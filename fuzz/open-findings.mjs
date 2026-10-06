@@ -20,6 +20,8 @@ export const OPEN = new Set([
   "B10", // t() expands replacement patterns in what it puts in a placeholder
   "B15", // t() looks a key up through the prototype: t("hasOwnProperty") is undefined
   "B16", // grading-ta.js throws URIError on a link with a malformed %-sequence
+  "B17", // a stored memo that is null stops the drawing of the assignment panel
+  "B18", // grading-ta.js throws on a submission whose status String() cannot convert
 ]);
 
 export const open = (id) => OPEN.has(id);

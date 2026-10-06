@@ -70,7 +70,7 @@ test("S7: the message listeners survive messages of any shape", { todo: "S7: nul
   t.after(() => browser.close());
   // Sent from a content script of the LMS, which can send any JSON.
   const tab = openTab(browser, { url: `${LMS}/portal`, scripts: [] });
-  for (const message of [null, 1, "x", [], { type: 1 }, { type: {} }, { action: "fetchTextbooks", courseName: 1 }]) {
+  for (const message of [null, 1, "x", [], { type: 1 }, { type: {} }, { action: "fetchTextbooks", courseName: 1 }, { action: "fetchTextbooks", siteId: { toString: 0 } }]) {
     browser.deliver(tab, [bg], message).catch(() => {});
   }
   await settle(50);

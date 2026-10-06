@@ -15,8 +15,13 @@
 // It fails when one of these throws, gives a kind it does not know, takes
 // off its status icon only part of the way (taking it off twice gives more),
 // or reads a link into what is not a string, or when a detector of the harness
-// sees something. While B16 is open (fuzz/open-findings.mjs), a link with a
-// malformed %-sequence, which B16 is known to throw on, is not read.
+// sees something. The submissions come from the page's world as JSON, which a
+// script of the page can forge, so their fields may be any JSON value.
+//
+// While B16 is open (fuzz/open-findings.mjs), a link with a malformed
+// %-sequence, which B16 is known to throw on, is not read; while B18 is, no
+// status is a value that String() cannot convert (an object whose toString
+// or valueOf is not a function), which B18 is known to throw on.
 import { Browser, openTab, settle, watch } from "../../harness/index.mjs";
 import { FuzzedDataProvider, fail, jsonValue, open, string } from "../lib.mjs";
 
@@ -33,6 +38,9 @@ export function fuzz(data) {
   const href = (fdp.consumeBoolean() ? "?assignmentId=/assignment/a/" : "") + string(fdp, 40) + (fdp.consumeBoolean() ? "&submissionId=/assignment/s/" : "") + string(fdp, 40);
   const submission = { status: fdp.consumeBoolean() ? status : jsonValue(fdp) };
   for (const k of ["draft", "hasHistory", "submitted", "returned", "graded", "grade", "submittedTime"]) if (fdp.consumeBoolean()) submission[k] = jsonValue(fdp);
+  if (open("B18")) {
+    try { String(submission.status); } catch { submission.status = ""; }
+  }
   const w = watch(tab);
   const kind = g.classifyStatus(status);
   if (!KINDS.has(kind)) fail(`classifyStatus(${JSON.stringify(status)}) = ${kind}`);

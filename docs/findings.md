@@ -12,7 +12,7 @@ specification: the GNU General Public License, version 3 or any later version
 
 - **対象**: [Radian0523/kulms-extension](https://github.com/Radian0523/kulms-extension) の [`087452e`](https://github.com/Radian0523/kulms-extension/commit/087452e33d14c117e6fa584fe3dd4b19f8f9a76c)（v1.21.0 と提出検知の修正）
 - **日付**: 2026-10-06
-- **方法**: 全ソースを通読した．そのうえで，実コードを Node 26.10.0 と jsdom 30.1.2 の上で動かして確かめた．その後，拡張を Node の上で動かすハーネス（[harness/](../harness/)）を作り，確かめたことをテスト（[tests/](../tests/)）にした．また，Jazzer.js でファジング（[fuzz/](../fuzz/)）を行い，B15 と B16 を見つけた
+- **方法**: 全ソースを通読した．そのうえで，実コードを Node 26.10.0 と jsdom 30.1.2 の上で動かして確かめた．その後，拡張を Node の上で動かすハーネス（[harness/](../harness/)）を作り，確かめたことをテスト（[tests/](../tests/)）にした．また，Jazzer.js でファジング（[fuzz/](../fuzz/)）を行い，B15〜B18 と，S7 の新しい例を見つけた
 - 行番号は上記コミット時点のもの．リンクはそのコミットへの固定リンク
 
 ## 凡例
@@ -49,6 +49,8 @@ specification: the GNU General Public License, version 3 or any later version
 | [B14](#b14) | 低 | Shift_JIS にない文字を検索語から黙って落とす | 再現 | 未着手 | |
 | [B15](#b15) | 低 | `t()` がキーをプロトタイプ越しに引き，`t("hasOwnProperty")` が undefined になる（潜在） | ファズ | 未着手 | |
 | [B16](#b16) | 低 | TA 採点支援が壊れた `%` の並びで URIError を投げ，装飾が止まる | ファズ | 未着手 | |
+| [B17](#b17) | 中 | 保存されたメモに null が 1 つあると，課題パネルの描画が止まる | ファズ | 未着手 | |
+| [B18](#b18) | 低 | TA 採点支援が，ページから届く提出の status の型を確かめず TypeError で止まる | ファズ | 未着手 | |
 | [P1](#p1) | **高** | 課題取得の N+1 と，タブごとの短い間隔での再取得（LMS への負荷） | 読解 | 未着手 | [#32](https://github.com/Radian0523/kulms-extension/issues/32), [#27](https://github.com/Radian0523/kulms-extension/issues/27) |
 | [P2](#p2) | 中 | フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行う | 読解 | 未着手 | [#62](https://github.com/Radian0523/kulms-extension/issues/62) |
 | [P3](#p3) | 中 | `document.body` 全体を監視する MutationObserver が多く，重い | 読解 | 未着手 | |
@@ -138,13 +140,14 @@ specification: the GNU General Public License, version 3 or any later version
 ### S7
 **形の崩れたメッセージで onMessage リスナーが例外を投げる**（低・再現）
 
-- 場所: [background.js:480-481](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L480-L481)，[:732-733](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L732-L733)
+- 場所: [background.js:480-481](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L480-L481)，[:484-485](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L484-L485)，[:732-733](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L732-L733)
 - 根拠: 次のメッセージで TypeError になる．
   - `null`（`message.action` を読む）
   - `{type: 1}`（`startsWith` が無い）
   - `{action: "fetchTextbooks", courseName: 1}`（`replace` が無い）
+  - `{action: "fetchTextbooks", siteId: {toString: 0}}`（`String()` が変換できない．ファズ対象 `background-message` が見つけた）
 - 影響: 送れるのは拡張の文脈だけなので，堅牢化の範囲の問題．
-- 直し方: メッセージの形を確かめる．オブジェクトであること，`type` が文字列であること，文字列の項目は `String()` で受けること．
+- 直し方: メッセージの形を確かめる．オブジェクトであること，`type` と文字列の項目が文字列であること．`String()` で受けるだけでは足りない（`toString` が関数でないオブジェクトでは，`String()` も例外を投げる）．
 - テスト: `tests/background.test.mjs` の「S7」．
 
 ### S8
@@ -297,6 +300,24 @@ specification: the GNU General Public License, version 3 or any later version
 - 直し方: 失敗したら元の文字列を使う（あるいは `URLSearchParams` で読む）．
 - テスト: `fuzz/known/grading-status/B16-malformed-percent`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
+### B17
+**保存されたメモに null が 1 つあると，課題パネルの描画が止まる**（中・ファズ）
+
+- 場所: [src/assignments.js:1064-1066](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L1064-L1066)，[:1468-1470](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L1468-L1470)，[:674-676](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L674-L676)，[popup.js:391-393](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L391-L393)
+- 何が起きるか: メモは `normalizeMemo()` を通してから `.deadline` や `.id` を読むが，`normalizeMemo()` は文字列しか直さず，null をそのまま返す．そのため，保存されたメモの一覧に null が 1 つでもあると TypeError になり，課題パネルの描画全体が止まる．popup の一覧と，期限の切れた非表示の掃除（読み込み時）も同じところで止まる．値は拡張自身のストレージから来るが，旧版や，計画中のスマホ版との同期，ストレージの破損などで 1 件でも壊れると，パネルを開けない状態が続く．
+- 根拠: ファズ対象 `assignments` が，Linux で約 2,500 回目（9 秒）に見つけた．
+- 直し方: 読み込んだ一覧から，オブジェクトでない要素を取り除く（`normalizeMemo()` で null や数値を捨てる）．
+- テスト: `fuzz/known/assignments/B17-null-memo`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
+
+### B18
+**TA 採点支援が，ページから届く提出の status の型を確かめず TypeError で止まる**（低・ファズ）
+
+- 場所: [src/grading-ta.js:88-89](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta.js#L88-L89)，[:204-205](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta.js#L204-L205)，[:263-268](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta.js#L263-L268)
+- 何が起きるか: 提出の一覧は，ページの世界のブリッジ（`grading-ta-page.js`）から JSON の event で届く．content script はその `status` を `String()` に渡すが，`toString` や `valueOf` が関数でないオブジェクトだと TypeError になり，状態の表示とジャンプが止まる．ページのスクリプトは，外へ出る event から requestId を読んで応答を偽れるので，届く値は任意の JSON になりうる．
+- 根拠: ファズ対象 `grading-status` が，Linux で見つけた．
+- 直し方: ページから届いた値は型を確かめてから使う（文字列でなければ空として扱う）．
+- テスト: `fuzz/known/grading-status/B18-status-object`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
+
 ## 速度・負荷
 
 ### P1
@@ -320,7 +341,7 @@ specification: the GNU General Public License, version 3 or any later version
 **フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行う**（中・読解・上流 [#62](https://github.com/Radian0523/kulms-extension/issues/62)）
 
 - 場所: [src/tree-view.js:208-263](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/tree-view.js#L208-L263)
-- 直し方: Sakai の `/direct/content/site/{siteId}.json` なら，木全体を 1 回で取れるはず（KULMS で使えるかは要確認）．それを取得して拡張の側で描画する．
+- 直し方: Sakai の `/direct/content/site/{siteId}.json` なら，ツリー全体を 1 回で取れるはず（KULMS で使えるかは要確認）．それを取得して拡張の側で描画する．
 
 ### P3
 **`document.body` 全体を監視する MutationObserver が多く，重い**（中・読解）

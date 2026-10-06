@@ -16,6 +16,12 @@
 // another tab could leave them. Teachers write the titles; the stored state is
 // the extension's own, which it has to read back whatever it holds.
 //
+// Both are JSON that Sakai's server or the extension writes from its own
+// values, so no object in them has a toString or valueOf of its own: only a
+// script that forges JSON puts one there (as the page can in B18), and String()
+// and + cannot convert such an object. So those two keys are left out of both,
+// and the stored state goes through JSON, as it does in chrome.storage.
+//
 // One tab serves every input. The panel is opened once; each input then has
 // the API answer anew, sets the stored state through the script's internals
 // (harness/source.mjs) and runs the fetch, the drawing and the colouring.
@@ -23,10 +29,15 @@
 // It fails when these throw, when a promise is rejected with nothing to handle
 // it, or when a detector of the harness sees something: the panel draws data
 // of the API and of the store into the page, where markup that runs script
-// would be a DOM XSS.
+// would be a DOM XSS. While B17 is open (fuzz/open-findings.mjs), no stored
+// memo is null, which B17 is known to stop the drawing on.
 import { Browser, Net, settle, watch } from "../../harness/index.mjs";
 import { COURSE_PAGE, LMS, openCoursePage } from "../../tests/lms.mjs";
-import { FuzzedDataProvider, fail, jsonValue, string } from "../lib.mjs";
+import { FuzzedDataProvider, fail, jsonValue, open, string } from "../lib.mjs";
+
+// JSON as a server or the extension writes it (see above).
+const written = (key, value) => (key === "toString" || key === "valueOf" ? undefined : value);
+const stored = (value) => JSON.parse(JSON.stringify(value, written));
 
 let answers = {};
 function api(url) {
@@ -37,7 +48,7 @@ function api(url) {
     : /\/pages\.json$/.test(path) ? "pages"
     : /\/direct\/site\.json$/.test(path) ? "sites" : null;
   if (!kind || answers[kind] === undefined) return { status: 404, body: "" };
-  return { headers: { "content-type": "application/json" }, body: JSON.stringify(answers[kind]) };
+  return { headers: { "content-type": "application/json" }, body: JSON.stringify(answers[kind], written) };
 }
 
 const browser = new Browser();
@@ -99,9 +110,9 @@ export async function fuzz(data) {
   };
   const w = watch(tab);
   const list = await a.fetchAllAssignments();
-  a.memos = fdp.consumeBoolean() ? listOf(fdp, memo) : [];
-  a.checkedState = record(fdp);
-  a.dismissedState = record(fdp);
+  a.memos = stored(fdp.consumeBoolean() ? listOf(fdp, memo).filter((m) => !(open("B17") && m === null)) : []);
+  a.checkedState = stored(record(fdp));
+  a.dismissedState = stored(record(fdp));
   a.renderAssignments(list);
   a.colorSidebarTabs(list);
   a.checkNotificationBadges(list);

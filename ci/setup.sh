@@ -45,8 +45,13 @@ get() {  # url file
   curl --fail --location --silent --show-error --retry 3 --retry-all-errors --output "$2" "$1"
 }
 
-node_version=$(curl --fail --silent --show-error --retry 3 https://nodejs.org/dist/index.json |
-  grep -o '"version":"v[0-9.]*"' | head -n 1 | cut -d '"' -f 4)
+# Pipelines here are written so that no command stops reading early: with
+# pipefail, a writer whose reader has gone fails the script, whether SIGPIPE
+# kills it or, where SIGPIPE is ignored (as on GitHub's runners), its write
+# fails. So the list of releases is saved first, and grep stops at its first
+# match reading the file, not a pipe from curl.
+get https://nodejs.org/dist/index.json index.json
+node_version=$(grep -m 1 -o '"version":"v[0-9.]*"' index.json | cut -d '"' -f 4)
 pnpm_version=$(grep -o '"packageManager": *"pnpm@[0-9.]*"' "$repo/package.json" | sed 's/.*pnpm@//; s/"$//')
 if [ -z "$node_version" ] || [ -z "$pnpm_version" ]; then
   echo "error: no version of Node (from nodejs.org) or of pnpm (from package.json)" >&2
@@ -78,7 +83,7 @@ case "$node_archive" in
     unzip -q "$pnpm_archive" -d pnpm
     ;;
 esac
-rm -f "$node_archive" "$pnpm_archive" SHASUMS256.txt
+rm -f "$node_archive" "$pnpm_archive" SHASUMS256.txt index.json
 
 export PATH="$node_bin:$tools/pnpm:$PATH"
 if [ -n "${GITHUB_PATH:-}" ]; then

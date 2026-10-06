@@ -19,8 +19,10 @@
 //
 // While S7 is open (fuzz/open-findings.mjs) it leaves out the messages that
 // are known to throw: null, a type that is truthy and not a string, and a
-// fetchTextbooks whose courseName is truthy and not a string. While S1 is open
-// it does not look for the secret in answers.
+// fetchTextbooks whose courseName is truthy and not a string, or whose siteId
+// or lectureCode is a value that String() cannot convert (an object whose
+// toString or valueOf is not a function). While S1 is open it does not look
+// for the secret in answers.
 import { Browser, Net, openBackground, openPopup, openTab, settle, watch } from "../../harness/index.mjs";
 import { FuzzedDataProvider, fail, jsonValue, open, string } from "../lib.mjs";
 
@@ -56,7 +58,9 @@ function knownToThrow(m) {
   if (m === null || m === undefined) return true;
   if (typeof m !== "object") return false;
   if (m.type && typeof m.type !== "string") return true;
-  return m.action === "fetchTextbooks" && !!m.courseName && typeof m.courseName !== "string";
+  if (m.action !== "fetchTextbooks") return false;
+  const convertible = (v) => { try { String(v); return true; } catch { return false; } };
+  return (!!m.courseName && typeof m.courseName !== "string") || [m.siteId, m.lectureCode].some((v) => !!v && !convertible(v));
 }
 
 export async function fuzz(data) {
