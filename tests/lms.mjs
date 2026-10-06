@@ -9,7 +9,7 @@
 // Pages and data of the LMS for tests: a course page with a sidebar, and the
 // cache of assignments the extension keeps, so that the panel can be drawn
 // without fetching anything.
-import { openTab, settle } from "../harness/index.mjs";
+import { openTab, until } from "../harness/index.mjs";
 
 export const LMS = "https://lms.gakusei.kyoto-u.ac.jp";
 export const H = 3600e3;
@@ -42,10 +42,17 @@ export function openCoursePage(browser, options = {}) {
   return openTab(browser, { url: `${LMS}/portal/site/C1`, html: COURSE_PAGE, ...options });
 }
 
-// Opens the assignment panel once the page has loaded its settings and state.
+// Opens the assignment panel once the page has loaded its settings and state
+// (the panel's button is made after them), and returns it once it has drawn
+// the list, which ends with the area to add a memo.
 export async function openPanel(tab) {
-  await settle(300);
+  await until(() => tab.document.getElementById("kulms-assign-toggle"));
   tab.document.getElementById("kulms-assign-toggle").click();
-  await settle(100);
-  return tab.document.getElementById("kulms-assign-panel");
+  const panel = tab.document.getElementById("kulms-assign-panel");
+  await until(() => panel.querySelector(".kulms-memo-area"));
+  return panel;
 }
+
+// The card of the assignment or memo named `name` in a drawn panel.
+export const card = (panel, name) => [...panel.querySelectorAll(".kulms-assign-card")]
+  .find((c) => c.querySelector(".kulms-assign-card-name, .kulms-memo-text")?.textContent.includes(name));

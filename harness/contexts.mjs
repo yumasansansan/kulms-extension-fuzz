@@ -167,3 +167,16 @@ export function openPopup(browser, { net = new Net(), prepare } = {}) {
 
 // Waits `ms` for the timers and callbacks the extension started.
 export const settle = (ms = 20) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Waits until `condition()` holds, for `timeout` ms at most, and says whether
+// it came to hold. Where a test waits for something the extension does, this
+// holds on a runner slower than the machine the test was written on, which a
+// wait of a fixed time need not.
+export async function until(condition, { timeout = 5000 } = {}) {
+  const end = Date.now() + timeout;
+  while (!condition()) {
+    if (Date.now() >= end) return false;
+    await settle(5);
+  }
+  return true;
+}

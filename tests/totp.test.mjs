@@ -14,7 +14,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import fc from "fast-check";
-import { Browser, openBackground, openPopup, openTab, settle } from "../harness/index.mjs";
+import { Browser, openBackground, openPopup, openTab, settle, until } from "../harness/index.mjs";
 
 const OTP_PAGE = '<!doctype html><html><head></head><body><form id="login"><input id="password_input"></form></body></html>';
 const OTP_URL = "https://auth.iimc.kyoto-u.ac.jp/user/otplogin.cgi";
@@ -49,7 +49,8 @@ async function extension() {
 }
 
 // Saves `secret` from the popup, then opens the login page at `seconds` and
-// returns what auth-totp.js typed into its field.
+// returns what auth-totp.js typed into its field, once it has typed (it sets
+// the whole code at once), or "" when it has typed nothing in 5 seconds.
 async function autofill({ browser, bg, popup }, secret, seconds) {
   await browser.deliver(popup, [bg], { type: "kulms-totp-save", secret });
   const tab = openTab(browser, {
@@ -60,8 +61,9 @@ async function autofill({ browser, bg, popup }, secret, seconds) {
       w.HTMLFormElement.prototype.submit = function () {};
     },
   });
-  await settle(30);
-  const code = tab.document.getElementById("password_input").value;
+  const field = tab.document.getElementById("password_input");
+  await until(() => field.value !== "");
+  const code = field.value;
   tab.close();
   return code;
 }
