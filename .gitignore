@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 Yuma Kakei <yumasansansan@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of kulms-extension-fuzz. The SPDX lines name its copyright
+# holder and its license, in the machine-readable form of the REUSE
+# specification: the GNU General Public License, version 3 or any later version
+# (LICENSES/GPL-3.0-or-later.txt).
+#
+# What git leaves out: the dependencies pnpm installs, the extension's scripts
+# as the harness rewrites them (harness/source.mjs), what a fuzzing run leaves
+# (corpora and failing inputs, which the CI keeps as artifacts), and a commit
+# message drafted in the working tree.
+
+node_modules/
+.harness/
+fuzz-run/
+COMMIT_MSG.txt

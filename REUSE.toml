@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2026 Yuma Kakei <yumasansansan@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of kulms-extension-fuzz. The SPDX lines name its copyright
+# holder and its license, in the machine-readable form of the REUSE
+# specification: the GNU General Public License, version 3 or any later version
+# (LICENSES/GPL-3.0-or-later.txt).
+#
+# The copyright holder and license of the files that cannot name them in a
+# comment of their own: package.json, which is JSON, pnpm-lock.yaml, which pnpm
+# writes anew each time, and the inputs of the fuzz targets, which are bytes.
+# Every other file names them at its top. The
+# license text is in LICENSES/ (and in LICENSE, for those who look there).
+# The kulms-extension submodule is not this repository's: it carries the
+# licensing of its own project, the MIT license, and reuse leaves submodules
+# out.
+
+version = 1
+
+[[annotations]]
+path = ["package.json", "pnpm-lock.yaml"]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Yuma Kakei <yumasansansan@gmail.com>"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# Inputs of the fuzz targets (fuzz/README.md): the seeds, written by hand; the
+# inputs that once made a target fail and pass since its fix; the inputs that
+# fail while a finding of docs/findings.md stands; and the input the canary
+# must fail on. A fuzzer made some of them, from nothing but the targets and
+# the extension's code; they hold no one's data.
+[[annotations]]
+path = ["fuzz/seeds/**", "fuzz/regressions/**", "fuzz/known/**", "fuzz/canary/planted-input"]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Yuma Kakei <yumasansansan@gmail.com>"
+SPDX-License-Identifier = "GPL-3.0-or-later"

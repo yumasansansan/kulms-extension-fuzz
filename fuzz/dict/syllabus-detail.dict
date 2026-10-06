@@ -1,0 +1,137 @@
+# SPDX-FileCopyrightText: 2026 Yuma Kakei <yumasansansan@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of kulms-extension-fuzz. The SPDX lines name its copyright
+# holder and its license, in the machine-readable form of the REUSE
+# specification: the GNU General Public License, version 3 or any later version
+# (LICENSES/GPL-3.0-or-later.txt).
+#
+# The headings and the marks a syllabus of KULASIS writes its books with,
+# which fetchSyllabusDetail() looks for with regular expressions; the fuzzer
+# cannot learn what a regular expression compares, so it is told. The tokens
+# are UTF-8, which the target's first byte picks one time in five.
+
+# 教科書
+"\xe6\x95\x99\xe7\xa7\x91\xe6\x9b\xb8"
+# 参考書
+"\xe5\x8f\x82\xe8\x80\x83\xe6\x9b\xb8"
+# テキスト
+"\xe3\x83\x86\xe3\x82\xad\xe3\x82\xb9\xe3\x83\x88"
+# 参考文献
+"\xe5\x8f\x82\xe8\x80\x83\xe6\x96\x87\xe7\x8c\xae"
+# 予習
+"\xe4\xba\x88\xe7\xbf\x92"
+# 復習
+"\xe5\xbe\xa9\xe7\xbf\x92"
+# 成績
+"\xe6\x88\x90\xe7\xb8\xbe"
+# 授業外
+"\xe6\x8e\x88\xe6\xa5\xad\xe5\xa4\x96"
+# 履修
+"\xe5\xb1\xa5\xe4\xbf\xae"
+# その他
+"\xe3\x81\x9d\xe3\x81\xae\xe4\xbb\x96"
+# 備考
+"\xe5\x82\x99\xe8\x80\x83"
+# 関連URL
+"\xe9\x96\xa2\xe9\x80\xa3URL"
+# オフィスアワー
+"\xe3\x82\xaa\xe3\x83\x95\xe3\x82\xa3\xe3\x82\xb9\xe3\x82\xa2\xe3\x83\xaf\xe3\x83\xbc"
+# (教科書)
+"(\xe6\x95\x99\xe7\xa7\x91\xe6\x9b\xb8)"
+# （教科書）
+"\xef\xbc\x88\xe6\x95\x99\xe7\xa7\x91\xe6\x9b\xb8\xef\xbc\x89"
+# 『
+"\xe3\x80\x8e"
+# 』
+"\xe3\x80\x8f"
+# （
+"\xef\xbc\x88"
+# ）
+"\xef\xbc\x89"
+# (
+"("
+# )
+")"
+# ISBN:
+"ISBN:"
+# ISBN
+"ISBN"
+# isbn{}{
+"isbn{}{"
+# 978
+"978"
+# <br>
+"<br>"
+# <br/>
+"<br/>"
+# <td>
+"<td>"
+# </td>
+"</td>"
+# </tr>
+"</tr>"
+# </div>
+"</div>"
+# </p>
+"</p>"
+# </li>
+"</li>"
+# <span class=\"lesson_plan_subheading\">
+"<span class=\x22lesson_plan_subheading\x22>"
+# </span>
+"</span>"
+# 特になし
+"\xe7\x89\xb9\xe3\x81\xab\xe3\x81\xaa\xe3\x81\x97"
+# なし
+"\xe3\x81\xaa\xe3\x81\x97"
+# 使用しない
+"\xe4\xbd\xbf\xe7\x94\xa8\xe3\x81\x97\xe3\x81\xaa\xe3\x81\x84"
+# No textbook
+"No textbook"
+# None
+"None"
+# &amp;
+"&amp;"
+# &lt;
+"&lt;"
+# &gt;
+"&gt;"
+# &nbsp;
+"&nbsp;"
+# &#12354;
+"&#12354;"
+# <script>
+"<script>"
+# </script>
+"</script>"
+# <style>
+"<style>"
+# </style>
+"</style>"
+# 出版
+"\xe5\x87\xba\xe7\x89\x88"
+# 社
+"\xe7\xa4\xbe"
+# 書店
+"\xe6\x9b\xb8\xe5\xba\x97"
+# 書院
+"\xe6\x9b\xb8\xe9\x99\xa2"
+# 書房
+"\xe6\x9b\xb8\xe6\x88\xbf"
+# プレス
+"\xe3\x83\x97\xe3\x83\xac\xe3\x82\xb9"
+# Press
+"Press"
+# Publishing
+"Publishing"
+# University Press
+"University Press"
+# 、
+"\xe3\x80\x81"
+# ,
+","
+# 年
+"\xe5\xb9\xb4"
+# \n
+"\x0a"

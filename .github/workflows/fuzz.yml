@@ -1,0 +1,134 @@
+# SPDX-FileCopyrightText: 2026 Yuma Kakei <yumasansansan@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of kulms-extension-fuzz. The SPDX lines name its copyright
+# holder and its license, in the machine-readable form of the REUSE
+# specification: the GNU General Public License, version 3 or any later version
+# (LICENSES/GPL-3.0-or-later.txt).
+#
+# The long fuzzing. Once a day, and whenever it is started by hand, every fuzz
+# target runs for twenty minutes, or as long as the run started by hand asks,
+# after the canary has shown that the fuzzer is looking (ci/fuzz.sh --canary).
+#
+# A run carries on from the corpus that the last decided run grew and kept as
+# an artifact — the last one that fuzzed at all, which is one the schedule or a
+# hand started, and that passed or failed; when there is none, it starts from
+# the seed inputs. The inputs that failed are kept as well, and the next run
+# replays them before anything else (ci/fuzz.sh), so that a failure lasts until
+# it is fixed, not until fuzzing happens to miss it. Each corpus is merged down
+# after its target has run (ci/fuzz.sh --merge). An input that failed goes into
+# fuzz/regressions/ with the fix of the extension that makes it pass, or into
+# fuzz/known/ while what it found stands (fuzz/README.md).
+#
+# Only gh and the one action that CI uses, actions/upload-artifact, pinned to
+# the commit of its release, take part.
+
+name: Fuzz
+
+# The name of a run says how long it fuzzed each target, so that the list of
+# runs shows what each one was worth. The daily run takes no input, and the
+# twenty minutes below are what it uses.
+run-name: Fuzz, ${{ github.event.inputs.minutes || '20' }} minutes each
+
+on:
+  schedule:
+    - cron: '43 17 * * *'
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: How long to fuzz each target
+        type: choice
+        default: '20'
+        options: ['1', '5', '10', '20', '30']
+
+permissions:
+  contents: read
+  actions: read
+
+# Two runs at once would carry over from the same corpus and race to keep it.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  fuzz:
+    name: fuzzing, ${{ github.event.inputs.minutes || '20' }} minutes a target
+    runs-on: ubuntu-26.04
+    # Seven targets one after another, each with up to five minutes past its
+    # time to start, replay its corpus and merge it: thirty minutes a target is
+    # room for that at the longest choice, which is 330 minutes in all.
+    timeout-minutes: 330
+    env:
+      MINUTES: ${{ github.event.inputs.minutes || '20' }}
+
+    steps:
+      - name: Check out
+        run: |
+          # The commit, and the submodule at the commit it names.
+          git config --global core.autocrlf false
+          git -c init.defaultBranch=main init --quiet
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --quiet origin "$GITHUB_SHA"
+          git checkout --quiet --detach "$GITHUB_SHA"
+          git submodule update --init --depth 1
+          git log -1 --format='%H %s'
+
+      - name: Set up Node and pnpm
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/setup.sh
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Carry over the corpus and the inputs that failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p fuzz-run/corpora fuzz-run/earlier
+          # Only a run that fuzzed counts: one the schedule or a hand started,
+          # that passed or failed.
+          last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow fuzz.yml --branch main \
+            --status completed --limit 20 --json conclusion,databaseId,event \
+            --jq '[.[] | select(.event == "schedule" or .event == "workflow_dispatch")
+                       | select(.conclusion == "success" or .conclusion == "failure")][0].databaseId // empty')
+          if [ -z "$last" ]; then
+            echo "No earlier run: the corpus starts from the seed inputs."
+            exit 0
+          fi
+          echo "Carrying over from run $last."
+          gh run download "$last" --repo "$GITHUB_REPOSITORY" --name fuzz-corpora --dir fuzz-run/corpora \
+            || echo "Run $last kept no corpus: the corpus starts from the seed inputs."
+          gh run download "$last" --repo "$GITHUB_REPOSITORY" --name fuzz-crashes --dir fuzz-run/earlier \
+            || echo "Run $last kept no inputs that failed."
+
+      - name: Check that the fuzzer is looking
+        run: bash ci/fuzz.sh --canary 60 fuzz-run/canary-corpora fuzz-run/canary-crashes
+
+      - name: Fuzz each target
+        run: bash ci/fuzz.sh --merge "$((MINUTES * 60))" fuzz-run/corpora fuzz-run/crashes fuzz-run/earlier
+
+      # What a run found is kept whatever became of the job, its own time limit
+      # included: a job that the limit stops counts as cancelled, and that is
+      # the very run whose corpus and failing inputs are worth having.
+      - name: Keep the corpus
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-corpora
+          path: fuzz-run/corpora/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Keep the inputs that failed
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-crashes
+          path: fuzz-run/crashes/
+          if-no-files-found: ignore
+          retention-days: 90

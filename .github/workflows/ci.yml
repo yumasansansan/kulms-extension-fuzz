@@ -1,0 +1,182 @@
+# SPDX-FileCopyrightText: 2026 Yuma Kakei <yumasansansan@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of kulms-extension-fuzz. The SPDX lines name its copyright
+# holder and its license, in the machine-readable form of the REUSE
+# specification: the GNU General Public License, version 3 or any later version
+# (LICENSES/GPL-3.0-or-later.txt).
+#
+# The checks of every push and pull request, against the extension at the
+# commit the submodule names.
+#
+# The test jobs run the tests (ci/test.sh) on Ubuntu and on Windows, where the
+# extension's users and developers mostly are: the harness itself, the
+# findings of docs/findings.md (each marked todo while it stands, so that it
+# fails without failing the job), and every fuzz target on the inputs kept for
+# it (fuzz/README.md).
+#
+# The lint job reads this repository's code with ESLint and fails on anything
+# it reports (eslint.config.js), and reads the extension in the submodule for
+# DOM XSS and ReDoS (eslint.extension.config.js), printing what it finds
+# without failing on it: that code is the extension's (ci/lint.sh).
+#
+# The reuse job checks with reuse lint, from Ubuntu's package, that every file
+# names its copyright holder and its license (REUSE.toml, LICENSES/). Ubuntu's
+# reuse tells text from binary with libmagic. The reuse of pip with
+# charset-normalizer, as on Windows, takes a file for binary when its first
+# 2,048 bytes end inside a character of more than one byte, as this
+# repository's Japanese often makes them, and then does not read the header.
+#
+# The fuzz job first checks that the fuzzer is looking: the canary, a target
+# with a bug planted in it, must be found within a minute. Silence from the
+# other targets could not be told apart from a fuzzer that never saw their
+# code. Then it fuzzes every target for a minute (ci/fuzz.sh); an input that
+# fails is kept as an artifact. The longer fuzzing, which carries its corpus
+# over from one run to the next, is fuzz.yml's, once a day.
+#
+# Each job checks the commit out with plain git, the submodule at its commit,
+# and ci/setup.sh installs the newest Node and the pnpm of package.json. The
+# one action, actions/upload-artifact, keeps the failing inputs; it is pinned
+# to the commit of its release.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A push cancels the run of an earlier push to the same branch, except on main.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, windows-2025-vs2026]
+
+    steps:
+      - name: Check out
+        run: |
+          # The commit, and the submodule at the commit it names. Git keeps the
+          # files as committed on every runner.
+          git config --global core.autocrlf false
+          git -c init.defaultBranch=main init --quiet
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --quiet origin "$GITHUB_SHA"
+          git checkout --quiet --detach "$GITHUB_SHA"
+          git submodule update --init --depth 1
+          git log -1 --format='%H %s'
+
+      - name: Set up Node and pnpm
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/setup.sh
+
+      - name: Test
+        run: bash ci/test.sh
+
+  lint:
+    name: lint
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out
+        run: |
+          git config --global core.autocrlf false
+          git -c init.defaultBranch=main init --quiet
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --quiet origin "$GITHUB_SHA"
+          git checkout --quiet --detach "$GITHUB_SHA"
+          git submodule update --init --depth 1
+          git log -1 --format='%H %s'
+
+      - name: Set up Node and pnpm
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/setup.sh
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Read the code
+        run: bash ci/lint.sh
+
+  reuse:
+    name: REUSE compliance
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out
+        run: |
+          # The commit alone: reuse lint leaves the submodule out, as it carries
+          # the licensing of its own project.
+          git config --global core.autocrlf false
+          git -c init.defaultBranch=main init --quiet
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --quiet --depth 1 origin "$GITHUB_SHA"
+          git checkout --quiet --detach "$GITHUB_SHA"
+          git log -1 --format='%H %s'
+
+      - name: Install reuse
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends reuse
+          reuse --version
+
+      - name: Check the licensing of every file
+        run: reuse lint
+
+  fuzz:
+    name: fuzzing, a minute a target
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out
+        run: |
+          git config --global core.autocrlf false
+          git -c init.defaultBranch=main init --quiet
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --quiet origin "$GITHUB_SHA"
+          git checkout --quiet --detach "$GITHUB_SHA"
+          git submodule update --init --depth 1
+          git log -1 --format='%H %s'
+
+      - name: Set up Node and pnpm
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/setup.sh
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check that the fuzzer is looking
+        run: bash ci/fuzz.sh --canary 60 fuzz-run/canary-corpora fuzz-run/canary-crashes
+
+      - name: Fuzz for a minute each
+        run: bash ci/fuzz.sh 60 fuzz-run/corpora fuzz-run/crashes
+
+      - name: Keep the inputs that failed
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-crashes
+          path: fuzz-run/crashes/
+          if-no-files-found: ignore
+          retention-days: 30

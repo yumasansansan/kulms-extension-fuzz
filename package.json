@@ -1,0 +1,26 @@
+{
+  "private": true,
+  "name": "kulms-extension-fuzz",
+  "description": "Tests and fuzzing of the KULMS+ browser extension, which this repository holds as a submodule",
+  "type": "module",
+  "packageManager": "pnpm@12.9.1",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "lint": "bash ci/lint.sh"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@jazzer.js/core": "^4.0.0",
+    "acorn": "^8.18.0",
+    "eslint": "^10.12.0",
+    "eslint-plugin-no-unsanitized": "^4.1.5",
+    "eslint-plugin-regexp": "^3.3.1",
+    "fake-indexeddb": "^6.2.5",
+    "fast-check": "^4.10.2",
+    "globals": "^17.13.0",
+    "jsdom": "30.1.2"
+  }
+}

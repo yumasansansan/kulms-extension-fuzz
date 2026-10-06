@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2026 Yuma Kakei <yumasansansan@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of kulms-extension-fuzz. The SPDX lines name its copyright
+# holder and its license, in the machine-readable form of the REUSE
+# specification: the GNU General Public License, version 3 or any later version
+# (LICENSES/GPL-3.0-or-later.txt).
+#
+# The status texts of Sakai's grader, in Japanese and English, and the parts
+# of a link to a submission.
+
+# 未採点 - 提出済み
+"\xe6\x9c\xaa\xe6\x8e\xa1\xe7\x82\xb9 - \xe6\x8f\x90\xe5\x87\xba\xe6\xb8\x88\xe3\x81\xbf"
+# 未採点 - 取組中
+"\xe6\x9c\xaa\xe6\x8e\xa1\xe7\x82\xb9 - \xe5\x8f\x96\xe7\xb5\x84\xe4\xb8\xad"
+# 未提出
+"\xe6\x9c\xaa\xe6\x8f\x90\xe5\x87\xba"
+# 採点済み
+"\xe6\x8e\xa1\xe7\x82\xb9\xe6\xb8\x88\xe3\x81\xbf"
+# 返却済み
+"\xe8\xbf\x94\xe5\x8d\xb4\xe6\xb8\x88\xe3\x81\xbf"
+# 再提出済み
+"\xe5\x86\x8d\xe6\x8f\x90\xe5\x87\xba\xe6\xb8\x88\xe3\x81\xbf"
+# Ungraded - Submitted
+"Ungraded - Submitted"
+# Ungraded - In Progress
+"Ungraded - In Progress"
+# Awaiting Grade
+"Awaiting Grade"
+# No Submission
+"No Submission"
+# Not Submitted
+"Not Submitted"
+# Honor Pledge Accepted
+"Honor Pledge Accepted"
+# Returned
+"Returned"
+# Graded
+"Graded"
+# assignmentId=/assignment/a/
+"assignmentId=/assignment/a/"
+# submissionId=/assignment/s/
+"submissionId=/assignment/s/"
+# %
+"%"
+# %E3%81%82
+"%E3%81%82"
+# /
+"/"
+# &
+"&"
+# 🟡
+"\xf0\x9f\x9f\xa1"
+# ✅
+"\xe2\x9c\x85"

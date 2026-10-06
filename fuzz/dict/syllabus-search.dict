@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: 2026 Yuma Kakei <yumasansansan@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of kulms-extension-fuzz. The SPDX lines name its copyright
+# holder and its license, in the machine-readable form of the REUSE
+# specification: the GNU General Public License, version 3 or any later version
+# (LICENSES/GPL-3.0-or-later.txt).
+#
+# The rows of KULASIS's page of search results, which searchSyllabus() reads
+# with regular expressions.
+
+# <tr>
+"<tr>"
+# </tr>
+"</tr>"
+# <tr class=\"odd\">
+"<tr class=\x22odd\x22>"
+# <td>
+"<td>"
+# </td>
+"</td>"
+# department_syllabus?lectureNo=
+"department_syllabus?lectureNo="
+# la_syllabus?lectureNo=
+"la_syllabus?lectureNo="
+# &departmentNo=
+"&departmentNo="
+# &amp;departmentNo=
+"&amp;departmentNo="
+# <a href=\"
+"<a href=\x22"
+# \">
+"\x22>"
+# <img src=\"x\">
+"<img src=\x22x\x22>"
+# 線形代数
+"\xe7\xb7\x9a\xe5\xbd\xa2\xe4\xbb\xa3\xe6\x95\xb0"
+# 京大
+"\xe4\xba\xac\xe5\xa4\xa7"
+# 太郎
+"\xe5\xa4\xaa\xe9\x83\x8e"
