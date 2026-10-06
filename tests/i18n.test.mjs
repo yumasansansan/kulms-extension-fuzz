@@ -10,7 +10,7 @@
 // messages it fetches from the extension as it does in Chrome.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Browser, openTab, settle } from "../harness/index.mjs";
+import { Browser, openPopup, openTab, settle, until } from "../harness/index.mjs";
 import { LMS } from "./lms.mjs";
 
 async function settings(t) {
@@ -30,5 +30,29 @@ test("B10: t() puts any text in its placeholder as it is", { todo: "B10: the val
   const w = await settings(t);
   for (const value of ["$&", "$$", "$`", "$'", "$1"]) {
     assert.equal(w.t("lastUpdatedMins", [value]), `最終更新: ${value}分前`);
+  }
+});
+
+// t() of popup.js, a copy of that of settings.js, once the popup has loaded
+// its messages.
+async function popupT(t) {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const popup = openPopup(browser);
+  await until(() => popup.internals["popup.js"] && popup.internals["popup.js"].overrideMessages);
+  return popup.internals["popup.js"].t;
+}
+
+test("B10: t() of the popup puts any text in its placeholder as it is", { todo: "B10: the value is a replacement pattern of String.prototype.replace, so $& and $` expand" }, async (t) => {
+  const popupt = await popupT(t);
+  for (const value of ["$&", "$$", "$`", "$'", "$1"]) {
+    assert.equal(popupt("lastUpdatedMins", [value]), `最終更新: ${value}分前`);
+  }
+});
+
+test("B15: t() of the popup answers a key that every object has with a string", { todo: "B15: the key is looked up through the prototype, and t(\"hasOwnProperty\") is undefined" }, async (t) => {
+  const popupt = await popupT(t);
+  for (const key of ["hasOwnProperty", "constructor", "toString", "__proto__"]) {
+    assert.equal(typeof popupt(key), "string", key);
   }
 });

@@ -19,38 +19,38 @@ specification: the GNU General Public License, version 3 or any later version
 
 - **重さ**: 高（利用者のデータが消える，広く効く）／中／低
 - **確認**: 再現（tests/ のテストで再現した）／計測（時間を測った）／ビルド（build.sh を実行した）／ファズ（ファジングで見つかった）／読解（コードを読んで判断した）
-- **状態**: 未着手／対応中／修正済（PR へのリンクを書く）．修正したら，tests/ の該当テストから `todo` を外し，ID を `fuzz/open-findings.mjs` から外す
+- **状態**: 未着手／対応中（直したブランチへのリンクを書く）／PR 中（PR へのリンクを書く）／修正済（上流に取り込まれた）．上流に取り込まれたら，tests/ の該当テストから `todo` を外し，ID を `fuzz/open-findings.mjs` から外す
 
 ## 一覧
 
 | ID | 重さ | 件名 | 確認 | 状態 | 上流 Issue |
 |---|---|---|---|---|---|
-| [S1](#s1) | 中 | TOTP の平文シークレットが content script と LMS の DOM に渡る | 再現 | 未着手 | |
-| [S2](#s2) | 中 | サイト連絡先の正規表現が入力長の 3 乗で遅くなる（ReDoS） | 再現・計測 | 未着手 | |
+| [S1](#s1) | 中 | TOTP の平文シークレットが content script と LMS の DOM に渡る | 再現 | 対応中（前半：[fix/totp-code-from-background](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-code-from-background)） | |
+| [S2](#s2) | 中 | サイト連絡先の正規表現が入力長の 3 乗で遅くなる（ReDoS） | 再現・計測 | 対応中（[fix/site-contact-regex](https://github.com/yumasansansan/kulms-extension/tree/fix/site-contact-regex)） | |
 | [S3](#s3) | 低 | TOTP 登録補助がシークレットをページの sessionStorage に置く | 読解 | 未着手 | |
-| [S4](#s4) | 低 | シラバスの実体参照を二重にデコードし，数値参照は捨てる | 再現 | 未着手 | |
-| [S5](#s5) | 低 | 使っていないホスト権限 `radian0523.github.io` | 読解 | 未着手 | |
-| [S6](#s6) | 低 | 不正な TOTP シークレットを保存できる | 再現 | 未着手 | |
-| [S7](#s7) | 低 | 形の崩れたメッセージで onMessage リスナーが例外を投げる | 再現 | 未着手 | |
-| [S8](#s8) | 低 | シラバス解析の正規表現が入力長の 2 乗で遅くなる | 再現・計測 | 未着手 | |
-| [B1](#b1) | **高** | 複数タブを開いていると，メモ・完了チェック・非表示が消える | 再現 | 未着手 | |
-| [B2](#b2) | 中 | 非表示にした課題が 30 日後に一覧へ戻る | 再現 | 未着手 | [#74](https://github.com/Radian0523/kulms-extension/issues/74) |
-| [B3](#b3) | 中 | サイドバーの色分けで，期限切れが最も弱く扱われる | 再現 | 未着手 | |
+| [S4](#s4) | 低 | シラバスの実体参照を二重にデコードし，数値参照は捨てる | 再現 | 対応中（[fix/syllabus-parse](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-parse)） | |
+| [S5](#s5) | 低 | 使っていないホスト権限 `radian0523.github.io` | 読解 | 対応中（[fix/drop-unused-host-permission](https://github.com/yumasansansan/kulms-extension/tree/fix/drop-unused-host-permission)） | |
+| [S6](#s6) | 低 | 不正な TOTP シークレットを保存できる | 再現 | 対応中（[fix/validate-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/validate-totp-secret)） | |
+| [S7](#s7) | 低 | 形の崩れたメッセージで onMessage リスナーが例外を投げる | 再現 | 対応中（[fix/message-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/message-shape)） | |
+| [S8](#s8) | 低 | シラバス解析の正規表現が入力長の 2 乗で遅くなる | 再現・計測 | 対応中（[fix/syllabus-parse](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-parse)） | |
+| [B1](#b1) | **高** | 複数タブを開いていると，メモ・完了チェック・非表示が消える | 再現 | PR 中（[#75](https://github.com/Radian0523/kulms-extension/pull/75)） | |
+| [B2](#b2) | 中 | 非表示にした課題が 30 日後に一覧へ戻る | 再現 | PR 中（[#76](https://github.com/Radian0523/kulms-extension/pull/76)） | [#74](https://github.com/Radian0523/kulms-extension/issues/74) |
+| [B3](#b3) | 中 | サイドバーの色分けで，期限切れが最も弱く扱われる | 再現 | 対応中（[fix/sidebar-overdue-color](https://github.com/yumasansansan/kulms-extension/tree/fix/sidebar-overdue-color)） | |
 | [B4](#b4) | 中 | ツール表示管理が 200ms ごとの再処理を止めない | 再現 | 未着手 | |
 | [B5](#b5) | 中 | Safari 版に `vendor/` が同梱されない | 再現（ビルド） | 未着手 | |
 | [B6](#b6) | 中 | 配布用 zip に `node_modules/` などが入る | 再現（ビルド） | 未着手 | |
 | [B7](#b7) | 低 | キャッシュから描画すると，クイズのリンクが課題ツールを指す | 再現 | 未着手 | |
 | [B8](#b8) | 低 | バナーが重複し，設定タブにも紛れ込む | 再現 | 未着手 | |
 | [B9](#b9) | 低 | 読み込み中の更新要求が，成功扱いのまま捨てられる | 読解 | 未着手 | |
-| [B10](#b10) | 低 | i18n の置換で `$&` などが展開される（潜在） | 再現 | 未着手 | |
+| [B10](#b10) | 低 | i18n の置換で `$&` などが展開される（潜在） | 再現 | 対応中（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)） | |
 | [B11](#b11) | 低 | 教科書一覧が科目名をキーにしていて，同名の科目が衝突する | 読解 | 未着手 | |
-| [B12](#b12) | 低 | ページから書き換えられる Web Storage の値で例外になる | 読解 | 未着手 | |
+| [B12](#b12) | 低 | ページから書き換えられる Web Storage の値で例外になる | 読解 | 対応中（[fix/web-storage-values](https://github.com/yumasansansan/kulms-extension/tree/fix/web-storage-values)） | |
 | [B13](#b13) | 低 | シラバス検索の最後のフォールバックが無関係な科目を選びうる | 読解 | 未着手 | |
 | [B14](#b14) | 低 | Shift_JIS にない文字を検索語から黙って落とす | 再現 | 未着手 | |
-| [B15](#b15) | 低 | `t()` がキーをプロトタイプ越しに引き，`t("hasOwnProperty")` が undefined になる（潜在） | ファズ | 未着手 | |
-| [B16](#b16) | 低 | TA 採点支援が壊れた `%` の並びで URIError を投げ，装飾が止まる | ファズ | 未着手 | |
-| [B17](#b17) | 中 | 保存されたメモに null が 1 つあると，課題パネルの描画が止まる | ファズ | 未着手 | |
-| [B18](#b18) | 低 | TA 採点支援が，ページから届く提出の status の型を確かめず TypeError で止まる | ファズ | 未着手 | |
+| [B15](#b15) | 低 | `t()` がキーをプロトタイプ越しに引き，`t("hasOwnProperty")` が undefined になる（潜在） | ファズ | 対応中（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)） | |
+| [B16](#b16) | 低 | TA 採点支援が壊れた `%` の並びで URIError を投げ，装飾が止まる | ファズ | 対応中（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)） | |
+| [B17](#b17) | 中 | 保存されたメモに null が 1 つあると，課題パネルの描画が止まる | ファズ | 対応中（[fix/invalid-memo](https://github.com/yumasansansan/kulms-extension/tree/fix/invalid-memo)） | |
+| [B18](#b18) | 低 | TA 採点支援が，ページから届く提出の status の型を確かめず TypeError で止まる | ファズ | 対応中（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)） | |
 | [P1](#p1) | **高** | 課題取得の N+1 と，タブごとの短い間隔での再取得（LMS への負荷） | 読解 | 未着手 | [#32](https://github.com/Radian0523/kulms-extension/issues/32), [#27](https://github.com/Radian0523/kulms-extension/issues/27) |
 | [P2](#p2) | 中 | フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行う | 読解 | 未着手 | [#62](https://github.com/Radian0523/kulms-extension/issues/62) |
 | [P3](#p3) | 中 | `document.body` 全体を監視する MutationObserver が多く，重い | 読解 | 未着手 | |
@@ -86,7 +86,8 @@ specification: the GNU General Public License, version 3 or any later version
   1. OTP は background で計算し，content script には 6 桁だけを返す（例: `kulms-totp-code`）．
   2. `load`・`save`・`delete` は拡張ページ（`sender.tab` が無く，`sender.url` が `chrome.runtime.getURL("")` で始まる）からだけ受け付ける．登録は auth.iimc の送信元に限った専用メッセージにする．
   3. QR とシークレットの表示は popup かオプションページだけで行い，LMS の設定パネルからはそこへ誘導する（挙動の変更になるので，先に上流で Issue を立てる）．
-- テスト: `tests/totp.test.mjs` の「S1」．
+- 対応: 前半として，自動入力が background で計算したコードだけを受け取るようにし（`kulms-totp-code`），認証ページの content script には `kulms-totp-load` でシークレットを返さないようにした（[fix/totp-code-from-background](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-code-from-background)）．時刻は background が決めるので，content script は先の時刻のコードを求められない．LMS の設定パネルでのコードと QR の表示（直し方の 3）は，表示の場所が変わるので，上流で Issue を立ててから行う．
+- テスト: `tests/totp.test.mjs` の「S1」の 3 件．前半で，ログインページと認証ページの 2 件が通る．設定パネルの 1 件は，後半まで失敗する．
 
 ### S2
 **サイト連絡先の正規表現の ReDoS**（中・再現・計測）
@@ -95,6 +96,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 根拠: `<td>` の後に `,` も `<` も無い空白が続くと，`\s*([^,<\n]+?)\s*` の 3 つの量指定子が互いに文字を取り合う．空白 1,000 字で 0.3 秒，2,000 字で 2.4 秒，4,000 字で **20 秒**かかり，入力長の 3 乗で伸びる．
 - 影響: その間 Service Worker のイベントループが止まり，TOTP 自動入力を含む拡張の全メッセージが応答しない．引き金はサイト連絡先の欄に異常な内容が入ることなので，起きる可能性は低い．
 - 直し方: 見出しを `indexOf` で探し，次の `<td…>` から `</td>` までを切り出してから，`,` と `<` で区切る．あるいは量指定子の上限を決める．
+- 対応: 見出し，`<td`，`>` の位置を順に探して，セルを切り出す（[fix/site-contact-regex](https://github.com/yumasansansan/kulms-extension/tree/fix/site-contact-regex)）．ランダムな 20 万件のページで古い正規表現と答えを突き合わせると，最初の `<td>` が空のときを除いて一致した．そのとき古い正規表現は，次の `<td>`（多くは別の行）の中身を教員名として返していた．
 - テスト: `tests/background.test.mjs` の「S2」．
 
 ### S3
@@ -106,6 +108,7 @@ specification: the GNU General Public License, version 3 or any later version
   - 登録完了の判定は「sessionStorage のキー」と「ページ本文の『設定が完了しました』」だけで行っている．そのため，ページ側がこの 2 つを用意すると，保存済みのシークレットを任意の値で上書きさせられる．
 - 前提: auth.iimc でスクリプトを動かせる攻撃者がいること．
 - 直し方: 保留中のシークレットは background の `chrome.storage.session` にタブ ID ごとに置く．完了の判定には URL やフォームの状態も使う．
+- 見立て: 登録の途中では，シークレットは QR とテキストとしてページに表示されている．そのため，ページのスクリプトは sessionStorage が無くても読める．偽の QR を表示すれば，好きなシークレットを保存させることもできる．保留中のシークレットを background に移して得られるのは，登録をやめたときにタブに残らないことくらいなので，後回しにする．
 - テスト: 未作成（ハーネスで作る）．
 
 ### S4
@@ -117,7 +120,9 @@ specification: the GNU General Public License, version 3 or any later version
   - `&#\d+;` は空文字に置き換えるので，数値参照で書かれた文字が消える．
 - 影響: 描画は textContent なので，今は XSS にならない．ただしデータが壊れ，将来 innerHTML で描画すれば XSS になる．
 - 直し方: 実体参照を表で引く 1 回きりのデコーダにする．数値参照もデコードする．
-- テスト: `tests/background.test.mjs` の「S4」．
+- そのほか: 16 進の数値文字参照（`&#x…;`）と `&quot;` は，デコードされずに残る．
+- 対応: すべての参照を 1 回の置き換えでデコードし，数値文字参照は 10 進も 16 進も文字に戻す．0，サロゲート，範囲外の数値は，これまでどおり捨てる（[fix/syllabus-parse](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-parse)，S8 と同じブランチ）．
+- テスト: `tests/background.test.mjs` の「S4」の 2 件（二重のデコードと，数値文字参照）．
 
 ### S5
 **使っていないホスト権限**（低・読解）
@@ -125,6 +130,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 場所: [manifest.json:22](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/manifest.json#L22)
 - 何が起きるか: v1.20.0 で Tips を消してから，`https://radian0523.github.io/*` へ通信するコードは無い（`<a href>` のリンクだけが残っている）．
 - 直し方: 権限を外す．権限を減らす更新では，利用者に再承認を求める警告は出ない．
+- 対応: [fix/drop-unused-host-permission](https://github.com/yumasansansan/kulms-extension/tree/fix/drop-unused-host-permission)．
 
 ### S6
 **不正な TOTP シークレットを保存できる**（低・再現）
@@ -135,7 +141,8 @@ specification: the GNU General Public License, version 3 or any later version
   - `A` は保存され，コード表示中は毎秒 `DataError: Zero-length key` の未処理 Promise 拒否が出る（[popup.js:744](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L744)，[src/assignments.js:2366](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2366)）．
   - `AB=CD2345` と `========` は保存されるが，デコード結果が null になり，自動入力は何も言わずに動かない．
 - 直し方: 実際にデコードして確かめる．末尾以外の `=` を拒み，最低長を決める（80 ビット = 16 文字）．拒んだときはエラーを表示する．
-- テスト: `tests/totp.test.mjs` の「S6」．
+- 対応: popup と LMS の設定パネルの両方で，空白とハイフンを除いて大文字にしたシークレットを `^[A-Z2-7]{16,}=*$` で確かめる（[fix/validate-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/validate-totp-secret)）．
+- テスト: `tests/totp.test.mjs` の「S6」の 2 件（popup と設定パネル）．空白，ハイフン，小文字，末尾の `=` を含む正しいシークレットが，今までどおり保存されることも確かめる．
 
 ### S7
 **形の崩れたメッセージで onMessage リスナーが例外を投げる**（低・再現）
@@ -148,6 +155,7 @@ specification: the GNU General Public License, version 3 or any later version
   - `{action: "fetchTextbooks", siteId: {toString: 0}}`（`String()` が変換できない．ファズ対象 `background-message` が見つけた）
 - 影響: 送れるのは拡張の文脈だけなので，堅牢化の範囲の問題．
 - 直し方: メッセージの形を確かめる．オブジェクトであること，`type` と文字列の項目が文字列であること．`String()` で受けるだけでは足りない（`toString` が関数でないオブジェクトでは，`String()` も例外を投げる）．
+- 対応: メッセージが無いときと，`type` が文字列でないときは，関係のないメッセージとして扱う．`fetchTextbooks` の項目は，文字列でなければ空として扱う（[fix/message-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/message-shape)）．
 - テスト: `tests/background.test.mjs` の「S7」．
 
 ### S8
@@ -155,7 +163,12 @@ specification: the GNU General Public License, version 3 or any later version
 
 - 場所: [background.js:370](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L370)（`<[^>]+>`），[:433](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L433)（`^(.*?)『(.+?)』`）
 - 根拠: 閉じない `<` や対にならない `『` が 20,000 字続くと，それぞれ約 0.2 秒かかる．
-- テスト: `tests/background.test.mjs` の「S8」．
+- そのほか: 同じ型の正規表現が，ほかに 3 つある．
+  - 出版社を読む `[（(]([^）)]+)[）)]`（閉じない括弧が続くとき）と，書名の末尾の区切りを除く `[\s,、;；]+$`（区切りが途中に長く続くとき）．4 万字で 1〜3 秒かかる．
+  - 出版社のフォールバックの `[,、]\s*([^,、]+?(?:社|…))`．`\s*` と `[^,、]+?` が空白を取り合い，読点の後に全角空白などが長く続くと遅くなる（2 万字で約 0.2 秒）．答えを変えずに直すには，出版社の語の並びを 2 回書く必要がある．起きる条件も考えにくいので，まだ直していない．
+- 補足: 教員が書いた文字は，KULASIS がエスケープして HTML に出す（`<` は `&lt;` になる）．そのため，タグを除く `<[^>]+>` が遅くなる入力は，教員の入力からは作りにくい．
+- 対応: 370 行，433 行，出版社の括弧，書名の末尾の 4 つを，答えを変えずに線形の時間にした（[fix/syllabus-parse](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-parse)）．ランダムな 10 万件のページで古い実装と答えを突き合わせると，行の途中に U+2028 などの改行扱いの文字があるときを除いて一致した．そのとき古い実装は，『』を書名として読まなかった．
+- テスト: `tests/background.test.mjs` の「S8」．4 つの正規表現を，4 万字の入力でそれぞれ測る．
 
 ## 不具合
 
@@ -167,7 +180,8 @@ specification: the GNU General Public License, version 3 or any later version
 - 根拠: タブ B でメモを追加し，続いてタブ A で追加すると，B のメモが消えた．完了チェックと非表示も同じ書き方をしている．
 - 影響: LMS をよく複数タブで開く利用者のデータが消える．
 - 直し方: 操作のたびに「最新を読む → 差分を当てる → 書く」にするか，`storage.onChanged` で他のタブと同期する．より良いのは，項目ごとのキーにするか，background が更新を一列に並べる方式．
-- テスト: `tests/assignments.test.mjs` の「B1」．
+- 対応: `storage.onChanged` で，ほかのタブが保存した状態をメモリに取り込み，開いているパネルを描き直す．バックフォワードキャッシュから戻ったページは読み直す（[fix/sync-state-across-tabs](https://github.com/yumasansansan/kulms-extension/tree/fix/sync-state-across-tabs)，PR [#75](https://github.com/Radian0523/kulms-extension/pull/75)）．
+- テスト: `tests/assignments.test.mjs` の「B1」の 4 件（メモ，完了チェック，削除，開いているパネルの表示）．
 
 ### B2
 **非表示にした課題が 30 日後に一覧へ戻る**（中・再現・上流 [#74](https://github.com/Radian0523/kulms-extension/issues/74) の原因とみられる）
@@ -176,7 +190,8 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: 画面は「30日後に自動的に完全削除されます」と表示する．しかし 30 日後に消えるのは，課題を隠している**非表示の記録**の方である．そのため，サーバーの一覧にまだある課題は「遅延提出」や「その他」に戻ってくる．
 - 根拠: 31 日前に非表示にした課題 2 件が，どちらも一覧に戻った．
 - 直し方: 「隠し続ける」と「削除済みに 30 日表示する」を分ける．非表示の記録は，その課題が取得結果から消えたとき（あるいは締切から一定期間が過ぎたとき）に消す．
-- テスト: `tests/assignments.test.mjs` の「B2」．
+- 対応: 30 日たった課題・クイズの記録は，削除日時だけの記録にして隠し続ける．メモは今までどおり，メモごと削除する（[fix/keep-dismissed-hidden](https://github.com/yumasansansan/kulms-extension/tree/fix/keep-dismissed-hidden)，PR [#76](https://github.com/Radian0523/kulms-extension/pull/76)）．
+- テスト: `tests/assignments.test.mjs` の「B2」（削除済みセクションから外れることも確かめる）と，31 日前に削除したメモがメモごと消えることを確かめるテスト．
 
 ### B3
 **サイドバーの色分けで，期限切れが最も弱く扱われる**（中・再現）
@@ -185,6 +200,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: `(priority[u] || 99)` は，期限切れの優先度 0 を 99 として扱う．そのため，期限切れの課題がある科目が，同じ科目の他の課題の色で塗られる．
 - 根拠: 「期限切れ + 先の課題」は灰色，「期限切れ + 緑の課題」は緑になった．
 - 直し方: `??` を使うか，`in` で確かめる．
+- 対応: 急ぐ順の表に無いときだけ 99 とし，`in` で確かめる（[fix/sidebar-overdue-color](https://github.com/yumasansansan/kulms-extension/tree/fix/sidebar-overdue-color)）．
 - テスト: `tests/assignments.test.mjs` の「B3」．
 
 ### B4
@@ -251,7 +267,8 @@ specification: the GNU General Public License, version 3 or any later version
 - 場所: [src/settings.js:112](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/settings.js#L112)，[popup.js:29](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L29)
 - 何が起きるか: 値を `String.prototype.replace` の置換文字列として渡しているので，`$&` は `$MINS$` に，`$$` は `$` に変わる．今の呼び出しは数値しか渡さないので，表には出ていない．
 - 直し方: `msg.replace(re, () => value)` のように関数で渡す．
-- テスト: `tests/i18n.test.mjs` の「B10」．
+- 対応: 値は関数で渡し，そのまま入れる（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)，B15 と同じブランチ）．
+- テスト: `tests/i18n.test.mjs` の「B10」の 2 件（settings.js と popup.js の `t()`）．
 
 ### B11
 **教科書一覧が科目名をキーにしていて，同名の科目が衝突する**（低・読解）
@@ -267,6 +284,8 @@ specification: the GNU General Public License, version 3 or any later version
   - `kulms-submitted-ids` が配列でない JSON（`"abc"` など）だと，`ids.forEach` で未処理の拒否になる．
   - `kulms-tool-config` の値に `hasOwnProperty` という名前の項目があると，TypeError になる．
 - 直し方: 読んだ値の形を確かめ，`Object.hasOwn` を使う．拡張の状態は，できるだけ chrome.storage に置く．
+- 対応: 提出の ID は文字列の配列だけを使い，それ以外の要素は捨てる．ツールの設定は，オブジェクトでなければ空とみなし，科目の設定の有無は `Object.prototype.hasOwnProperty.call` で確かめる（[fix/web-storage-values](https://github.com/yumasansansan/kulms-extension/tree/fix/web-storage-values)）．
+- テスト: `tests/assignments.test.mjs` の「B12」（提出の ID）と，`tests/sidebar.test.mjs` の「B12」の 2 件（ツールの設定）．
 
 ### B13
 **シラバス検索の最後のフォールバックが無関係な科目を選びうる**（低・読解）
@@ -289,7 +308,8 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: 読み込んだ messages.json を `__kulmsOverrideMessages[key]` で引くので，`constructor`，`toString`，`hasOwnProperty` などのキーは Object.prototype の関数に当たる．その `message` は undefined なので，`t()` は文字列でなく undefined を返す．今の呼び出しはキーが定数なので，表には出ていない．
 - 根拠: ファズ対象 `i18n` が，起動から 1 秒足らず（390 回目）で見つけた．
 - 直し方: `Object.hasOwn(messages, key)` で引く．
-- テスト: `fuzz/known/i18n/B15-hasOwnProperty`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
+- 対応: 辞書自身のキーだけを引き，それ以外は `chrome.i18n.getMessage` に任せる（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)，B10 と同じブランチ）．
+- テスト: `fuzz/known/i18n/B15-hasOwnProperty`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/i18n.test.mjs` の「B15」（popup の `t()`）．
 
 ### B16
 **TA 採点支援が壊れた `%` の並びで URIError を投げ，装飾が止まる**（低・ファズ）
@@ -298,7 +318,8 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: 提出へのリンクや URL のクエリから ID を取り出すとき，`decodeURIComponent` を例外の処理なしに呼ぶ．`%` の後に 16 進数が続かないリンクがあると URIError で止まり，提出一覧の状態アイコンの装飾がその場で途切れる．URL のクエリに壊れた `%` があると，採点画面の起動そのものが止まる．
 - 根拠: ファズ対象 `grading-status` が，約 6 万回目（10 秒）で見つけた．
 - 直し方: 失敗したら元の文字列を使う（あるいは `URLSearchParams` で読む）．
-- テスト: `fuzz/known/grading-status/B16-malformed-percent`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
+- 対応: デコードできないときは，元の文字列をそのまま使う（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)，B18 と同じブランチ）．
+- テスト: `fuzz/known/grading-status/B16-malformed-percent`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/grading-ta.test.mjs` の「B16」．
 
 ### B17
 **保存されたメモに null が 1 つあると，課題パネルの描画が止まる**（中・ファズ）
@@ -307,7 +328,8 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: メモは `normalizeMemo()` を通してから `.deadline` や `.id` を読むが，`normalizeMemo()` は文字列しか直さず，null をそのまま返す．そのため，保存されたメモの一覧に null が 1 つでもあると TypeError になり，課題パネルの描画全体が止まる．popup の一覧と，期限の切れた非表示の掃除（読み込み時）も同じところで止まる．値は拡張自身のストレージから来るが，旧版や，計画中のスマホ版との同期，ストレージの破損などで 1 件でも壊れると，パネルを開けない状態が続く．
 - 根拠: ファズ対象 `assignments` が，Linux で約 2,500 回目（9 秒）に見つけた．
 - 直し方: 読み込んだ一覧から，オブジェクトでない要素を取り除く（`normalizeMemo()` で null や数値を捨てる）．
-- テスト: `fuzz/known/assignments/B17-null-memo`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
+- 対応: `normalizeMemo()` は，オブジェクトでも文字列でもないものに null を返し，呼び出し元（課題パネルの 4 か所と popup の 1 か所）はそれを飛ばす（[fix/invalid-memo](https://github.com/yumasansansan/kulms-extension/tree/fix/invalid-memo)）．
+- テスト: `fuzz/known/assignments/B17-null-memo`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B17」の 2 件（課題パネルと popup）．
 
 ### B18
 **TA 採点支援が，ページから届く提出の status の型を確かめず TypeError で止まる**（低・ファズ）
@@ -316,7 +338,8 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: 提出の一覧は，ページの世界のブリッジ（`grading-ta-page.js`）から JSON の event で届く．content script はその `status` を `String()` に渡すが，`toString` や `valueOf` が関数でないオブジェクトだと TypeError になり，状態の表示とジャンプが止まる．ページのスクリプトは，外へ出る event から requestId を読んで応答を偽れるので，届く値は任意の JSON になりうる．
 - 根拠: ファズ対象 `grading-status` が，Linux で見つけた．
 - 直し方: ページから届いた値は型を確かめてから使う（文字列でなければ空として扱う）．
-- テスト: `fuzz/known/grading-status/B18-status-object`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
+- 対応: 届いた提出は，ブリッジが送るのと同じ形に揃える（文字列の項目は文字列，真偽の項目は真偽値）．`stripStatusIcon()` も文字列でないものを空として扱う（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)，B16 と同じブランチ）．
+- テスト: `fuzz/known/grading-status/B18-status-object`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/grading-ta.test.mjs` の「B18」（ページのスクリプトがブリッジの代わりに答える）．
 
 ## 速度・負荷
 

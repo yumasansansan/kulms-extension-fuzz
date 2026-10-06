@@ -10,7 +10,7 @@
 // manifest has them, drawn from a fresh cache so that nothing is fetched.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Browser, settle } from "../harness/index.mjs";
+import { Browser, openPopup, settle, until } from "../harness/index.mjs";
 import { D, H, LMS, assignment, cached, card, openCoursePage, openPanel } from "./lms.mjs";
 
 function browserWith(stored) {
@@ -90,6 +90,48 @@ test("B2: an assignment hidden 31 days ago stays hidden, out of the deleted sect
   assert.deepEqual(names(panel, ".kulms-assign-card:not(.kulms-deleted-card)"), []);
   // What was hidden 30 days ago or more can no longer be restored, as the panel says.
   assert.deepEqual(names(panel, ".kulms-deleted-card"), ["昨日隠した課題"]);
+});
+
+// After a submission, submit-detect.js leaves the IDs submitted in the page's
+// sessionStorage for assignments.js to mark as done; the page's own scripts
+// can write there too.
+test("B12: a list of submitted IDs that the page has spoiled is read as far as it holds IDs", { todo: "B12: ids.forEach and checkedState[id] throw on what is not an array of strings" }, async (t) => {
+  for (const ids of ["null", '"abc"', "{}", JSON.stringify([{ toString: 0 }, 1, "A1"])]) {
+    const browser = browserWith(cached([assignment("A1", "レポート1", Date.now() + 30 * H)]));
+    t.after(() => browser.close());
+    openCoursePage(browser, { prepare: (w) => w.sessionStorage.setItem("kulms-submitted-ids", ids) });
+    const checked = () => browser.storage.local.dump()["kulms-checked-assignments"] || {};
+    if (ids.includes("A1")) await until(() => "A1" in checked(), { timeout: 2000 });
+    else await settle(300);
+    assert.deepEqual(browser.errors.map((e) => `${ids}: ${e.error}`), []);
+    assert.deepEqual(Object.keys(checked()), ids.includes("A1") ? ["A1"] : [], ids);
+  }
+});
+
+// The stored state of B17: one memo that is null, beside one that is not.
+const withNullMemo = () => ({
+  ...cached([assignment("A1", "レポート1", Date.now() + 30 * H)]),
+  "kulms-memos": [null, { id: 1, text: "残るメモ", created: Date.now() }],
+});
+
+test("B17: a stored memo that is null does not stop the drawing of the panel", { todo: "B17: normalizeMemo() hands null back, and reading its deadline throws" }, async (t) => {
+  const browser = browserWith(withNullMemo());
+  t.after(() => browser.close());
+  const tab = openCoursePage(browser);
+  await until(() => tab.document.getElementById("kulms-assign-toggle"));
+  tab.document.getElementById("kulms-assign-toggle").click();
+  const panel = tab.document.getElementById("kulms-assign-panel");
+  await until(() => card(panel, "残るメモ"), { timeout: 2000 });
+  assert.ok(card(panel, "レポート1") && card(panel, "残るメモ"), "the panel lacks the assignment or the memo");
+});
+
+test("B17: a stored memo that is null does not stop the popup's list", { todo: "B17: normalizeMemo() hands null back, and reading its id throws" }, async (t) => {
+  const browser = browserWith(withNullMemo());
+  t.after(() => browser.close());
+  const popup = openPopup(browser);
+  await until(() => popup.document.body.textContent.includes("残るメモ"), { timeout: 2000 });
+  const text = popup.document.body.textContent;
+  assert.ok(text.includes("レポート1") && text.includes("残るメモ"), "the popup lacks the assignment or the memo");
 });
 
 test("a memo deleted 31 days ago is deleted for good", async (t) => {

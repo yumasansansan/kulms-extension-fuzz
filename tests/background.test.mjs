@@ -56,13 +56,29 @@ test("S4: the syllabus text is decoded once, so &amp;lt; stays &lt;", { todo: "S
   assert.equal(book.title, "&lt;b&gt;入門");
 });
 
-test("S8: the textbook line parsers keep to linear time", { todo: "S8: quadratic, 20,000 characters take about 0.2 s each" }, async (t) => {
-  for (const run of ["『".repeat(20000), "<".repeat(20000)]) {
+// KULASIS writes a character that Shift_JIS lacks as a numeric reference.
+test("S4: numeric character references in the syllabus are decoded", { todo: "S4: &#…; is replaced with nothing, and &#x…; is left as it is" }, async (t) => {
+  const { browser, g } = background(syllabus("<td>(教科書)</td><td>著者『&#134071;野家の&#x2160;巻』(出版社)</td>"));
+  t.after(() => browser.close());
+  const [book] = await g.fetchSyllabusDetail("1", "2");
+  assert.equal(book.title, "𠮷野家のⅠ巻");
+});
+
+// A run of what one of the parsers' regular expressions takes, where it does
+// not find what ends the match: an unclosed tag, 『 with no 』, an opening
+// bracket of the publisher with no closing one, and a run of separators that
+// is not at the end of a title. In linear time each takes a few milliseconds;
+// in quadratic time, 1 to 3 s.
+test("S8: the textbook line parsers keep to linear time", { todo: "S8: quadratic, 40,000 characters take 1 to 3 s each" }, async (t) => {
+  const n = 40000;
+  const slow = [];
+  for (const run of ["『".repeat(n), "<".repeat(n), "著者『書名』" + "（".repeat(n), "書名" + "、".repeat(n) + "x"]) {
     const { browser, g } = background(syllabus("<td>(教科書)</td><td>" + run + "</td>"));
     t.after(() => browser.close());
     const ms = await timed(() => g.fetchSyllabusDetail("1", "2"));
-    assert.ok(ms < 50, `${JSON.stringify(run[0])} x 20,000 took ${ms.toFixed(0)} ms`);
+    if (ms >= 150) slow.push(`${JSON.stringify(run.slice(0, 8))}… took ${ms.toFixed(0)} ms`);
   }
+  assert.deepEqual(slow, []);
 });
 
 test("S7: the message listeners survive messages of any shape", { todo: "S7: null and {type: 1} throw a TypeError" }, async (t) => {
