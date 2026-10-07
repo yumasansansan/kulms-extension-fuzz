@@ -231,11 +231,20 @@ export class Browser {
       let responded = false;
       let open = false;
       let listeners = 0;
+      // The answer arrives whatever its copy throws: once the extension's
+      // work has passed what it may do (harness/work.mjs), every counted step
+      // throws, the copy's into the sender's realm among them, and an answer
+      // lost there would be told of as none.
       const sendResponse = (response) => {
         if (responded) return;
         responded = true;
-        exchange.response = copyInto(null, response);
-        resolve({ response: copyInto(from.realm, response) });
+        let copy;
+        try {
+          exchange.response = copyInto(null, response);
+          copy = copyInto(from.realm, response);
+        } finally {
+          resolve({ response: copy });
+        }
       };
       for (const t of targets) {
         for (const f of t.events.onMessage.listeners) {

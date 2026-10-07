@@ -10,7 +10,7 @@
 // messages it fetches from the extension as it does in Chrome.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Browser, openPopup, openTab, settle, until } from "../harness/index.mjs";
+import { Browser, LINEAR, degree, measure, openPopup, openTab, settle, until } from "../harness/index.mjs";
 import { LMS } from "./lms.mjs";
 
 async function settings(t) {
@@ -36,6 +36,15 @@ test("B10: t() puts any text in its placeholder as it is", { todo: B10 }, async 
   assert.equal(w.t("remainDaysHoursMins", ["$HOURS$", "5", "7"]), "残り$HOURS$日5時間7分");
 });
 
+test("B10: t()'s work grows linearly with a value that holds a replacement pattern", { todo: B10 }, async (t) => {
+  const w = await settings(t);
+  // $' puts in what follows the placeholder, the next placeholder's name
+  // among it, which the next replacement replaces in turn with its value of
+  // $': the text, and the work, grow as the cube of the value's length.
+  const d = await degree(16, (k) => measure(() => w.t("remainHoursMins", ["$'".repeat(k), "$'".repeat(k)])));
+  assert.ok(d < LINEAR, `degree ${d.toFixed(2)}`);
+});
+
 // t() of popup.js, a copy of that of settings.js, once the popup has loaded
 // its messages.
 async function popupT(t) {
@@ -52,6 +61,12 @@ test("B10: t() of the popup puts any text in its placeholder as it is", { todo: 
     assert.equal(popupt("lastUpdatedMins", [value]), `最終更新: ${value}分前`);
   }
   assert.equal(popupt("remainDaysHoursMins", ["$HOURS$", "5", "7"]), "残り$HOURS$日5時間7分");
+});
+
+test("B10: the work of t() of the popup grows linearly with a value that holds a replacement pattern", { todo: B10 }, async (t) => {
+  const popupt = await popupT(t);
+  const d = await degree(16, (k) => measure(() => popupt("remainHoursMins", ["$'".repeat(k), "$'".repeat(k)])));
+  assert.ok(d < LINEAR, `degree ${d.toFixed(2)}`);
 });
 
 test("B15: t() of the popup answers a key that every object has with a string", { todo: "B15: the key is looked up through the prototype, and t(\"hasOwnProperty\") is undefined" }, async (t) => {

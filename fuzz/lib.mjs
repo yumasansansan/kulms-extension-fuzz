@@ -102,8 +102,14 @@ export const BOTTOM = 4096;
 // An input is run on rungs (ladder()): on the first as it is, and on each one
 // above with every piece it repeats repeated twice as many times as on the
 // one below, up to the top rung, as many doublings up as the input picks
-// (doublings()). Each rung is a whole input to the extension, judged by
-// itself (judge()), and between rungs how the work grew is judged:
+// (doublings()). Every rung reads the input alike, the same bytes for the
+// same values but for how many times a piece is repeated: nothing a rung
+// makes longer says how a read goes on. A rung that read it otherwise would
+// be another input, and its growth from the rung below would say nothing of
+// the extension's; so the provider holds every rung to the questions the
+// bottom rung asked it (provider()), and tests/fuzz-reads.test.mjs reads the
+// targets' inputs on rungs. Each rung is a whole input to the extension,
+// judged by itself (judge()), and between rungs how the work grew is judged:
 // - work that grows as n log n at most adds, from one rung to the next, no
 //   more than 2^LINEAR times what it added to the one before (degree() of
 //   harness/work.mjs; a sort, as harness/costs.mjs counts it, at most 2.44
@@ -152,6 +158,8 @@ let rungTime = Infinity; // and its time, in seconds
 let capNote = ""; // how they were worked out, for a failure's message
 let timeNote = "";
 let judged = null; // the work of the rung last judged (judge())
+let questions = []; // what the bottom rung asked the provider, in order (provider())
+let asking = 0; // how many of them the rung being run has asked
 
 // How much more a rung may add over the rung below than that one added over
 // the one below it: as much as work that grows as n log n at most adds.
@@ -171,25 +179,67 @@ export const TIME_SPAN = 2;
 export const NOISE = process.env.KULMS_FUZZ_NOISE ? Number(process.env.KULMS_FUZZ_NOISE) : 0.5;
 export const TIME_FLOOR = 0.3;
 
+// A question to the provider, as the bottom rung's are kept: the method, what
+// it was given (an array by its length, all that the provider reads of it),
+// and the bytes its answer left. The same questions of the same bytes get the
+// same answers.
+function question(fdp, name, args) {
+  const given = args.map((a) => (Array.isArray(a) ? `an array of ${a.length}` : typeof a === "object" || typeof a === "function" ? `a ${typeof a}` : String(a)));
+  return `${name}(${given.join(", ")}), leaving ${fdp.remainingBytes} bytes`;
+}
+
+// `fdp`, held on the rungs above the bottom one to the questions the bottom
+// rung asked it, in the same order (the head of this section).
+function heldToBottom(fdp) {
+  return new Proxy(fdp, {
+    get(target, name) {
+      const v = Reflect.get(target, name, target);
+      if (typeof v !== "function") return v;
+      return (...args) => {
+        const said = Reflect.apply(v, target, args);
+        const q = question(target, String(name), args);
+        if (rung === 1) questions.push(q);
+        else if (questions[asking] !== q) {
+          fail(`the rung of ×${rung} read the input otherwise than the bottom rung: its read ${asking + 1} was ${q}, the bottom rung's ${questions[asking] ?? "none"}; every rung must read the input alike, or it is another input (fuzz/lib.mjs)`);
+        }
+        asking++;
+        return said;
+      };
+    },
+  });
+}
+
+// The seed that the extension's draws of chance begin from for `data`
+// (harness/work.mjs): its bytes, hashed (FNV-1a), the same on every rung, and
+// another for another input.
+function seedOf(data) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < data.length; i++) h = Math.imul(h ^ data[i], 0x01000193);
+  return h >>> 0;
+}
+
 // A provider for `data`, an input of the target's, on the rung being run: its
 // work is judged against the size of the input, which is counted from here on
-// (harness/work.mjs), and against what the rungs below allow it.
+// (harness/work.mjs), and against what the rungs below allow it; and what it
+// is asked, against what the bottom rung asked.
 export function provider(data) {
-  const fdp = new FuzzedDataProvider(data);
+  if (rung === 1) questions = [];
+  asking = 0;
+  const fdp = heldToBottom(new FuzzedDataProvider(data));
   top = 2 ** doublings(fdp);
   leftBottom = BOTTOM;
   leftTop = MAX_UNITS;
   repeated = 0;
-  beginInput(data.length, { judge: !calibrating, cap: rungCap, deadline: performance.now() + 1000 * rungTime });
+  beginInput(data.length, { judge: !calibrating, cap: rungCap, deadline: performance.now() + 1000 * rungTime, seed: seedOf(data) });
   return fdp;
 }
 
 // A provider for `data` read back outside a target's run (fuzz/inputs.mjs and
-// the tests read inputs so): as provider() reads it, on the bottom rung, and
-// nothing judged.
-export function reading(data) {
+// the tests read inputs so): as provider() reads it, on rung `m` (the bottom
+// one unless told), and nothing judged.
+export function reading(data, m = 1) {
   const fdp = new FuzzedDataProvider(data);
-  rung = 1;
+  rung = m;
   top = 2 ** doublings(fdp);
   leftBottom = BOTTOM;
   leftTop = MAX_UNITS;
@@ -293,6 +343,9 @@ const SHOW_RUNGS = Boolean(process.env.KULMS_FUZZ_RUNGS);
 // is a rung above it: none above the top, and none when the input repeats
 // nothing.
 function landed(rungs, time) {
+  if (asking !== questions.length) {
+    fail(`the rung of ×${rung} read the input ${asking} times, the bottom rung ${questions.length} times; every rung must read the input alike, or it is another input (fuzz/lib.mjs)`);
+  }
   rungs.push({ m: rung, work: judged.done, units: judged.units, time });
   if (SHOW_RUNGS) console.error(`rung ×${rung}: ${judged.units} units, ${judged.done} steps, ${time.toFixed(3)} s`);
   if (rungs.length > 2 * TIME_SPAN) {
@@ -666,6 +719,9 @@ function contentType(fdp, type) {
 // too (what a Response can hold).
 export const STATUSES = [200, 201, 204, 206, 301, 302, 304, 400, 401, 403, 404, 408, 410, 429, 500, 502, 503, 504];
 
+// The shares a body may be cut at (answer()), said in two bytes.
+const CUT = 2 ** 16 - 1;
+
 // The answer of the network to one fetch, for a route of harness/net.mjs:
 // mostly `body` as `type`, otherwise, as the input picks, a network that
 // fails, another status, another content type or none, a body cut short, or
@@ -680,8 +736,13 @@ export function answer(fdp, body, type) {
     case 2: return { status: 200, headers: { "content-type": contentType(fdp, type) }, body };
     case 3: return { status: 200, headers: {}, body };
     case 4: {
+      // Cut at a share of the body, which the input says. A rung repeats
+      // more of the body, so a cut read as a place up to its length would be
+      // read anew on each rung, in other bytes once the length took another
+      // byte to say: every rung must read the input alike (the head of this
+      // file's section on rungs).
       const b = typeof body === "string" ? new TextEncoder().encode(body) : body;
-      return { status: 200, headers: { "content-type": type }, body: b.subarray(0, fdp.consumeIntegralInRange(0, b.length)) };
+      return { status: 200, headers: { "content-type": type }, body: b.subarray(0, Math.floor((b.length * fdp.consumeIntegralInRange(0, CUT)) / CUT)) };
     }
     case 5: return { status: 200, headers: { "content-type": contentType(fdp, type) }, body: bytes(fdp) };
     default: return { status: 200, headers: { "content-type": type }, body };
@@ -728,7 +789,13 @@ export function brief(v) {
   return s.length > 300 ? `${s.slice(0, 300)}… (${s.length} characters)` : s;
 }
 
-// Fails the input, saying what went wrong with it.
+// Fails the input, saying what went wrong with it; but if its work or its
+// time has passed what it may be, it says that instead (judge()). From then
+// on every counted step throws (harness/work.mjs), those of the extension's
+// own handling of what it caught too, so what goes wrong next (an answer that
+// never comes, a promise rejected with nothing to handle it) follows from the
+// passing.
 export function fail(message) {
+  if (work.judging && (work.over || work.overTime)) judge();
   throw new Error(message);
 }

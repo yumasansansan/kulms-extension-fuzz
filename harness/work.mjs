@@ -89,12 +89,50 @@ function rebound() {
   work.capped = work.cap < linear;
 }
 
-// An input of `units` units begins; with `judge`, passing the bound, or the
-// cap and the deadline that a rung of the input is given (fuzz/lib.mjs),
-// throws.
-export function beginInput(units, { judge = true, cap = Infinity, deadline = Infinity } = {}) {
+// The extension's Math.random (harness/contexts.mjs puts it in each realm in
+// place of the realm's own): draws that begin anew with each input, from the
+// seed the input is given. A rung of an input (fuzz/lib.mjs) is the input run
+// again with its pieces repeated more, and draws what the rungs below drew;
+// what the rungs add is then all that differs between them. With draws of
+// the moment, how long a draw comes out (the extension makes a request's ID
+// of Math.random().toString(36), whose length differs from draw to draw)
+// would add work to one rung and not to the next. sfc32, from the seed and
+// three constants of its own, two of its numbers to a double in [0, 1) of
+// 53 bits, as fine as a double there goes.
+let s0 = 0;
+let s1 = 0;
+let s2 = 0;
+let s3 = 0;
+
+function next32() {
+  const t = (((s0 + s1) | 0) + s3) | 0;
+  s3 = (s3 + 1) | 0;
+  s0 = s1 ^ (s1 >>> 9);
+  s1 = (s2 + (s2 << 3)) | 0;
+  s2 = (s2 << 21) | (s2 >>> 11);
+  s2 = (s2 + t) | 0;
+  return t >>> 0;
+}
+
+function seedRandom(seed) {
+  s0 = 0x9e3779b9;
+  s1 = 0x243f6a88;
+  s2 = 0xb7e15162;
+  s3 = seed >>> 0;
+  for (let i = 0; i < 12; i++) next32(); // its first numbers, which say little of the seed yet
+}
+
+export function random() {
+  return ((next32() >>> 5) * 2 ** 26 + (next32() >>> 6)) / 2 ** 53;
+}
+
+// An input of `units` units begins, drawing from `seed`; with `judge`,
+// passing the bound, or the cap and the deadline that a rung of the input is
+// given (fuzz/lib.mjs), throws.
+export function beginInput(units, { judge = true, cap = Infinity, deadline = Infinity, seed = 0 } = {}) {
   epoch++;
   inputs.enterWith(epoch);
+  seedRandom(seed);
   work.done = 0;
   work.units = units;
   work.cap = cap;

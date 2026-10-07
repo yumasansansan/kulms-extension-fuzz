@@ -67,26 +67,32 @@ function check(data) {
   browser.forget();
   const fdp = provider(data);
   const key = fdp.consumeBoolean() ? fdp.pickValue(keys) : string(fdp);
-  // Known: B15 (docs/findings.md). While it is open, no key that every object
-  // has (constructor, toString, ...) is asked for: t() looks it up through the
-  // prototype and returns undefined.
-  if (open("B15") && !Object.hasOwn(messages, key) && key in {}) return;
   let given;
   switch (fdp.consumeIntegralInRange(0, 2)) {
     case 0: given = undefined; break;
     case 1: given = substitution(fdp); break;
     default: given = Array.from({ length: fdp.consumeIntegralInRange(0, fdp.remainingBytes) }, () => substitution(fdp));
   }
+  // Known: B15 (docs/findings.md). While it is open, no key that every object
+  // has (constructor, toString, ...) is asked for: t() looks it up through the
+  // prototype and returns undefined. The key is left out once the input is
+  // read: on the rungs above, a key repeated ("constructorconstructor") is
+  // none, and every rung reads the input alike (fuzz/lib.mjs).
+  if (open("B15") && !Object.hasOwn(messages, key) && key in {}) return;
+  let values = given === undefined ? [] : Array.isArray(given) ? given : [given];
+  // Known: B10. While it is open, t() is not called with a value that has a
+  // dollar sign in it for a message of the extension's: the replacement reads
+  // the value as a pattern, which mangles the text, and where a message has
+  // two placeholders, $` and $' (what comes before and after the match, the
+  // next placeholder's name among it) make the text and the work grow as the
+  // square and the cube of the value's length.
+  if (open("B10") && Object.hasOwn(messages, key) && values.some((v) => v.includes("$"))) return;
   const text = tab.window.t(key, given);
   if (typeof text !== "string") fail(`t(${brief(key)}) gave ${brief(text)}`);
   if (!Object.hasOwn(messages, key)) return; // chrome.i18n's answer, or the key itself
-  let values = given === undefined ? [] : Array.isArray(given) ? given : [given];
   // Known: B21. While it is open, a value given alone that is empty is taken
   // as no value, as t() takes it.
   if (open("B21") && given === "") values = [];
-  // Known: B10. While it is open, a text with a value that has a dollar sign
-  // in it, which the replacement mangles, is not looked at.
-  if (open("B10") && values.some((v) => v.includes("$"))) return;
   const want = expected(messages[key], values);
   if (text !== want) {
     let at = 0;

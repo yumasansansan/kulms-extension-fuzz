@@ -12,12 +12,14 @@
 // grows as n or n log n, or that steps up once, climbs to the top rung; work
 // that grows as the square stops on the second rung in a row where that
 // shows; and time that grows faster than the counted work fails as work the
-// counting does not see.
+// counting does not see. What goes wrong after the work passed what it may be
+// is told as the work's passing, and a rung that reads the input otherwise
+// than the bottom rung fails as such.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { judge, ladder, provider, string } from "../fuzz/lib.mjs";
+import { fail, judge, ladder, provider, string } from "../fuzz/lib.mjs";
 import { encode, repeated, string as written } from "../fuzz/encode.mjs";
-import { addSites, step } from "../harness/work.mjs";
+import { addSites, step, work } from "../harness/work.mjs";
 
 // The bound of linear code (harness/work.mjs) as if a script of a thousand
 // counting sites were loaded, as a target loads the extension's.
@@ -90,4 +92,32 @@ test("time that grows faster than the counted work fails as work the counting do
   const rungs = [];
   await assert.rejects(ladder(input(5), target((n) => 10 * n, rungs, (n) => (n * n) / 10)), /time grew faster than its counted work|time on the rung of ×32 passed/);
   assert.equal(rungs.length, 6);
+});
+
+test("a rung that reads the input otherwise than the bottom rung fails as such", async () => {
+  // A cut read as a place up to the length of a string the rungs repeat: one
+  // more byte to say it once the length passes 255.
+  const rungs = [];
+  const run = async (data) => {
+    const fdp = provider(data);
+    const s = string(fdp);
+    rungs.push(s.length);
+    fdp.consumeIntegralInRange(0, s.length);
+    judge();
+  };
+  await assert.rejects(ladder(encode((w) => { repeated(w, "ab", 64); w.int(0, 128, 0); }, { doublings: 3 }), run), /the rung of ×2 read the input otherwise than the bottom rung: its read \d+ was consumeIntegralInRange\(0, 256\)/);
+  assert.deepEqual(rungs, [128, 256]);
+});
+
+test("what goes wrong after the work passed what it may be is told as the work's passing", async () => {
+  // A step more than the bound of linear code allows, caught as the extension
+  // catches what the counting throws, and then an answer that never came.
+  const run = async (data) => {
+    string(provider(data));
+    try {
+      for (let i = 0; i <= work.bound; i++) step(1);
+    } catch { /* what the counting threw */ }
+    fail("no answer");
+  };
+  await assert.rejects(ladder(input(0), run), /the extension's work passed .*the most that linear code does/);
 });

@@ -31,7 +31,7 @@ import { globToRegExp, matchesPattern } from "./chrome.mjs";
 import { record } from "./log.mjs";
 import { Net, response } from "./net.mjs";
 import { backtrackingRegExp, costedClass, costedFunction, installCosts } from "./install.mjs";
-import { compare, finished, forIn, has, instanceOf, key, spread, started, step, tracked, trackedCrypto, uncounted } from "./work.mjs";
+import { compare, finished, forIn, has, instanceOf, key, random, spread, started, step, tracked, trackedCrypto, uncounted } from "./work.mjs";
 
 // What the extension's code calls to count its work (harness/work.mjs,
 // harness/install.mjs), in each context.
@@ -174,6 +174,7 @@ export function openBackground(browser, { net = new Net() } = {}) {
     Fuzzer: globalThis.Fuzzer,
     ...COUNTING,
   });
+  context.realm.Math.random = random; // an input's draws, the same on each of its rungs (harness/work.mjs)
   installCosts(context.realm);
   context.close = () => browser.unregister(context);
   run(context, "background.js");
@@ -200,6 +201,7 @@ function openWindow(browser, context, html, url) {
   // The harness runs the extension's scripts with the window's own eval, not
   // the counted one: loading a script is not the extension's work.
   context.evaluate = w.eval.bind(w);
+  w.Math.random = random; // an input's draws, the same on each of its rungs (harness/work.mjs)
   installCosts(w, { web: w });
   w.__kulmsExpose = (file, internals) => { context.internals[file] = internals; };
   w.console = quietConsole(context);

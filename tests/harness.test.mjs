@@ -11,7 +11,9 @@
 // that its detectors see what they are for.
 import test from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
 import { Browser, Net, contentScriptsFor, exposeInternals, openBackground, openTab, read, settle, watch } from "../harness/index.mjs";
+import { beginInput, endInput } from "../harness/work.mjs";
 import { LMS } from "./lms.mjs";
 
 test("exposing an IIFE's internals moves no line and keeps its directive first", () => {
@@ -44,6 +46,45 @@ test("a message with no listener to take it gives lastError, as Chrome does", as
   const seen = await new Promise((resolve) => tab.window.chrome.runtime.sendMessage({ type: "x" }, () => resolve(tab.window.chrome.runtime.lastError)));
   assert.match(seen.message, /Receiving end does not exist/);
   assert.equal(tab.window.chrome.runtime.lastError, undefined);
+});
+
+test("the extension's draws of chance begin anew with each input, the same from the same seed", async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const bg = openBackground(browser);
+  const tab = openTab(browser, { url: `${LMS}/portal`, scripts: [] });
+  // Three draws in the background and three in the tab, as an input whose
+  // seed is `seed` draws them.
+  const draws = (seed) => {
+    beginInput(0, { judge: false, seed });
+    const got = [...vm.runInContext("[Math.random(), Math.random(), Math.random()]", bg.global), ...tab.window.eval("[Math.random(), Math.random(), Math.random()]")];
+    endInput();
+    return got;
+  };
+  const first = draws(7);
+  assert.deepEqual(draws(7), first);
+  assert.notDeepEqual(draws(8), first);
+  for (const x of first) assert.ok(x >= 0 && x < 1, `${x} is a draw in [0, 1)`);
+  assert.equal(new Set(first).size, first.length);
+});
+
+test("an answer arrives even when copying it passes what the input's work may be", async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const bg = openBackground(browser);
+  const tab = openTab(browser, { url: `${LMS}/portal`, scripts: [] });
+  // A listener that answers, and answers again with the error when its answer
+  // throws, as the extension's listeners catch what their work throws.
+  vm.runInContext(`chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
+    try { sendResponse({ books: ["${"x".repeat(1000)}"] }); } catch (e) { sendResponse({ error: String(e) }); }
+  });`, bg.global);
+  // Enough work for the message to reach the listener, not for the answer's
+  // copy into the tab's realm, which counts its thousand units.
+  beginInput(0, { cap: 200 });
+  const answered = await Promise.race([browser.deliver(tab, [bg], { type: "x" }).then(() => true, () => true), settle(2000).then(() => false)]);
+  const work = endInput();
+  assert.ok(work.over, "the answer's copy passed the work it may be");
+  assert.ok(answered, "the answer was lost where its copy threw");
 });
 
 test("what one tab stores another reads, and is told of", async (t) => {
