@@ -11,7 +11,7 @@
 // that its detectors see what they are for.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Browser, LOG_LIMIT, Net, contentScriptsFor, exposeInternals, openBackground, openTab, read, settle, watch } from "../harness/index.mjs";
+import { Browser, Net, contentScriptsFor, exposeInternals, openBackground, openTab, read, settle, watch } from "../harness/index.mjs";
 import { LMS } from "./lms.mjs";
 
 test("exposing an IIFE's internals moves no line and keeps its directive first", () => {
@@ -72,25 +72,19 @@ test("a tab may fetch only the extension's files that web_accessible_resources o
 
 // A fuzz target runs millions of inputs in one browser; the daily fuzzing ran
 // out of its 4 GB when these logs kept every entry.
-test("the logs of the console, of the network and of the messages keep to their last entries", async (t) => {
+test("the logs of the console, of the network and of the messages are forgotten when asked", async (t) => {
   const net = new Net().on("https://www.k.kyoto-u.ac.jp/", { body: "" });
   const browser = new Browser();
   t.after(() => browser.close());
   const bg = openBackground(browser, { net });
   const tab = openTab(browser, { url: `${LMS}/portal`, scripts: [] });
-  // Each is logged when it is called, so the answers are awaited only at the end.
-  const answers = [];
-  for (let i = 0; i < 5 * LOG_LIMIT; i++) {
-    bg.global.console.log("line", i);
-    answers.push(bg.global.fetch(`https://www.k.kyoto-u.ac.jp/${i}`));
-    answers.push(browser.deliver(tab, [bg], { type: "x", i }).catch(() => {})); // no listener answers it
-  }
-  await Promise.all(answers);
-  for (const [name, log] of [["console", bg.logs], ["network", net.requests], ["messages", browser.traffic]]) {
-    assert.ok(log.length >= LOG_LIMIT && log.length <= 2 * LOG_LIMIT, `${name}: ${log.length} entries`);
-  }
-  assert.deepEqual(bg.logs.at(-1).args, ["line", 5 * LOG_LIMIT - 1]);
-  assert.equal(browser.traffic.at(-1).message.i, 5 * LOG_LIMIT - 1);
+  bg.global.console.log("line");
+  await bg.global.fetch("https://www.k.kyoto-u.ac.jp/");
+  await browser.deliver(tab, [bg], { type: "x" }).catch(() => {}); // no listener answers it
+  for (const [name, log] of [["console", bg.logs], ["network", net.requests], ["messages", browser.traffic]]) assert.equal(log.length, 1, name);
+  browser.forget();
+  net.forget();
+  for (const [name, log] of [["console", bg.logs], ["network", net.requests], ["messages", browser.traffic]]) assert.equal(log.length, 0, name);
 });
 
 test("the detectors see markup that runs script, a polluted prototype and an error of a listener", async (t) => {

@@ -8,14 +8,11 @@
 //
 // The logs the harness keeps of what the extension does: what it wrote to the
 // console, what it fetched, the messages that crossed between its contexts.
-// A fuzz target runs millions of inputs in one browser, and a log that kept
-// every entry would fill the memory: the daily fuzzing of syllabus-search ran
-// out of its 4 GB so, at about 1 KB an input. A log keeps its last LOG_LIMIT
-// entries or more; it is cut back to LOG_LIMIT whenever it holds twice as
-// many, which costs little more than the push itself. A test reads far fewer.
-export const LOG_LIMIT = 1000;
-
+// A log keeps every entry. A fuzz target runs millions of inputs in one
+// browser, and a log that kept every input's entries would fill the memory
+// (the daily fuzzing of syllabus-search once ran out of its 4 GB so), so a
+// target forgets them as each input begins (Browser.forget(), Net.forget()):
+// a log then holds what one input did, which its work bounds.
 export function record(log, entry) {
   log.push(entry);
-  if (log.length > 2 * LOG_LIMIT) log.splice(0, log.length - LOG_LIMIT);
 }

@@ -19,6 +19,8 @@
 //   context's realm (Object, Array, Function, String) — prototype pollution.
 // - errors: what browser.errors gained (exceptions of listeners, timers and
 //   event handlers, and rejected promises nothing handled).
+import { uncounted } from "./work.mjs";
+
 const URL_ATTRIBUTES = ["href", "src", "action", "formaction", "xlink:href", "data"];
 
 function scriptCarriers(document) {
@@ -55,8 +57,14 @@ function prototypeShape(realm) {
   return shape;
 }
 
-// Snapshots `context` (and browser.errors); check() returns what is new.
+// Snapshots `context` (and browser.errors); check() returns what is new. What
+// the detectors go through is the harness's work, not the extension's, and is
+// not counted (harness/work.mjs).
 export function watch(context) {
+  return uncounted(() => watching(context));
+}
+
+function watching(context) {
   const document = context.document;
   const before = {
     carriers: document ? scriptCarriers(document) : null,
@@ -64,7 +72,7 @@ export function watch(context) {
     errors: context.browser.errors.length,
   };
   return {
-    check() {
+    check: () => uncounted(() => {
       const problems = [];
       if (document) {
         for (const el of scriptCarriers(document)) if (!before.carriers.has(el)) problems.push(`markup that runs script: ${describe(el)}`);
@@ -79,7 +87,7 @@ export function watch(context) {
         problems.push(`${where}: ${error && error.stack ? error.stack : error}`);
       }
       return problems;
-    },
+    }),
   };
 }
 

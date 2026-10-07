@@ -18,21 +18,28 @@
 // of three characters or more, the other fields strings, an ISBN of digits, a
 // type of textbook or reference), when it asks for a URL outside KULASIS's
 // syllabus, or when a detector of the harness sees something
-// (harness/detectors.mjs). An input that takes longer than the fuzzer's
-// --timeout is a regular expression that backtracks. The message handler
-// catches what the parser throws and answers with no books.
+// (harness/detectors.mjs). The message handler catches what the parser
+// throws and answers with no books.
+//
+// It also fails when the extension's work grows faster than n log n from rung
+// to rung of the input, or passes what linear code does with an input of its
+// size (ladder() and judge() of fuzz/lib.mjs, harness/work.mjs): no clock
+// decides. A regular expression's work is the steps of a backtracking engine
+// (harness/backtrack.mjs), but for those of a finding that stands, which run
+// on V8's linear engine (fuzz/lib.mjs).
 //
 // The extension catches its own errors in many places and only warns; the
 // target fails too on a warning or an error that tells of a slip of the code
 // (warnings() of fuzz/lib.mjs), not on an HTTP error, a network that fails
 // or an answer that is not JSON, which the catching is there for.
 import { Browser, Net, openBackground, watch } from "../../harness/index.mjs";
-import { FuzzedDataProvider, answer, brief, bytes, fail, isSlip, open, string, warnings } from "../lib.mjs";
+import { answer, brief, bytes, calibrate, fail, isSlip, judge, ladder, provider, string, warnings } from "../lib.mjs";
 
 const SYLLABUS = "https://www.k.kyoto-u.ac.jp/external/open_syllabus/";
 let page = {};
 const net = new Net().on("https://www.k.kyoto-u.ac.jp/", () => page);
-const bg = openBackground(new Browser(), { net });
+const browser = new Browser();
+const bg = openBackground(browser, { net });
 
 // What the input gives the target, as fuzz/lib.mjs reads it (fuzz/inputs.mjs
 // checks its seeds and known inputs against this).
@@ -42,14 +49,11 @@ export function read(fdp) {
   return { lectureNo, departmentNo, page: answer(fdp, bytes(fdp), "text/html") };
 }
 
-export async function fuzz(data) {
-  const { lectureNo, departmentNo, page: answered } = read(new FuzzedDataProvider(data));
+async function run(data) {
+  browser.forget();
+  net.forget();
+  const { lectureNo, departmentNo, page: answered } = read(provider(data));
   page = answered;
-  // Known: S8 (docs/findings.md). While it is open, the page is cut at 16,384
-  // bytes, where its quadratic regular expressions still answer within a
-  // tenth of a second, so that the fuzzing goes on to what is not known yet.
-  if (open("S8") && page.body) page = { ...page, body: page.body.subarray(0, 16384) };
-  net.requests.length = 0;
   const w = watch(bg);
   const log = warnings(bg);
   let books = [];
@@ -69,4 +73,12 @@ export async function fuzz(data) {
   }
   const problems = w.check();
   if (problems.length) fail(problems.join("\n"));
+  judge();
 }
+
+// The target's work for an input, on each of its rungs (fuzz/lib.mjs).
+export async function fuzz(data) {
+  await ladder(data, run);
+}
+
+await calibrate(fuzz);

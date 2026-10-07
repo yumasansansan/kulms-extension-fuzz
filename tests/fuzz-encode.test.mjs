@@ -8,17 +8,18 @@
 //
 // fuzz/encode.mjs against fuzz/lib.mjs: what a Writer is handed, the
 // generators of lib.mjs read back from the input it writes, whatever comes
-// before and after and however long it is.
+// before and after and however long it is, up to what the bottom rung of an
+// input makes (BOTTOM).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { FuzzedDataProvider, answer, bytes, number, string, value } from "../fuzz/lib.mjs";
+import { BOTTOM, answer, bytes, number, reading, string, value } from "../fuzz/lib.mjs";
 import * as write from "../fuzz/encode.mjs";
 
-const back = (plan, readAll) => readAll(new FuzzedDataProvider(write.encode(plan)));
+const back = (plan, readAll) => readAll(reading(write.encode(plan)));
 
 const LONE = String.fromCharCode(0xd800);
 const LATIN1 = String.fromCharCode(0, 0x41, 0xff);
-const STRINGS = ["", "a", "%", LATIN1, "線形代数", "🟡", `${LONE}x`, "x".repeat(300), "y".repeat(70000)];
+const STRINGS = ["", "a", "%", LATIN1, "線形代数", "🟡", `${LONE}x`, "x".repeat(300), "y".repeat(BOTTOM)];
 const holds = { latin1: (s) => [...s].every((c) => c.charCodeAt(0) <= 0xff), utf8: (s) => s.isWellFormed(), units: () => true };
 
 test("a string is read back as it was written, by each decoding that holds it", () => {
@@ -40,14 +41,14 @@ test("numbers, values and bytes are read back as they were written", () => {
   const values = [undefined, null, true, false, 0.25, "線", 12n, -(2n ** 63n), [], {}, [null, [1, ["a"]], { b: false }],
     { assignment_collection: [null, { title: "レポート1", entityId: "A1" }] }, { toString: 0, "": LONE, 10: "x" }];
   for (const v of values) assert.deepEqual(back((w) => { write.value(w, v); w.bool(true); }, (fdp) => [value(fdp), fdp.consumeBoolean()]), [v, true]);
-  for (const n of [0, 1, 255, 256, 70000]) {
+  for (const n of [0, 1, 255, 256, BOTTOM]) {
     const data = Uint8Array.from({ length: n }, (_, i) => i & 0xff);
     for (const rest of [false, true]) assert.deepEqual(back((w) => write.bytes(w, data, { rest }), (fdp) => bytes(fdp)), data);
   }
 });
 
 test("a sequence is read back in order, the lengths around those at which an integer takes another byte", () => {
-  for (const n of [0, 1, 200, 250, 251, 252, 253, 254, 255, 256, 257, 300, 65530, 65536, 70000]) {
+  for (const n of [0, 1, 200, 250, 251, 252, 253, 254, 255, 256, 257, 300, BOTTOM - 200]) {
     const page = new Uint8Array(n).fill(0x41);
     const v = { list: [1, null, "x", true, -0.5, NaN, 7n], name: `${LONE}名` };
     const got = back((w) => {

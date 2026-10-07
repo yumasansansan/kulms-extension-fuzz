@@ -23,14 +23,21 @@
 //
 // One tab serves every input. The panel is opened once; each input then sets
 // the sidebar, the network's answers and the stored state (through the
-// script's internals, harness/source.mjs) and runs the fetch, the drawing and
-// the colouring.
+// script's internals, harness/source.mjs), forgets the courses an earlier
+// input's fetch found, and runs the fetch, the drawing and the colouring.
 //
 // It fails when these throw, when a promise is rejected with nothing to handle
 // it, or when a detector of the harness sees something: the panel draws data
 // of the API and of the store into the page, where markup that runs script
 // would be a DOM XSS. It does not fail on the two errors fetchAllAssignments()
 // throws on purpose for the panel to show (no course found, logged out).
+//
+// It also fails when the extension's work grows faster than n log n from rung
+// to rung of the input, or passes what linear code does with an input of its
+// size (ladder() and judge() of fuzz/lib.mjs, harness/work.mjs): no clock
+// decides. A regular expression's work is the steps of a backtracking engine
+// (harness/backtrack.mjs), but for those of a finding that stands, which run
+// on V8's linear engine (fuzz/lib.mjs).
 //
 // The fetch of each course catches what it throws and only warns, leaving out
 // the course's assignments: so a TypeError on one malformed item of an answer
@@ -39,9 +46,9 @@
 // (warnings() of fuzz/lib.mjs), not of one of the failures that the fetch is
 // there to take (an HTTP error, a network that fails, an answer that is not
 // JSON).
-import { Browser, Net, settle, watch } from "../../harness/index.mjs";
+import { Browser, Net, idle, uncounted, watch } from "../../harness/index.mjs";
 import { COURSE_PAGE, LMS, openCoursePage } from "../../tests/lms.mjs";
-import { FuzzedDataProvider, answer, bytes, fail, json, jsonText, number, open, string, value, warnings } from "../lib.mjs";
+import { answer, bytes, calibrate, fail, json, jsonText, judge, ladder, number, open, provider, string, value, warnings } from "../lib.mjs";
 
 const NOT_FOUND = { status: 404, headers: { "content-type": "text/html" }, body: "" };
 let answers = {};
@@ -60,9 +67,9 @@ const net = new Net()
   .on(`${LMS}/direct/`, (request) => api(request.url))
   .on(`${LMS}/portal`, (request) => (new URL(request.url).pathname === "/portal" && answers.portal) || NOT_FOUND);
 const tab = openCoursePage(browser, { net });
-await settle(300);
+await idle();
 tab.document.getElementById("kulms-assign-toggle").click();
-await settle(300);
+await idle();
 const a = tab.internals["src/assignments.js"];
 if (!a || !tab.document.querySelector(".kulms-assign-content")) throw new Error(`the panel did not open on ${COURSE_PAGE.length} bytes of page`);
 
@@ -129,8 +136,13 @@ const reply = (fdp, make) => answer(fdp, jsonText(fdp, either(fdp, make)), "appl
 
 // The sidebar's courses: none, or as many links to /portal/site/<ID> as the
 // input has bytes for, the IDs and the names any strings (a page holds only
-// strings), as a teacher names a course and Sakai writes its ID.
+// strings), as a teacher names a course and Sakai writes its ID. Building it
+// is the target's work, not the extension's, and is not counted.
 function setSidebar(fdp) {
+  uncounted(() => buildSidebar(fdp));
+}
+
+function buildSidebar(fdp) {
   const d = tab.document;
   const ul = d.querySelector("#portal-nav-sidebar > ul");
   ul.replaceChildren();
@@ -150,8 +162,15 @@ function setSidebar(fdp) {
   }
 }
 
-export async function fuzz(data) {
-  const fdp = new FuzzedDataProvider(data);
+async function run(data) {
+  browser.forget();
+  net.forget();
+  // The courses the panel keeps from the last fetch that found any: none on a
+  // panel just opened. A fetch that finds no course throws before it keeps
+  // what it found, and the memo form lists the courses kept, so an earlier
+  // input's courses would be drawn, and their work counted, for this one.
+  a.lastCourses = [];
+  const fdp = provider(data);
   setSidebar(fdp);
   answers = {
     assignments: reply(fdp, () => ({ assignment_collection: list(fdp, assignment) })),
@@ -184,7 +203,7 @@ export async function fuzz(data) {
   a.renderAssignments(fetched);
   a.colorSidebarTabs(fetched);
   a.checkNotificationBadges(fetched);
-  await settle(0);
+  await idle();
   for (const line of log.slips()) {
     // Known: B19 (docs/findings.md). While it is open, a slip that the fetch
     // of the course list or of a course catches is not counted: one item of
@@ -195,4 +214,12 @@ export async function fuzz(data) {
   }
   const problems = w.check();
   if (problems.length) fail(problems.join("\n"));
+  judge();
 }
+
+// The target's work for an input, on each of its rungs (fuzz/lib.mjs).
+export async function fuzz(data) {
+  await ladder(data, run);
+}
+
+await calibrate(fuzz);

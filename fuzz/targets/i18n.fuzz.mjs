@@ -20,11 +20,19 @@
 // left as it is, as t() leaves it). The text is built and compared whole,
 // since looking for each value in it takes time that grows with the product
 // of their lengths, and a value can be millions of units long.
-import { Browser, openTab, read, settle } from "../../harness/index.mjs";
-import { FuzzedDataProvider, brief, fail, number, open, string } from "../lib.mjs";
+//
+// It also fails when the extension's work grows faster than n log n from rung
+// to rung of the input, or passes what linear code does with an input of its
+// size (ladder() and judge() of fuzz/lib.mjs, harness/work.mjs): no clock
+// decides. A regular expression's work is the steps of a backtracking engine
+// (harness/backtrack.mjs), but for those of a finding that stands, which run
+// on V8's linear engine (fuzz/lib.mjs).
+import { Browser, idle, openTab, read } from "../../harness/index.mjs";
+import { brief, calibrate, fail, judge, ladderSync, number, open, provider, string } from "../lib.mjs";
 
-const tab = openTab(new Browser(), { url: "https://lms.gakusei.kyoto-u.ac.jp/portal", scripts: ["src/settings.js"] });
-await settle(200);
+const browser = new Browser();
+const tab = openTab(browser, { url: "https://lms.gakusei.kyoto-u.ac.jp/portal", scripts: ["src/settings.js"] });
+await idle();
 const messages = JSON.parse(read("_locales/ja/messages.json"));
 const keys = Object.keys(messages);
 
@@ -50,8 +58,14 @@ function expected(entry, values) {
   return text;
 }
 
-export function fuzz(data) {
-  const fdp = new FuzzedDataProvider(data);
+function run(data) {
+  check(data);
+  judge();
+}
+
+function check(data) {
+  browser.forget();
+  const fdp = provider(data);
   const key = fdp.consumeBoolean() ? fdp.pickValue(keys) : string(fdp);
   // Known: B15 (docs/findings.md). While it is open, no key that every object
   // has (constructor, toString, ...) is asked for: t() looks it up through the
@@ -80,3 +94,10 @@ export function fuzz(data) {
     fail(`t(${brief(key)}, ${brief(given)}) differs from ${brief(want)} at ${at}: ${brief(text.slice(Math.max(0, at - 20), at + 80))}`);
   }
 }
+
+// The target's work for an input, on each of its rungs (fuzz/lib.mjs).
+export function fuzz(data) {
+  ladderSync(data, run);
+}
+
+await calibrate(fuzz);

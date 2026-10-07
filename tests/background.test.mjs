@@ -9,9 +9,18 @@
 // background.js: the syllabus parsers, the Shift_JIS encoder and the message
 // listeners. Each test says what the code should do; a test marked todo fails
 // while the finding of docs/findings.md it names stands.
+//
+// How the work of the parsers grows on a run of what one of their regular
+// expressions backtracks over is counted with no clock: the work of the
+// regular expressions of the findings by the steps of a backtracking engine
+// (harness/backtrack.mjs), for runs of n, 2n and 4n characters, and the degree
+// of its growth read off them (degree() of harness/work.mjs). Linear work has
+// degree 1; S2 and S8 have 3 and 2 on these runs. tests/regexp.test.mjs
+// decides the same of every regular expression of the extension, from its
+// automaton.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Browser, Net, openBackground, openTab, settle } from "../harness/index.mjs";
+import { Browser, LINEAR, Net, degree, measure, openBackground, openTab, settle } from "../harness/index.mjs";
 
 const LMS = "https://lms.gakusei.kyoto-u.ac.jp";
 const SYLLABUS = "https://www.k.kyoto-u.ac.jp/external/open_syllabus";
@@ -30,23 +39,55 @@ const siteInfo = (html) => new Net()
 // A syllabus page whose text is `html`.
 const syllabus = (html) => new Net().on(`${SYLLABUS}/`, { headers: { "content-type": "text/html; charset=utf-8" }, body: html });
 
-async function timed(f) {
-  const started = performance.now();
-  await f();
-  return performance.now() - started;
-}
-
 test("the site contact is read from a well-formed row", async (t) => {
   const { browser, g } = background(siteInfo('<th>サイト連絡先・メール</th>\n<td>\n  京大 太郎, <a href="mailto:x@example.com">x</a></td>'));
   t.after(() => browser.close());
   assert.equal(await g.fetchSakaiSiteContact("site"), "京大 太郎");
 });
 
-test("S2: the site contact regex keeps to linear time on a run of whitespace", { todo: "S2: cubic backtracking, 2,000 chars take about 2.4 s and 4,000 about 20 s" }, async (t) => {
-  const { browser, g } = background(siteInfo("サイト連絡先・メール<td>" + " \t".repeat(1000) + "\n"));
-  t.after(() => browser.close());
-  const ms = await timed(() => g.fetchSakaiSiteContact("site"));
-  assert.ok(ms < 200, `2,000 whitespace characters took ${ms.toFixed(0)} ms`);
+// The degree of the work of read(g), on the background with `net(k)`.
+const degreeOf = (n, net, read) => degree(n, async (k) => {
+  const { browser, g } = background(net(k));
+  try {
+    return await measure(() => read(g));
+  } finally {
+    browser.close();
+  }
+});
+
+test("S2: the site contact is read in work linear in a run of whitespace", { todo: "S2: the regex backtracks, cubically on a run of whitespace" }, async () => {
+  const d = await degreeOf(64, (k) => siteInfo("サイト連絡先・メール<td>" + " \t".repeat(k) + "\n"), (g) => g.fetchSakaiSiteContact("site"));
+  assert.ok(d < LINEAR, `the work grows as the ${d.toFixed(2)}th power of the run`);
+});
+
+// A run of what one of the parsers' regular expressions takes, where it does
+// not find what ends the match: 『 with no 』, an unclosed tag, an opening
+// bracket of the publisher with no closing one, and a run of separators that
+// is not at the end of a title; in the search's results, rows, cells and tags
+// that do not close.
+const LINK = '<a href="la_syllabus?lectureNo=1">x</a>';
+const RUNS = {
+  "the syllabus": [(k) => "『".repeat(k), (k) => "<".repeat(k), (k) => "著者『書名』" + "（".repeat(k), (k) => "書名" + "、".repeat(k) + "x"],
+  // A row is read only when it links to a syllabus.
+  "the search's results": [(k) => "<tr".repeat(k), (k) => "<tr>".repeat(k), (k) => `<tr><td>${LINK}</td>` + "<td>".repeat(k) + "</tr>", (k) => `<tr><td>${LINK}` + "<".repeat(k) + "</td></tr>"],
+};
+
+test("S8: the textbook line parsers read a run in work linear in its length", { todo: "S8: the regular expressions backtrack, quadratically on these runs" }, async () => {
+  const steep = [];
+  for (const run of RUNS["the syllabus"]) {
+    const d = await degreeOf(1000, (k) => syllabus("<td>(教科書)</td><td>" + run(k) + "</td>"), (g) => g.fetchSyllabusDetail("1", "2"));
+    if (!(d < LINEAR)) steep.push(`${JSON.stringify(run(2))}…: degree ${d.toFixed(2)}`);
+  }
+  assert.deepEqual(steep, []);
+});
+
+test("S8: the search's results are read in work linear in a run", { todo: "S8: the regular expressions backtrack, quadratically on these runs" }, async () => {
+  const steep = [];
+  for (const run of RUNS["the search's results"]) {
+    const d = await degreeOf(1000, (k) => syllabus("<table>" + run(k) + "</table>"), (g) => g.searchSyllabus("線形代数", { expectedTeacher: () => Promise.resolve(null) }));
+    if (!(d < LINEAR)) steep.push(`${JSON.stringify(run(2))}…: degree ${d.toFixed(2)}`);
+  }
+  assert.deepEqual(steep, []);
 });
 
 test("S4: the syllabus text is decoded once, so &amp;lt; stays &lt;", { todo: "S4: &amp; is decoded before &lt;, so &amp;lt; becomes <" }, async (t) => {
@@ -62,23 +103,6 @@ test("S4: numeric character references in the syllabus are decoded", { todo: "S4
   t.after(() => browser.close());
   const [book] = await g.fetchSyllabusDetail("1", "2");
   assert.equal(book.title, "𠮷野家のⅠ巻");
-});
-
-// A run of what one of the parsers' regular expressions takes, where it does
-// not find what ends the match: an unclosed tag, 『 with no 』, an opening
-// bracket of the publisher with no closing one, and a run of separators that
-// is not at the end of a title. In linear time each takes a few milliseconds;
-// in quadratic time, 1 to 3 s.
-test("S8: the textbook line parsers keep to linear time", { todo: "S8: quadratic, 40,000 characters take 1 to 3 s each" }, async (t) => {
-  const n = 40000;
-  const slow = [];
-  for (const run of ["『".repeat(n), "<".repeat(n), "著者『書名』" + "（".repeat(n), "書名" + "、".repeat(n) + "x"]) {
-    const { browser, g } = background(syllabus("<td>(教科書)</td><td>" + run + "</td>"));
-    t.after(() => browser.close());
-    const ms = await timed(() => g.fetchSyllabusDetail("1", "2"));
-    if (ms >= 150) slow.push(`${JSON.stringify(run.slice(0, 8))}… took ${ms.toFixed(0)} ms`);
-  }
-  assert.deepEqual(slow, []);
 });
 
 test("S7: the message listeners survive messages of any shape", { todo: "S7: null and {type: 1} throw a TypeError" }, async (t) => {

@@ -17,6 +17,13 @@
 // even when the function returns early; a let or const read before the
 // function reaches it throws, as it would in the script itself.
 //
+// Each script of the extension also counts its work (harness/work.mjs): a
+// call of __kulmsWork(1) at the start of each function and each pass of a
+// loop, put on the line where the body opens, so no line moves either. A
+// regular expression of a finding that backtracks (harness/backtrack.mjs) is
+// handed to __kulmsBacktracking() where the code makes it, in its place on
+// its line (harness/work.mjs).
+//
 // loadedSource() then puts that code through Node's loader without running
 // it, so that whatever require hook is registered applies to it. When
 // Jazzer.js runs, that is its instrumentation: the extension's code gives the
@@ -27,6 +34,8 @@ import path from "node:path";
 import Module from "node:module";
 import * as acorn from "acorn";
 import { CACHE, EXT, read } from "./paths.mjs";
+import { findingOf } from "./backtrack.mjs";
+import { addSites, counters, parse } from "./work.mjs";
 
 // The function of a statement such as (function () { ... })(); or
 // (function () { ... }());, if it is one.
@@ -55,7 +64,51 @@ function declarations(statements) {
 }
 
 export function exposeInternals(code, file) {
-  const ast = acorn.parse(code, { ecmaVersion: "latest", sourceType: "script" });
+  return apply(code, exposing(acorn.parse(code, { ecmaVersion: "latest", sourceType: "script" }), file));
+}
+
+// `code` with `edits` made: { at, text } puts text in at `at`, and
+// { at, end, text } puts it in place of what is from `at` to `end`. They are
+// made from the end back, so that each place is still where it was. What is
+// made later at one place lands in front of what was made there before, so a
+// replacement is made first; then what opens a wrapping, the inner first, so
+// that the outer lands outside; then what closes one, the outer first, so
+// that the inner closes inside it and before anything that opens there.
+function apply(code, edits) {
+  let out = code;
+  const end = (e) => (e.end === undefined ? e.at : e.end);
+  const rank = (e) => (end(e) > e.at ? 0 : e.side === "close" ? 2 : 1);
+  const depth = (e) => e.depth || 0;
+  const order = (a, b) => b.at - a.at || rank(a) - rank(b) || (a.side === "close" ? depth(a) - depth(b) : depth(b) - depth(a));
+  for (const e of [...edits].sort(order)) out = out.slice(0, e.at) + e.text + out.slice(end(e));
+  return out;
+}
+
+// The edits that hand each regular expression literal of `ast` (the code of
+// `file`) that is one of a finding to __kulmsBacktracking().
+function backtrackingRegExps(ast, file, code) {
+  const edits = [];
+  const walk = (node) => {
+    if (!node || typeof node.type !== "string") return;
+    if (node.type === "Literal" && node.regex) {
+      const id = findingOf(file, node.regex.pattern, node.regex.flags);
+      if (id) {
+        const args = [JSON.stringify(id), JSON.stringify(node.regex.pattern), JSON.stringify(node.regex.flags)];
+        edits.push({ at: node.start, end: node.end, text: `__kulmsBacktracking(${code.slice(node.start, node.end)}, ${args.join(", ")})` });
+      }
+    }
+    for (const key of Object.keys(node)) {
+      const v = node[key];
+      if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v.type === "string") walk(v);
+    }
+  };
+  walk(ast);
+  return edits;
+}
+
+// The inserts that expose the internals of each top-level IIFE of `ast`.
+function exposing(ast, file) {
   const inserts = [];
   for (const statement of ast.body) {
     const fn = iife(statement);
@@ -75,9 +128,14 @@ export function exposeInternals(code, file) {
       text: ` if (globalThis.__kulmsExpose) globalThis.__kulmsExpose(${JSON.stringify(file)}, { ${members.join(", ")} });`,
     });
   }
-  let out = code;
-  for (const { at, text } of inserts.sort((a, b) => b.at - a.at)) out = out.slice(0, at) + text + out.slice(at);
-  return out;
+  return inserts;
+}
+
+// `code` (the script `file` of the extension) as the harness runs it, its
+// internals not exposed: what tests/costs.test.mjs checks the counting of.
+export function instrument(code, file = "") {
+  const { ast, tokens } = parse(code);
+  return apply(code, [...counters(ast, tokens).inserts, ...backtrackingRegExps(ast, file, code)]);
 }
 
 // The cache keeps the scripts as CommonJS files to Node's loader, whatever the
@@ -92,13 +150,21 @@ function prepareCache() {
 
 const loaded = new Map();
 
-// `code`, named `name` (a path under the cache), exposed unless `expose` is
-// false, written to the cache and put through the loader. Returns the code to
-// run and the file it was written to, which stack traces and the fuzzer's
-// coverage name.
-function prepare(name, code, expose) {
+// `code`, named `name` (a path under the cache), its internals exposed if
+// `expose`, and, if it is the extension's (`extension`), its work counted and
+// its regular expressions of a finding handed to __kulmsBacktracking(); written
+// to the cache and put through the loader. Returns the code to run and the file it was
+// written to, which stack traces and the fuzzer's coverage name.
+function prepare(name, code, { expose, extension }) {
   if (loaded.has(name)) return loaded.get(name);
-  const exposed = expose ? exposeInternals(code, name) : code;
+  const { ast, tokens } = parse(code);
+  const edits = expose ? exposing(ast, name) : [];
+  if (extension) {
+    const counting = counters(ast, tokens);
+    edits.push(...counting.inserts, ...backtrackingRegExps(ast, name, code));
+    addSites(counting.sites);
+  }
+  const exposed = apply(code, edits);
   const file = path.join(prepareCache(), name);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== exposed) fs.writeFileSync(file, exposed);
@@ -113,16 +179,17 @@ function prepare(name, code, expose) {
   return result;
 }
 
-// The extension's script at `rel`. The libraries it bundles (vendor/) are left
-// as they are; the fuzzing leaves them out of the instrumentation too
-// (ci/fuzz.sh), as they are not the extension's code.
+// The extension's script at `rel`, its work counted. The libraries it bundles
+// (vendor/) are not exposed, and the fuzzing leaves them out of its coverage
+// (ci/fuzz.sh), as they are not the extension's code; their work is the
+// extension's all the same.
 export function loadedSource(rel) {
-  return prepare(rel, read(rel), !rel.startsWith("vendor/"));
+  return prepare(rel, read(rel), { expose: !rel.startsWith("vendor/"), extension: true });
 }
 
 // A script of this repository at `abs` (the fuzzing's canary), cached as `name`.
 export function loadedFile(abs, name) {
-  return prepare(name, fs.readFileSync(abs, "utf8"), true);
+  return prepare(name, fs.readFileSync(abs, "utf8"), { expose: true, extension: false });
 }
 
 export { EXT };

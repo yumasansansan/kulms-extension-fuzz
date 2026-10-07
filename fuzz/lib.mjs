@@ -7,8 +7,9 @@
 // (LICENSES/GPL-3.0-or-later.txt).
 //
 // What the fuzz targets share: the provider that turns the fuzzer's bytes
-// into values, the values made from them, the answers of the network, and a
-// failure that names the input's problem.
+// into values, the values made from them, the answers of the network, the
+// judging of the extension's work, and a failure that names the input's
+// problem.
 //
 // Nothing here holds the input back:
 // - bytes are the input's bits as they are, of any length, none included;
@@ -22,10 +23,10 @@
 // - a value may also be undefined, null, a BigInt, a Date, a RegExp with any
 //   flags, an ArrayBuffer, a DataView or a typed array of any kind, a Map, a
 //   Set, an array with holes or an object with any keys (__proto__ as an own
-//   key too), nested deep;
-// - a length is bounded only by the input, or reaches millions of units by
-//   repeating a piece of the input (mostly a few bytes, now and then as long
-//   as the input), so that a few bytes make a huge input;
+//   key too), nested as deep as the input says;
+// - a length is bounded by what the bytes of an input hold (BOTTOM), and, for
+//   a piece of the input repeated, by what one runtime message of Chrome
+//   carries (MAX_UNITS) on the input's top rung;
 // - the network may fail, answer with any status, any content type and any
 //   charset, or cut its body short.
 // Words the extension looks for are mixed in only so that the fuzzer reaches
@@ -35,11 +36,38 @@
 // doing, and is done as Chrome does it: the harness copies runtime messages
 // and chrome.storage as JSON (NaN becomes null, a BigInt cannot be sent at
 // all), and json() and clone() below do the same for values a target hands
-// over directly.
+// over directly. How deep a value can go is the channel's to say too: JSON
+// carries any depth, a structured clone stops at about ten thousand levels.
+//
+// No input is judged by the time it takes (harness/work.mjs): the extension's
+// work is counted, on rungs of the input (ladder()). An input is run as it is,
+// then with each piece it repeats repeated twice as many times, four times,
+// and so on, as many doublings as it picks; a rung is allowed, before it runs,
+// the most work that the growth of the work over the two rungs below allows
+// work that grows as n log n, and the input fails on the first rung that
+// passes it, or that passes what linear code does with an input of its size
+// (the bound of harness/work.mjs, all that the two lowest rungs are held to).
+// The size is counted here: the input's bytes, and the units of every string
+// and byte array made from them (provider()). A regular expression's work is
+// counted by the steps of a backtracking engine (harness/backtrack.mjs), on
+// the input it is given. The time is looked at from rung to rung too, as a
+// check of the counting.
+import { constants } from "node:buffer";
 import { FuzzedDataProvider } from "@jazzer.js/core";
+import { BACKTRACKING } from "../harness/backtrack.mjs";
+import { avoidBacktracking } from "../harness/install.mjs";
+import { LINEAR, addUnits, beginInput, endInput, setBase, work } from "../harness/work.mjs";
+import { open } from "./open-findings.mjs";
 
-export { FuzzedDataProvider };
-export { open } from "./open-findings.mjs";
+export { FuzzedDataProvider, open };
+
+// Known: S2, S8 and S9 (docs/findings.md). While one stands, its regular
+// expressions run on V8's linear engine, which finds what they find in time
+// linear in the input, and their work is counted by how far they went, not by
+// the steps of a backtracking engine (harness/work.mjs): on the first input
+// that made them backtrack, a backtracking engine would take them past the
+// bound, and Chrome past any time. Nothing of the input is cut.
+for (const id of Object.keys(BACKTRACKING)) if (open(id)) avoidBacktracking(id);
 
 // Strings the extension looks for.
 export const WORDS = [
@@ -49,27 +77,287 @@ export const WORDS = [
   "__proto__", "constructor", "prototype", "toString", "valueOf", "hasOwnProperty", "length", "",
 ];
 
-// The longest string or array a repeated piece makes, and the deepest a value
-// nests. They bound only what a handful of bytes can ask of the generator
-// itself (V8 cannot make a string of 2^29 units, and recursion as deep as a
-// megabyte of input would overflow the generator's stack); both are far past
-// what the extension meets.
-export const LOG2_MAX_REPEAT = 22;
-export const MAX_REPEAT = 2 ** LOG2_MAX_REPEAT;
-export const MAX_DEPTH = 200;
+// What one input may make: the units of all the strings and byte arrays and
+// all the holes of the arrays made from it, as many as one runtime message of
+// Chrome carries at the least. The extension's parts hand what they read to
+// one another in runtime messages, which Chrome writes as JSON and refuses
+// beyond 64 MiB of its UTF-8 (kMaxMessageLength of
+// extensions/renderer/api/messaging/messaging_util.cc), and JSON writes a unit
+// as six bytes at most (\u0000): an input that made more could not pass
+// between the extension's parts even once. A unit that grows on its way, to
+// the nine characters of a URL's percent-encoding at most, still leaves what
+// is made within the longest string V8 makes, as is checked here.
+export const MAX_UNITS = Math.floor((64 * 2 ** 20) / 6);
+if (9 * MAX_UNITS > constants.MAX_STRING_LENGTH) throw new Error("what an input makes, percent-encoded, would not fit in a string of V8");
+
+// What the bottom rung of an input may make: as many units as libFuzzer makes
+// an input of bytes unless told otherwise, which is as long as ci/fuzz.sh
+// lets an input be. Larger sizes are the rungs': an input of this size
+// reaches the bound of linear code fast, whatever its work, and the rungs
+// above it are judged by how their work grows.
+export const BOTTOM = 4096;
+
+// --- The input, its rungs, and its size.
+//
+// An input is run on rungs (ladder()): on the first as it is, and on each one
+// above with every piece it repeats repeated twice as many times as on the
+// one below, up to the top rung, as many doublings up as the input picks
+// (doublings()). Each rung is a whole input to the extension, judged by
+// itself (judge()), and between rungs how the work grew is judged:
+// - work that grows as n log n at most adds, from one rung to the next, no
+//   more than 2^LINEAR times what it added to the one before (degree() of
+//   harness/work.mjs; a sort, as harness/costs.mjs counts it, at most 2.44
+//   times), and work that grows as the square adds four times as much once
+//   the square outweighs the rest, and so on every rung from there up.
+// - Growth is read only where the code went through what the rungs added: a
+//   rung whose work grew by fewer steps than the units it added (a step a
+//   unit is the least that reading them takes) has not reached them yet, and
+//   gives nothing to read growth from.
+// - A rung whose work grew faster than n log n once is a step, not yet a
+//   growth: where the input's repeats first make something whole that the
+//   code then reads (a row that closes), or the parity of a count changes its
+//   path, the work jumps on one rung and grows as before after it. Growth
+//   faster than n log n goes on. So once a rung has grown faster than that,
+//   the rung above is allowed, before it runs, the work of the rung below it
+//   and 2^LINEAR times what that one added (work.cap of harness/work.mjs), and
+//   is stopped once it passes it: an input whose work grows faster than
+//   n log n fails on the second rung in a row where that shows, the first of
+//   them run to the end, and no other rung is held to more than the bound
+//   of linear code (harness/work.mjs), which an input of BOTTOM units, the
+//   bottom rung, reaches fast.
+// - The time is a check of the counting, not of the extension: from rung to
+//   rung it must grow as the counted work does, to within the noise of the
+//   clock (NOISE). Time that grows faster is work the counting does not see
+//   (harness/costs.mjs, harness/web-costs.mjs), or a loop where nothing is
+//   counted, and fails the input as such. It is compared over rungs two
+//   doublings apart (TIME_SPAN): the time of one rung that comes out a little
+//   long or short changes the time added below it and above it the other way
+//   round, so that the growth from one rung to the next is noisier by far
+//   than the growth over two, while work the counting misses grows as much
+//   faster over two doublings as over one, in degrees. Once a rung ends, the
+//   degree of the time's growth over the span below it may pass the degree of
+//   the work's by NOISE at most; and a rung is stopped once its time passes
+//   what growth of degree LINEAR + NOISE from the span below allows it. The
+//   time is looked at only where the span below added TIME_FLOOR seconds or
+//   more: below that, the noise of the clock is as large as what it measures.
+
+let calibrating = false;
+let rung = 1; // how many times more the rung being run repeats a piece than the bottom rung
+let top = 1; // the same of the input's top rung
+let leftBottom = BOTTOM; // what the input may still make on its bottom rung
+let leftTop = MAX_UNITS; // and on its top rung
+let repeated = 0; // the units of the bottom rung that the rungs above repeat more
+let rungCap = Infinity; // the work the rungs below allow the rung being run
+let rungTime = Infinity; // and its time, in seconds
+let capNote = ""; // how they were worked out, for a failure's message
+let timeNote = "";
+let judged = null; // the work of the rung last judged (judge())
+
+// How much more a rung may add over the rung below than that one added over
+// the one below it: as much as work that grows as n log n at most adds.
+export const GROWTH = 2 ** LINEAR;
+
+// How many doublings apart the rungs are whose times are compared.
+export const TIME_SPAN = 2;
+
+// The noise of the clock, in degrees: how much faster than the counted work
+// the time of the rungs may grow before it is taken for work the counting does
+// not see; and the least time the span below a rung must add for its time to
+// be looked at. Measured (docs/findings.md), not derived: the time a step
+// takes is the machine's, and its noise the garbage collector's and the
+// scheduler's. Work the counting misses that grows as the square passes the
+// work's degree by 1. KULMS_FUZZ_NOISE sets the noise for a machine of other
+// noise (Infinity looks at no time, as when the noise is measured).
+export const NOISE = process.env.KULMS_FUZZ_NOISE ? Number(process.env.KULMS_FUZZ_NOISE) : 0.5;
+export const TIME_FLOOR = 0.3;
+
+// A provider for `data`, an input of the target's, on the rung being run: its
+// work is judged against the size of the input, which is counted from here on
+// (harness/work.mjs), and against what the rungs below allow it.
+export function provider(data) {
+  const fdp = new FuzzedDataProvider(data);
+  top = 2 ** doublings(fdp);
+  leftBottom = BOTTOM;
+  leftTop = MAX_UNITS;
+  repeated = 0;
+  beginInput(data.length, { judge: !calibrating, cap: rungCap, deadline: performance.now() + 1000 * rungTime });
+  return fdp;
+}
+
+// A provider for `data` read back outside a target's run (fuzz/inputs.mjs and
+// the tests read inputs so): as provider() reads it, on the bottom rung, and
+// nothing judged.
+export function reading(data) {
+  const fdp = new FuzzedDataProvider(data);
+  rung = 1;
+  top = 2 ** doublings(fdp);
+  leftBottom = BOTTOM;
+  leftTop = MAX_UNITS;
+  repeated = 0;
+  return fdp;
+}
+
+// What is made from the input: `n` units on the bottom rung, `scaled` when
+// the rungs above repeat it more. It adds to the input's size on the rung
+// being run, and takes from what the input may still make on its bottom rung
+// and on its top rung. The units made on this rung.
+function made(n, scaled = false) {
+  const here = scaled ? n * rung : n;
+  addUnits(here);
+  leftBottom -= n;
+  leftTop -= scaled ? n * top : n;
+  if (scaled) repeated += n;
+  return here;
+}
+
+// What a piece that the rungs do not repeat may still take of the input.
+const room = () => Math.max(0, Math.min(leftBottom, leftTop));
+
+// `x` (a string or bytes), made from the input as it is.
+const taken = (x) => {
+  made(x.length);
+  return x;
+};
+
+// Fails the input when the extension's work for it passed what linear code
+// does with an input of its size, or what the rungs below allow it, even if
+// the extension caught what the counting threw; or when its time passed what
+// the rungs below allow it.
+export function judge() {
+  const r = endInput();
+  judged = r;
+  if (r.overTime) fail(`the extension's time on the rung of ×${rung} passed ${rungTime.toFixed(2)} s: ${timeNote}; time that grows faster than the counted work is work the counting does not see (harness/costs.mjs, harness/web-costs.mjs), or a loop where nothing is counted`);
+  if (r.over && r.capped) fail(`the extension's work on the rung of ×${rung} passed ${r.bound}: ${capNote}; it grows faster than n log n with the input's size on two rungs in a row`);
+  if (r.over) fail(`the extension's work passed ${r.bound}, the most that linear code does with an input of ${r.units} units: it is not linear in the input, or it does not end`);
+}
+
+// Runs `run`, the target's work for one input, on the rungs of `data` (the
+// head of this section), one after another until the top rung or a failure.
+export async function ladder(data, run) {
+  const rungs = [];
+  for (;;) {
+    climb(rungs);
+    const start = performance.now();
+    await run(data);
+    if (!landed(rungs, (performance.now() - start) / 1000)) return;
+  }
+}
+
+// ladder() for a target whose work for an input is synchronous.
+export function ladderSync(data, run) {
+  const rungs = [];
+  for (;;) {
+    climb(rungs);
+    const start = performance.now();
+    run(data);
+    if (!landed(rungs, (performance.now() - start) / 1000)) return;
+  }
+}
+
+// Whether the code went through what rung `y` added over rung `x`: its work
+// grew by at least a step a unit added.
+const reads = (x, y) => y.work - x.work >= Math.max(1, y.units - x.units);
+
+// Gets the next rung ready: how many times more it repeats a piece, and the
+// work and the time that the rungs below allow it.
+function climb(rungs) {
+  rung = 2 ** rungs.length;
+  rungCap = Infinity;
+  rungTime = Infinity;
+  capNote = "";
+  timeNote = "";
+  if (rungs.length >= 3) {
+    const [a, b, c] = rungs.slice(-3);
+    const before = b.work - a.work;
+    const after = c.work - b.work;
+    if (reads(a, b) && reads(b, c) && after > GROWTH * before) {
+      rungCap = c.work + GROWTH * after;
+      capNote = `its work grew faster than n log n from ×${b.m} to ×${c.m}, by ${after}, more than ${GROWTH.toFixed(2)} times the ${before} it grew from ×${a.m} to ×${b.m}, and may grow ${GROWTH.toFixed(2)} times ${after} more to ×${rung}`;
+    }
+  }
+  if (rungs.length < 2 * TIME_SPAN) return;
+  const [low, high] = [rungs.at(-2 * TIME_SPAN), rungs.at(-TIME_SPAN)];
+  const took = high.time - low.time;
+  if (took >= TIME_FLOOR) {
+    const growth = 2 ** (TIME_SPAN * (LINEAR + NOISE));
+    rungTime = high.time + growth * took;
+    timeNote = `from ×${low.m} to ×${high.m} the time grew by ${took.toFixed(2)} s, and it may grow ${growth.toFixed(0)} times as much from ×${high.m} to ×${rung}, as work of degree ${LINEAR} at most does, but for the noise of the clock`;
+  }
+}
+
+// KULMS_FUZZ_RUNGS=1 writes each rung as it ends: how many times more it
+// repeats a piece than the bottom rung, its size, its work and its time.
+const SHOW_RUNGS = Boolean(process.env.KULMS_FUZZ_RUNGS);
+
+// Keeps the rung just run, and compares its time with its work. Whether there
+// is a rung above it: none above the top, and none when the input repeats
+// nothing.
+function landed(rungs, time) {
+  rungs.push({ m: rung, work: judged.done, units: judged.units, time });
+  if (SHOW_RUNGS) console.error(`rung ×${rung}: ${judged.units} units, ${judged.done} steps, ${time.toFixed(3)} s`);
+  if (rungs.length > 2 * TIME_SPAN) {
+    const [a, b, c] = [rungs.at(-2 * TIME_SPAN - 1), rungs.at(-TIME_SPAN - 1), rungs.at(-1)];
+    const t1 = b.time - a.time;
+    const w1 = b.work - a.work;
+    const t2 = c.time - b.time;
+    const w2 = c.work - b.work;
+    if (t1 >= TIME_FLOOR && w1 > 0 && t2 > 0) {
+      const faster = (Math.log2(t2 / t1) - Math.log2(Math.max(w2 / w1, 1))) / TIME_SPAN;
+      if (faster > NOISE) {
+        fail(`the extension's time grew faster than its counted work, by ${faster.toFixed(2)} degrees: from ×${a.m} to ×${b.m} its rungs added ${t1.toFixed(2)} s and ${w1} steps, from ×${b.m} to ×${c.m} ${t2.toFixed(2)} s and ${w2} steps; time that grows faster than the work is work the counting does not see (harness/costs.mjs, harness/web-costs.mjs)`);
+      }
+    }
+  }
+  return repeated > 0 && rung < top;
+}
+
+// Runs `fuzz` on the input of no bytes, unjudged, and takes the work it took
+// as what any input may take whatever its size (the base of the bound).
+export async function calibrate(fuzz) {
+  calibrating = true;
+  try {
+    await fuzz(Buffer.alloc(0));
+  } finally {
+    calibrating = false;
+  }
+  setBase(work.done);
+}
 
 // How many of something: as many as the input has bytes left for.
 const count = (fdp) => fdp.consumeIntegralInRange(0, fdp.remainingBytes);
 
-// How many times to repeat a piece, up to `max`: as likely between 1 and 2 as
-// between 2,048 and 4,096, and one time in 64 as likely between a million and
-// two as well, so that most inputs stay small and quick and some are huge.
-// (A huge input takes a second or more, and were it as likely as a small one,
-// it would take most of the fuzzer's time.)
-const many = (fdp, max) => {
-  const bits = fdp.consumeIntegralInRange(0, 63) === 0 ? LOG2_MAX_REPEAT : 12;
-  return Math.min(max, fdp.consumeIntegralInRange(0, 2 ** fdp.consumeIntegralInRange(0, bits)));
-};
+// The number of binary digits of n (0 for 0), for n below 2^32.
+const digits = (n) => 32 - Math.clz32(n);
+
+// The binary digits of the number an input picks its top rung by: as many as
+// MAX_UNITS has, so that the top rung is at most 2^(TOP_BITS - 1) times the
+// bottom one, and a piece of one unit repeated once on the bottom rung still
+// fits on the top one.
+export const TOP_BITS = digits(MAX_UNITS);
+
+// How many doublings up the input's top rung is: the input picks it first,
+// each more doubling half as likely as the one before, as many() picks a
+// number's digits, so that every height takes about the same share of the
+// fuzzer's work (a rung costs about twice the one below it).
+function doublings(fdp) {
+  const r = fdp.consumeIntegralInRange(0, 2 ** TOP_BITS - 1);
+  return r === 0 ? 0 : TOP_BITS - digits(r);
+}
+
+// How many times to repeat a piece, up to `max`: the input picks how many
+// binary digits the number has, each more digit half as likely as the one
+// before, and then any number of that many digits. A number of k + 1 digits
+// costs about twice one of k and comes up half as often, so that every size
+// class takes about the same share of the fuzzer's work: small inputs keep it
+// quick, and every size up to `max` comes up.
+function many(fdp, max) {
+  if (max < 1) return 0;
+  const bits = digits(max);
+  const r = fdp.consumeIntegralInRange(0, 2 ** bits - 1);
+  if (r === 0) return 0;
+  const k = bits - digits(r);
+  return Math.min(max, 2 ** k + fdp.consumeIntegralInRange(0, 2 ** k - 1));
+}
 
 const chars = (codes) => {
   let s = "";
@@ -101,34 +389,47 @@ const decoded = (fdp, take) => fdp.pickValue(DECODINGS)(take());
 // input has bytes for.
 const pieceLength = (fdp) => Math.max(1, many(fdp, fdp.remainingBytes));
 
-// Any bytes: some of the input's, the rest of it, or a piece repeated.
+// How many times a piece of `length` units is repeated on the bottom rung:
+// up to as many as what the input may still make holds there, and, the
+// rungs' times as many, on the top rung.
+const repeats = (fdp, length) => (length ? many(fdp, Math.min(Math.floor(leftBottom / length), Math.floor(leftTop / (length * top)))) : 0);
+
+// `piece` repeated on the rung being run: `times` times on the bottom rung.
+function repeatedBytes(piece, times) {
+  made(piece.length * times, true);
+  const out = new Uint8Array(piece.length * times * rung);
+  for (let i = 0; i < times * rung; i++) out.set(piece, i * piece.length);
+  return out;
+}
+
+// Any bytes: some of the input's, the rest of it, or a piece repeated. What
+// the input takes as it is ends where what it may still make does.
 export function bytes(fdp) {
   switch (fdp.consumeIntegralInRange(0, 3)) {
-    case 0: return Uint8Array.from(fdp.consumeRemainingAsBytes());
+    case 0: return taken(Uint8Array.from(fdp.consumeRemainingAsBytes()).subarray(0, room()));
     case 1: {
       const piece = Uint8Array.from(fdp.consumeBytes(pieceLength(fdp)));
-      const times = piece.length ? many(fdp, Math.floor(MAX_REPEAT / piece.length)) : 0;
-      const out = new Uint8Array(piece.length * times);
-      for (let i = 0; i < times; i++) out.set(piece, i * piece.length);
-      return out;
+      return repeatedBytes(piece, repeats(fdp, piece.length));
     }
-    default: return Uint8Array.from(fdp.consumeBytes(count(fdp)));
+    default: return taken(Uint8Array.from(fdp.consumeBytes(count(fdp))).subarray(0, room()));
   }
 }
 
 // Any string: mostly some of the input's bits, or the rest of them, read as
 // the input picks; now and then a word the extension looks for, or a piece
-// repeated.
+// repeated. It ends where what the input may still make does, as bytes do.
 export function string(fdp) {
   if (fdp.remainingBytes === 0) return "";
   switch (fdp.consumeIntegralInRange(0, 5)) {
-    case 0: return fdp.pickValue(WORDS);
+    case 0: return taken(fdp.pickValue(WORDS).slice(0, room()));
     case 1: {
       const piece = fdp.consumeBoolean() ? fdp.pickValue(WORDS) : decoded(fdp, () => fdp.consumeBytes(pieceLength(fdp)));
-      return piece ? piece.repeat(many(fdp, Math.floor(MAX_REPEAT / piece.length))) : "";
+      const times = repeats(fdp, piece.length);
+      made(piece.length * times, true);
+      return piece.repeat(times * rung);
     }
-    case 2: return decoded(fdp, () => fdp.consumeRemainingAsBytes());
-    default: return decoded(fdp, () => fdp.consumeBytes(count(fdp)));
+    case 2: return taken(decoded(fdp, () => fdp.consumeRemainingAsBytes()).slice(0, room()));
+    default: return taken(decoded(fdp, () => fdp.consumeBytes(count(fdp))).slice(0, room()));
   }
 }
 
@@ -153,21 +454,6 @@ export function number(fdp) {
   }
 }
 
-function array(fdp, depth) {
-  const a = [];
-  for (let n = count(fdp); n > 0 && fdp.remainingBytes > 0; n--) a.push(value(fdp, depth + 1));
-  if (fdp.consumeBoolean()) a.length += many(fdp, MAX_REPEAT); // holes, as many as a few bytes say
-  return a;
-}
-
-function object(fdp, depth) {
-  const o = {};
-  for (let n = count(fdp); n > 0 && fdp.remainingBytes > 0; n--) {
-    Object.defineProperty(o, string(fdp), { value: value(fdp, depth + 1), enumerable: true, writable: true, configurable: true });
-  }
-  return o;
-}
-
 // Binary data as a structured clone can carry it: the bytes as an
 // ArrayBuffer, a DataView or a typed array of any kind over them (as many
 // elements as whole ones fit).
@@ -177,42 +463,115 @@ const VIEWS = [Uint8Array, (b) => b.buffer, (b) => new DataView(b.buffer), Int8A
 
 const REGEXP_FLAGS = "dgimsuvy";
 
-// Any value a script can hand over. The containers (Map, Set, array, object)
-// come after the values that hold no other, so that MAX_DEPTH leaves them
-// out.
-export function value(fdp, depth = 0) {
-  if (fdp.remainingBytes === 0) return undefined;
-  switch (fdp.consumeIntegralInRange(0, depth < MAX_DEPTH ? 15 : 10)) {
-    case 0: return undefined;
-    case 1: return null;
-    case 2: return fdp.consumeBoolean();
-    case 3: case 4: return number(fdp);
-    case 5: case 6: return string(fdp);
-    case 7: return fdp.consumeBigIntegral(8, true);
-    case 8: return new Date(number(fdp));
-    case 9: {
-      const source = string(fdp);
-      const mask = fdp.consumeIntegral(1);
-      const flags = [...REGEXP_FLAGS].filter((_, i) => (mask >> i) & 1).join("");
-      try { return new RegExp(source, flags); } catch { return /x/; } // a source or flags (u with v) that no RegExp takes
+const property = (o, key, v) => Object.defineProperty(o, key, { value: v, enumerable: true, writable: true, configurable: true });
+
+// Any value a script can hand over, nested as deep as the input says. It is
+// made with a stack of its own rather than by recursion, so that how deep it
+// can go is not the generator's to say but the channel's (the head of this
+// file). The input is read in the order a recursive generator would read it
+// (fuzz/encode.mjs writes it so): each value's kind, and a container's count
+// before its contents.
+export function value(fdp) {
+  let result;
+  // The containers being filled, innermost last. fill() makes the next of a
+  // container's contents and returns true, or finishes the container and
+  // returns false.
+  const open = [];
+  const make = (put) => {
+    if (fdp.remainingBytes === 0) return put(undefined);
+    switch (fdp.consumeIntegralInRange(0, 15)) {
+      case 0: return put(undefined);
+      case 1: return put(null);
+      case 2: return put(fdp.consumeBoolean());
+      case 3: case 4: return put(number(fdp));
+      case 5: case 6: return put(string(fdp));
+      case 7: return put(fdp.consumeBigIntegral(8, true));
+      case 8: return put(new Date(number(fdp)));
+      case 9: {
+        const source = string(fdp);
+        const mask = fdp.consumeIntegral(1);
+        const flags = [...REGEXP_FLAGS].filter((_, i) => (mask >> i) & 1).join("");
+        try { return put(new RegExp(source, flags)); } catch { return put(/x/); } // a source or flags (u with v) that no RegExp takes
+      }
+      case 10: {
+        const view = fdp.pickValue(VIEWS);
+        return put(view(Uint8Array.from(fdp.consumeBytes(count(fdp)))));
+      }
+      case 11: {
+        const m = new Map();
+        put(m);
+        let n = count(fdp);
+        let key;
+        let keyed = false;
+        open.push({
+          fill() {
+            if (keyed) {
+              keyed = false;
+              make((v) => m.set(key, v));
+              return true;
+            }
+            if (!(n > 0 && fdp.remainingBytes > 0)) return false;
+            n--;
+            keyed = true;
+            make((k) => { key = k; });
+            return true;
+          },
+        });
+        return undefined;
+      }
+      case 12: {
+        const s = new Set();
+        put(s);
+        let n = count(fdp);
+        open.push({
+          fill() {
+            if (!(n > 0 && fdp.remainingBytes > 0)) return false;
+            n--;
+            make((v) => s.add(v));
+            return true;
+          },
+        });
+        return undefined;
+      }
+      case 13: {
+        const a = [];
+        put(a);
+        let n = count(fdp);
+        open.push({
+          fill() {
+            if (n > 0 && fdp.remainingBytes > 0) {
+              n--;
+              make((v) => a.push(v));
+              return true;
+            }
+            if (fdp.consumeBoolean()) a.length += made(many(fdp, Math.min(leftBottom, Math.floor(leftTop / top))), true); // holes, as many as a few bytes say, the rungs' times as many
+            return false;
+          },
+        });
+        return undefined;
+      }
+      default: {
+        const o = {};
+        put(o);
+        let n = count(fdp);
+        open.push({
+          fill() {
+            if (!(n > 0 && fdp.remainingBytes > 0)) return false;
+            n--;
+            const key = string(fdp);
+            make((v) => property(o, key, v));
+            return true;
+          },
+        });
+        return undefined;
+      }
     }
-    case 10: {
-      const view = fdp.pickValue(VIEWS);
-      return view(Uint8Array.from(fdp.consumeBytes(count(fdp))));
-    }
-    case 11: {
-      const m = new Map();
-      for (let n = count(fdp); n > 0 && fdp.remainingBytes > 0; n--) m.set(value(fdp, depth + 1), value(fdp, depth + 1));
-      return m;
-    }
-    case 12: {
-      const s = new Set();
-      for (let n = count(fdp); n > 0 && fdp.remainingBytes > 0; n--) s.add(value(fdp, depth + 1));
-      return s;
-    }
-    case 13: return array(fdp, depth);
-    default: return object(fdp, depth);
+  };
+  make((v) => { result = v; });
+  while (open.length) {
+    if (!open[open.length - 1].fill()) open.pop();
   }
+  return result;
 }
 
 // What v is after the JSON that Chrome's runtime messages and chrome.storage
@@ -229,7 +588,9 @@ export function json(v) {
 }
 
 // What v is after a structured clone, as between the page's world and a
-// content script (the detail of a CustomEvent), or { sendable: false }.
+// content script (the detail of a CustomEvent), or { sendable: false } when a
+// clone cannot carry it (a symbol, a function, or nesting deeper than the
+// clone goes).
 export function clone(v) {
   try {
     return { sendable: true, value: structuredClone(v) };
@@ -242,8 +603,12 @@ export function clone(v) {
 // that the input picks how a number without a JSON literal is written (1e400
 // parses to Infinity, -1e400 to -Infinity, -0 stays -0), and a BigInt is
 // written as its digits, which JSON reads as a number that may lose precision.
+// Those numbers are put in v itself first, in the order JSON.stringify goes
+// through v, so that the plain JSON.stringify, which goes any depth, writes
+// the text (one with a replacer stops at about ten thousand levels). v is
+// made for the text alone, so changing it changes nothing else.
 export function jsonText(fdp, v) {
-  const text = JSON.stringify(v, (key, x) => {
+  const literal = (x) => {
     if (typeof x === "bigint") return MARK + x.toString();
     if (typeof x !== "number") return x;
     if (Number.isNaN(x)) return fdp.consumeBoolean() ? null : MARK + fdp.pickValue(["1e400", "-1e400"]);
@@ -251,7 +616,34 @@ export function jsonText(fdp, v) {
     if (x === -Infinity) return MARK + "-1e400";
     if (Object.is(x, -0)) return MARK + "-0";
     return x;
-  });
+  };
+  const holder = { "": v };
+  // Each frame: an object or array whose own enumerable keys are gone through
+  // in turn, as JSON.stringify goes through them.
+  const frames = [{ o: holder, keys: [""], i: 0 }];
+  while (frames.length) {
+    const f = frames[frames.length - 1];
+    if (f.i === f.keys.length) {
+      frames.pop();
+      continue;
+    }
+    const key = f.keys[f.i++];
+    let x = f.o[key];
+    if (x === null || x === undefined || x instanceof Date) continue; // a Date writes itself as its ISO string, or null
+    if (typeof x !== "object") {
+      const y = literal(x);
+      if (y !== x) f.o[key] = y;
+      continue;
+    }
+    if (ArrayBuffer.isView(x) && !(x instanceof DataView)) {
+      // A typed array writes itself as an object of its elements, which can
+      // take no string: an object of them, written the same, can.
+      x = Object.fromEntries(Object.keys(x).map((k) => [k, x[k]]));
+      f.o[key] = x;
+    }
+    frames.push({ o: x, keys: Array.isArray(x) ? Array.from({ length: x.length }, (_, i) => String(i)) : Object.keys(x), i: 0 });
+  }
+  const text = JSON.stringify(holder[""]);
   return text === undefined ? "" : text.replace(MARKED, "$1"); // undefined has no JSON: an empty body
 }
 
@@ -325,13 +717,13 @@ export function warnings(context) {
 }
 
 // A value as a failure message shows it: JSON where JSON can write it (a
-// BigInt with an n), else String(), cut at 300 characters, since an input can
-// make values of millions.
+// BigInt with an n), else String(), its first 300 characters and its length,
+// since an input can make values of millions and the message is for a reader.
 export function brief(v) {
   let s;
   try {
     s = JSON.stringify(v, (key, x) => (typeof x === "bigint" ? `${x}n` : x));
-  } catch { /* a cycle, or a value whose toJSON throws */ }
+  } catch { /* a cycle, a value too deep, or one whose toJSON throws */ }
   if (s === undefined) s = printable(v);
   return s.length > 300 ? `${s.slice(0, 300)}… (${s.length} characters)` : s;
 }

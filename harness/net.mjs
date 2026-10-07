@@ -11,6 +11,7 @@
 // does. What a response holds comes out as objects of the realm of the
 // context that fetched it.
 import { record } from "./log.mjs";
+import { step } from "./work.mjs";
 
 const encoder = new TextEncoder();
 
@@ -31,6 +32,12 @@ export class Net {
   // a string or bytes, url the final URL after a redirect, or { failed: true }
   // for a network that fails (fetch() rejects, as it does when a host cannot be
   // reached). The newest route that matches wins.
+  // Forgets the requests it has answered (harness/log.mjs).
+  forget() {
+    this.requests.length = 0;
+    return this;
+  }
+
   on(match, handler) {
     this.routes.unshift({ match, handler: typeof handler === "function" ? handler : () => handler });
     return this;
@@ -60,9 +67,12 @@ export function response(realm, url, { status = 200, headers = {}, body = "", ur
     url: finalUrl || url,
     redirected: !!finalUrl && finalUrl !== url,
     headers: { get: (name) => (Object.hasOwn(lower, String(name).toLowerCase()) ? lower[String(name).toLowerCase()] : null) },
-    text: async () => new TextDecoder().decode(bytes),
-    json: async () => realm.JSON.parse(new TextDecoder().decode(bytes)),
+    // Reading the body goes through its bytes (decoded as UTF-8, or copied);
+    // JSON.parse of the realm counts what it goes through itself.
+    text: async () => (step(1 + bytes.length), new TextDecoder().decode(bytes)),
+    json: async () => (step(1 + bytes.length), realm.JSON.parse(new TextDecoder().decode(bytes))),
     arrayBuffer: async () => {
+      step(1 + bytes.length);
       const copy = new realm.Uint8Array(bytes.length);
       copy.set(bytes);
       return copy.buffer;

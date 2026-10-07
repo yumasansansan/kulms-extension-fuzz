@@ -11,14 +11,14 @@ specification: the GNU General Public License, version 3 or any later version
 # KULMS+ 拡張機能 レビューの記録
 
 - **対象**: [Radian0523/kulms-extension](https://github.com/Radian0523/kulms-extension) の [`087452e`](https://github.com/Radian0523/kulms-extension/commit/087452e33d14c117e6fa584fe3dd4b19f8f9a76c)（v1.21.0 と提出検知の修正）
-- **日付**: 2026-10-06（B19〜B21 は 2026-10-07）
-- **方法**: 全ソースを通読した．そのうえで，実コードを Node 26.10.0 と jsdom 30.1.2 の上で動かして確かめた．その後，拡張を Node の上で動かすハーネス（[harness/](../harness/)）を作り，確かめたことをテスト（[tests/](../tests/)）にした．また，Jazzer.js でファジング（[fuzz/](../fuzz/)）を行い，B15〜B21 と，S7 の新しい例を見つけた
+- **日付**: 2026-10-06（B19〜B21 と S9 は 2026-10-07）
+- **方法**: 全ソースを通読した．そのうえで，実コードを Node 26.10.0 と jsdom 30.1.2 の上で動かして確かめた．その後，拡張を Node の上で動かすハーネス（[harness/](../harness/)）を作り，確かめたことをテスト（[tests/](../tests/)）にした．また，Jazzer.js でファジング（[fuzz/](../fuzz/)）を行い，B15〜B21 と，S7 の新しい例を見つけた．拡張のすべての正規表現を，受理するオートマトンで調べ，S9 を見つけた
 - 行番号は上記コミット時点のもの．リンクはそのコミットへの固定リンク
 
 ## 凡例
 
 - **重さ**: 高（利用者のデータが消える，広く効く）／中／低
-- **確認**: 再現（tests/ のテストで再現した）／計測（時間を測った）／ビルド（build.sh を実行した）／ファズ（ファジングで見つかった）／読解（コードを読んで判断した）
+- **確認**: 再現（tests/ のテストで再現した）／計測（時間を測った）／ビルド（build.sh を実行した）／ファズ（ファジングで見つかった）／解析（正規表現が受理するオートマトンを調べた）／読解（コードを読んで判断した）
 - **状態**: 未着手／対応中（直したブランチへのリンクを書く）／PR 中（PR へのリンクを書く）／修正済（上流に取り込まれた）．上流に取り込まれたら，tests/ の該当テストから `todo` を外し，ID を `fuzz/open-findings.mjs` から外し，`fuzz/inputs.mjs` での既知の入力の書き出し先を `fuzz/regressions/` に移す
 
 ## 一覧
@@ -33,6 +33,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [S6](#s6) | 低 | 不正な TOTP シークレットを保存できる | 再現 | 対応中（[fix/validate-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/validate-totp-secret)） | |
 | [S7](#s7) | 低 | 形の崩れたメッセージで onMessage リスナーが例外を投げる | 再現 | 対応中（[fix/message-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/message-shape)） | |
 | [S8](#s8) | 低 | シラバス解析の正規表現が入力長の 2 乗で遅くなる | 再現・計測 | 対応中（[fix/syllabus-parse](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-parse)） | |
+| [S9](#s9) | 低 | 科目名，TOTP のシークレット，フォルダを読む正規表現が入力長の 2 乗で遅くなる | 解析・再現・計測 | 対応中（[fix/backtracking-regexes](https://github.com/yumasansansan/kulms-extension/tree/fix/backtracking-regexes)） | |
 | [B1](#b1) | **高** | 複数タブを開いていると，メモ・完了チェック・非表示が消える | 再現 | PR 中（[#75](https://github.com/Radian0523/kulms-extension/pull/75)） | |
 | [B2](#b2) | 中 | 非表示にした課題が 30 日後に一覧へ戻る | 再現 | PR 中（[#76](https://github.com/Radian0523/kulms-extension/pull/76)） | [#74](https://github.com/Radian0523/kulms-extension/issues/74) |
 | [B3](#b3) | 中 | サイドバーの色分けで，期限切れが最も弱く扱われる | 再現 | 対応中（[fix/sidebar-overdue-color](https://github.com/yumasansansan/kulms-extension/tree/fix/sidebar-overdue-color)） | |
@@ -51,8 +52,8 @@ specification: the GNU General Public License, version 3 or any later version
 | [B16](#b16) | 低 | TA 採点支援が壊れた `%` の並びで URIError を投げ，装飾が止まる | ファズ | 対応中（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)） | |
 | [B17](#b17) | 中 | 保存されたメモに null が 1 つあると，課題パネルの描画が止まる | ファズ | 対応中（[fix/invalid-memo](https://github.com/yumasansansan/kulms-extension/tree/fix/invalid-memo)） | |
 | [B18](#b18) | 低 | TA 採点支援が，ページから届く提出の status の型を確かめず TypeError で止まる | ファズ | 対応中（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)） | |
-| [B19](#b19) | 低 | Sakai の応答に形の崩れた項目が 1 つあると，ほかの科目や課題も一覧から消える | ファズ | 未着手 | |
-| [B20](#b20) | 低 | サイト連絡先の取得で，pages.json の形の崩れたページが，後のページを隠す | ファズ | 未着手 | |
+| [B19](#b19) | 低 | Sakai の応答に形の崩れた項目が 1 つあると，ほかの科目や課題も一覧から消える | ファズ | 対応中（[fix/sakai-answer-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/sakai-answer-shape)） | |
+| [B20](#b20) | 低 | サイト連絡先の取得で，pages.json の形の崩れたページが，後のページを隠す | ファズ | 対応中（[fix/site-contact-pages](https://github.com/yumasansansan/kulms-extension/tree/fix/site-contact-pages)） | |
 | [B21](#b21) | 低 | `t()` に値を 1 つだけ空文字列で渡すと，`$HOURS$` などが残る（潜在） | ファズ | 対応中（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)） | |
 | [P1](#p1) | **高** | 課題取得の N+1 と，タブごとの短い間隔での再取得（LMS への負荷） | 読解 | 未着手 | [#32](https://github.com/Radian0523/kulms-extension/issues/32), [#27](https://github.com/Radian0523/kulms-extension/issues/27) |
 | [P2](#p2) | 中 | フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行う | 読解 | 未着手 | [#62](https://github.com/Radian0523/kulms-extension/issues/62) |
@@ -100,7 +101,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 影響: その間 Service Worker のイベントループが止まり，TOTP 自動入力を含む拡張の全メッセージが応答しない．引き金はサイト連絡先の欄に異常な内容が入ることなので，起きる可能性は低い．
 - 直し方: 見出しを `indexOf` で探し，次の `<td…>` から `</td>` までを切り出してから，`,` と `<` で区切る．あるいは量指定子の上限を決める．
 - 対応: 見出し，`<td`，`>` の位置を順に探して，セルを切り出す（[fix/site-contact-regex](https://github.com/yumasansansan/kulms-extension/tree/fix/site-contact-regex)）．ランダムな 20 万件のページで古い正規表現と答えを突き合わせると，最初の `<td>` が空のときを除いて一致した．そのとき古い正規表現は，次の `<td>`（多くは別の行）の中身を教員名として返していた．
-- テスト: `tests/background.test.mjs` の「S2」．
+- テスト: [tests/background.test.mjs](../tests/background.test.mjs) の「S2」（空白の連なりの長さ n，2n，4n で数えた仕事量の伸びの次数．main では 3），[tests/regexp.test.mjs](../tests/regexp.test.mjs)（正規表現のオートマトン）．
 
 ### S3
 **TOTP 登録補助がシークレットをページの sessionStorage に置く**（低・読解）
@@ -164,15 +165,34 @@ specification: the GNU General Public License, version 3 or any later version
 ### S8
 **シラバス解析の正規表現が入力長の 2 乗で遅くなる**（低・再現・計測）
 
-- 場所: [background.js:370](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L370)（`<[^>]+>`），[:433](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L433)（`^(.*?)『(.+?)』`）
-- 根拠: 閉じない `<` や対にならない `『` が 20,000 字続くと，それぞれ約 0.2 秒かかる．
-- そのほか: 同じ型の正規表現が，ほかにもある．
-  - 出版社を読む `[（(]([^）)]+)[）)]`（閉じない括弧が続くとき）と，書名の末尾の区切りを除く `[\s,、;；]+$`（区切りが途中に長く続くとき）．4 万字で 1〜3 秒かかる．
-  - 出版社のフォールバックの `[,、]\s*([^,、]+?(?:社|…))`．`\s*` と `[^,、]+?` が空白を取り合い，読点の後に全角空白などが長く続くと遅くなる（2 万字で約 0.2 秒）．答えを変えずに直すには，出版社の語の並びを 2 回書く必要がある．起きる条件も考えにくいので，まだ直していない．
-  - 検索結果を読む [background.js:228](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L228)（行の `<tr[^>]*>([\s\S]*?)<\/tr>`），[:244](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L244)（列の `<td[^>]*>([\s\S]*?)<\/td>`），[:248](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L248)（列の中のタグを除く `<[^>]+>`）．閉じない `<`，`>` の無い `<tr`，`</tr>` の無い `<tr>`，`</td>` の無い `<td>` が 4 万字続くと，それぞれ約 0.75 秒，0.25 秒，0.09 秒，0.09 秒かかる（2026-10-07，ファズ対象が S8 を避けずに届くことに気づいて測った）．fix/syllabus-parse は，これらをまだ直していない．
+- 場所: background.js の，シラバスと検索結果を読む正規表現．
+  - シラバス: [:366-367](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L366-L367)（`<style>` と `<script>` を除く `<style[^>]*>[\s\S]*?<\/style>` など），[:370](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L370)（タグを除く `<[^>]+>`），[:433](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L433)（書名を読む `^(.*?)『(.+?)』`），[:441](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L441)（出版社を読む `[（(]([^）)]+)[）)]`），[:452](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L452)（書名の末尾の区切りを除く `[\s,、;；]+$`），[:455-457](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L455-L457)（出版社のフォールバック `[,、]\s*([^,、]+?(?:社|…))`）．
+  - 検索結果: [:228](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L228)（行の `<tr[^>]*>([\s\S]*?)<\/tr>`），[:244](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L244)（列の `<td[^>]*>([\s\S]*?)<\/td>`），[:248](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L248)（列の中のタグを除く `<[^>]+>`）．
+- 根拠: どれも，一致しなかった位置から一字ずつずらして探し直す．閉じない `<`，対にならない `『`，閉じない括弧，途中に長く続く区切り，`</tr>` の無い `<tr>`，`</td>` の無い `<td>`，閉じない `<style>`，区切りの後に長く続く空白で，入力長の 2 乗の時間がかかる．V8 で，閉じない `<` 2 万字に約 0.2 秒，対にならない `『` 2 万字に約 0.1 秒，閉じない括弧 8 万字に約 3.6 秒，`</tr>` の無い `<tr>` 4 万個に約 1 秒，閉じない `<style>` 4 万個に約 1.8 秒，区切りの後の空白 16 万字に約 6.3 秒かかった（Node 26.10.0，Core i7-1360P，3 回の中央値）．
 - 補足: 教員が書いた文字は，KULASIS がエスケープして HTML に出す（`<` は `&lt;` になる）．そのため，タグを除く `<[^>]+>` が遅くなる入力は，教員の入力からは作りにくい．
-- 対応: 370 行，433 行，出版社の括弧，書名の末尾の 4 つを，答えを変えずに線形の時間にした（[fix/syllabus-parse](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-parse)）．ランダムな 10 万件のページで古い実装と答えを突き合わせると，行の途中に U+2028 などの改行扱いの文字があるときを除いて一致した．そのとき古い実装は，『』を書名として読まなかった．
-- テスト: `tests/background.test.mjs` の「S8」．4 つの正規表現を，4 万字の入力でそれぞれ測る．
+- 対応: [fix/syllabus-parse](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-parse) で，答えを変えずに線形の時間にした．
+  - 最初の修正（S4 と同じコミット）: 370 行と出版社の括弧は，最後の `>` や閉じ括弧より後ろを正規表現に渡さないようにした．433 行は `『` と `』` の位置で探し，書名の末尾は末尾から 1 字ずつ見て取り除いた．ランダムな 10 万件のページで古い実装と答えを突き合わせると，行の途中に U+2028 などの改行扱いの文字があるときを除いて一致した．そのとき古い実装は，『』を書名として読まなかった．
+  - 続く修正: 正規表現そのものが線形になるよう，残りを書き換えた．閉じないものからは，残りを丸ごと一致させて探すのをやめる（その先に閉じるものは無いので，後ろのものも閉じない）．出版社のフォールバックは，出版社名を空白でない文字から始めて，区切りの後の空白と取り合わないようにした．区切りの後の空白のすぐ後に出版社の語があるときだけは，これまでどおり最後の空白 1 字を含める．370 行と出版社の括弧も，渡す範囲を切る代わりに同じ書き方にした．新しい正規表現はどれもオートマトンで線形と判定され，関わる文字だけでできたランダムな文字列（各 3 万件）で，元の正規表現と答えが一致した．
+- テスト: [tests/background.test.mjs](../tests/background.test.mjs) の「S8」（連なりの長さ n，2n，4n で数えた仕事量の伸びの次数．main では 2），[tests/large.test.mjs](../tests/large.test.mjs)（ランダムなバイト列 8MB の検索結果．閉じない `<tr>` が約 400 万字に 1 度出る），[tests/regexp.test.mjs](../tests/regexp.test.mjs)（正規表現のオートマトン）．
+
+### S9
+**科目名，TOTP のシークレット，フォルダを読む正規表現が入力長の 2 乗で遅くなる**（低・解析・再現・計測）
+
+- 場所:
+  - [background.js:39](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L39)：`cleanCourseName()` が末尾の (…) を取る `\s*\(.*\)\s*$`．
+  - [popup.js:628](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L628)，[src/assignments.js:2284](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2284)，[src/auth-totp-register.js:26](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/auth-totp-register.js#L26)，[src/auth-totp.js:10](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/auth-totp.js#L10)：base32 のデコードで，末尾の `=` を取る `=+$`．
+  - [src/course-name.js:15](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/course-name.js#L15)，[src/textbooks.js:134](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L134)：曜日と時限を読む `\[(?:\d{4}[^\]]*?)?([月火水木金土日])\s*([０-９0-9]+)\s*\]`．
+  - [src/tree-view.js:26](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/tree-view.js#L26)：フォルダの深さを読む `collectionId.*?=\s*'([^']*)'`．
+- 根拠: 拡張のすべての正規表現を，受理するオートマトンで調べて見つけた（recheck．[tests/regexp.test.mjs](../tests/regexp.test.mjs)）．どれも，一致しなかった位置から一字ずつずらして探し直す．`(` の続かない空白や閉じない `(`，末尾でない `=`，年の 4 桁が続く `[`（`]` が来ない），1 行に続く `collectionId`（`='…'` が無い）が長く続くと，入力長の 2 乗の時間がかかる．V8 で，空白 4 万字の科目名に約 0.9 秒，末尾でない `=` 4 万字に約 0.7 秒，日本語を含む 8 万字の科目名に約 0.3 秒，`collectionId` が続く 20 万字の onclick に約 0.8 秒（40 万字で約 3.3 秒）かかった（Node 26.10.0，Core i7-1360P，3 回の中央値）．
+  - 曜日と時限の正規表現は，文字列が U+00FF までの文字だけのときは，V8 がすぐ失敗させる（曜日の文字がその範囲に無いため）．日本語を含む科目名では遅くなる．
+- 影響: 科目名とフォルダはページから，シークレットは保存された値から来る．引き金は異常に長い値なので，起きる可能性は低い．content script の処理が止まると，そのページが固まる．
+- 対応: 正規表現そのものを，一度失敗した範囲を探し直さない書き方に改めた（[fix/backtracking-regexes](https://github.com/yumasansansan/kulms-extension/tree/fix/backtracking-regexes)）．
+  - `cleanCourseName()` は，`(` の続かない空白の連なりと，行末まで閉じない `(` からの残りを，丸ごと一致させてそのまま返し，末尾の (…) だけを取り除く．
+  - 末尾の `=` は，その前の 1 字（または文字列の先頭）と一緒に一致させる（`(^|[^=])=+$` を `$1` に置き換える）．
+  - 曜日と時限は，先に「曜日 時限 ]」を探し，同じ括弧の中（前の `]` から曜日まで）に，年の 4 桁が続く `[` か，曜日の直前の `[` があるかを確かめる．どの括弧の中も一度しか見ない．最初の書き換えでは，`[` を探す `indexOf` が括弧の外まで走っていたため，「月1]」が長く続くと 2 乗になった（数えた仕事量の次数 1.98）．下のテストの「月1]」の連なりは，これを確かめる．
+  - フォルダの深さは，`collectionId` の後に `='…'` が無い行の残りを丸ごと一致させて，次の行へ進む．
+  - 新しい正規表現はどれもオートマトンで線形と判定された．関わる文字だけでできたランダムな文字列で，元の正規表現と答えが一致した（曜日と時限は 20 万件，ほかは各 3 万件．`cleanCourseName()` は前後の空白を除いた結果が一致し，関数はその結果を返す）．
+- テスト: [tests/regexp.test.mjs](../tests/regexp.test.mjs) の「S9」（オートマトン），[tests/runs.test.mjs](../tests/runs.test.mjs)（それぞれの連なりの長さ n，2n，4n で数えた仕事量の伸びの次数．main では 2.00，修正後は 1）．
 
 ## 不具合
 
@@ -351,7 +371,7 @@ specification: the GNU General Public License, version 3 or any later version
 ### B19
 **Sakai の応答に形の崩れた項目が 1 つあると，ほかの科目や課題も一覧から消える**（低・ファズ）
 
-- 場所: [src/assignments.js:265-367](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L265-L367)（課題），[:380-413](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L380-L413)（クイズ），[:103-113](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L103-L113)，[:155-166](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L155-L166)（科目の一覧）
+- 場所: [src/assignments.js:265-367](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L265-L367)（課題），[:380-413](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L380-L413)（クイズ），[:103-113](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L103-L113)，[:155-166](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L155-L166)（科目の一覧），[:247-263](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L247-L263)（課題ツールの URL），[src/textbooks.js:24-37](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L24-L37)（教科書の科目一覧）
 - 何が起きるか: 科目ごとの取得は，Sakai の API の応答を，形を確かめずに読む．次のようなときに TypeError になる．
   - 応答や項目が null のとき（`data.assignment_collection`，`a.entityId`，`a.dueTime`）
   - 提出の `status` が文字列でないとき（`toLowerCase` が無い）
@@ -359,7 +379,7 @@ specification: the GNU General Public License, version 3 or any later version
 
   取得全体を囲む try がこれを受けて `console.warn` に書き，その科目の課題を空にする．そのため，形の崩れた項目が 1 つあるだけで，同じ科目の正しい課題も一覧から黙って消える．クイズの取得は，警告も出さずに，その科目のクイズをすべて捨てる．
 
-  科目の一覧（`site.json`）でも同じで，項目が 1 つ崩れていると，API から得た一覧をすべて捨てて，ポータルのページから科目を読む方法に切り替わる．ポータルのページから読めない科目は，課題ごと一覧から消える（ページも読めなければ「科目が見つからない」になる）．
+  科目の一覧（`site.json`）でも同じで，項目が 1 つ崩れていると，API から得た一覧をすべて捨てて，ポータルのページから科目を読む方法に切り替わる．ポータルのページから読めない科目は，課題ごと一覧から消える（ページも読めなければ「科目が見つからない」になる）．課題ツールの URL を pages.json から探すときも，null のページがあると探すのをやめ，科目のページへのリンクで代える（警告は出さない）．教科書の科目一覧（textbooks.js）も，項目が 1 つ崩れると API から得た一覧をすべて捨て，サイドバーから読む方法に切り替わる．
 - 根拠: ファズ対象 `assignments` が，拡張の捕まえたプログラムの誤りも失敗とするようにした最初の実行で見つけた（課題の一覧の応答が JSON の `null` だった）．次の 2 つのとき，同じ科目の正しい課題も消えることを確かめた．
   - 項目に null があるとき
   - 提出の `status` が数のとき
@@ -367,6 +387,7 @@ specification: the GNU General Public License, version 3 or any later version
   クイズでも，null の項目があると同じことが起きる．科目の一覧の経路は，13 本の修正をすべて当てた拡張のファジングで見つけた（`site.json` の応答が `null` だった）．
 - 見立て: Sakai の API がこの形を返すことは，まず無い．ただ，期限を知らせる拡張で，科目ごと期限の一覧から黙って消えるのは重い失敗になる．
 - 直し方: 応答と項目の形を確かめ，形の崩れた項目だけを飛ばす．文字列の項目は，文字列のときだけ使う．
+- 対応: 応答の一覧は配列のときだけ読み，オブジェクトでない項目は飛ばす．文字列の欄は，文字列か数のときだけ使う．日時は，数か数の文字列で，Date で表せるときだけ使う．ID の無い課題には個別の API を呼ばない．課題ツールの URL と教科書の科目一覧も，同じように直した（[fix/sakai-answer-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/sakai-answer-shape)）．
 - テスト: `fuzz/known/assignments/B19-null-assignment`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B19」の 3 件（課題，クイズ，科目の一覧）．
 
 ### B20
@@ -377,6 +398,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 根拠: ファズ対象 `site-contact` が，拡張の捕まえたプログラムの誤りも失敗とするようにした最初の実行で見つけた（pages.json が `[null]` だった）．
 - 見立て: Sakai がこの形を返すことは，まず無い．失うのも，同名の科目を教員名で絞り込む手がかりだけなので，影響は小さい．
 - 直し方: オブジェクトでないページと，配列でない `tools` を飛ばす．
+- 対応: 配列でない pages.json，オブジェクトでないページとツール，配列でない `tools` を飛ばす．`placementId` は，空でない文字列のときだけ使う（[fix/site-contact-pages](https://github.com/yumasansansan/kulms-extension/tree/fix/site-contact-pages)）．
 - テスト: `fuzz/known/site-contact/B20-null-page`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/background.test.mjs` の「B20」．
 
 ### B21
@@ -475,7 +497,7 @@ specification: the GNU General Public License, version 3 or any later version
 JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起きない．代わりに見るのは次の 4 つ．
 
 - 落ちる: 未捕捉の例外，未処理の Promise 拒否
-- 固まる: ReDoS や無限ループ（timeout で検出する．S2 がこれ）
+- 固まる: ReDoS や無限ループ（時計ではなく，数えた仕事量の伸びで検出する．S2，S8，S9 がこれ）
 - 膨らむ: メモリの膨張
 - 注入: DOM XSS，プロトタイプ汚染
 
@@ -494,16 +516,42 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
 - **このリポジトリ（kulms-extension-fuzz）の役割**: kulms-extension を submodule として持ち，上流のコードは変えずに，ハーネス側でテストとファジングを行う．
 - **ハーネス**（[harness/](../harness/)）: 偽の chrome API と jsdom を用意し，submodule のスクリプトを manifest と同じ順で読み込む．偽の API は，複数タブで共有するストレージ，メッセージとその記録，拡張自身のファイル（web_accessible_resources の制限つき）を備える．IIFE の中の関数は，読み込み時に AST 変換で外へ公開する（行番号は変えない）．読み込むコードは Jazzer.js の計装を通すので，vm や jsdom で動くコードからもカバレッジがファザーに届く．
 - **検出器**（[harness/detectors.mjs](../harness/detectors.mjs)）: 例外のほか，ページに入り込んだスクリプトを動かすマークアップ（DOM XSS），プロトタイプの汚染，誰も受けない Promise の拒否を失敗とする．
+- **仕事量**（[harness/work.mjs](../harness/work.mjs)）: 遅さは時計で判定せず，拡張がした仕事を数えて判定する（2026-10-07 に作り直した）．
+  - 拡張のコードは，関数の呼び出し，ループの 1 周，値をたどる構文（コードに書かれていない文字列どうしの比較，実行時に作るキー，オブジェクトの展開，プロトタイプチェーンをたどる演算子）を数える．組み込み関数と Web API は，標準の手順の歩数で数える（[harness/costs.mjs](../harness/costs.mjs)，[harness/web-costs.mjs](../harness/web-costs.mjs)）．標準が上限だけを求めるものはその上限，エンジンに任せるものは Chrome のやり方で数える．DOM は標準の手順どおりに数えるので，Chrome が索引で速く済ませるもの（getElementById など）も木をたどる分を数え，数は Chrome にとっての上限になる．正規表現は，V8 と答えを突き合わせながら，バックトラックするエンジンの歩数で数える（[harness/backtrack.mjs](../harness/backtrack.mjs)）．
+  - 規則の抜けは [tests/costs.test.mjs](../tests/costs.test.mjs) が防ぐ．ECMAScript の組み込み関数のすべて（1 つの realm に 645），拡張のコードが名前を挙げる Web API のメンバーのすべて，構文の形のすべて，拡張のコードが書く selector のすべてに規則があることを確かめる．拡張は eval も Function も使わない（使えば数えられないので，これも確かめる）．
+  - 数えた仕事量で，テストは入力の大きさ n，2n，4n での伸びの次数を見る（[harness/work.mjs](../harness/work.mjs) の `degree()`．1.5 未満を線形とする）．ファジングは，入力を段に分けて同じ基準で見る（下）．
+  - 仕事量を数える手順そのもの（ハーネスの関数，jsdom の内部の呼び出し，前の入力の遅れて動くタイマー）は，入力の仕事に数えない．入力ごとに非同期の文脈（AsyncLocalStorage）を分け，その入力の文脈で動いた仕事だけを数える．
 - **テスト**（[tests/](../tests/)）: 各問題の再現（todo），ハーネス自体のテスト，ファズ対象のシードと回帰入力と既知の失敗入力の再生．
 - **ファジング**（[fuzz/](../fuzz/)）: 外から入力が来る面ごとの 7 つの対象と canary．対象の一覧と運用は [fuzz/README.md](../fuzz/README.md) にある．
-  - 入力は手加減しない（2026-10-07 に見直した）．文字列は入力のビット列を 16 ビットずつ（すべての符号単位），8 ビットずつ（ASCII が出やすい），UTF-8 のいずれかで読む．数は任意の 64 ビットのパターンと境目の値，値は undefined，null，BigInt，入れ子などを含む．数バイトから数百万字の入力も作り，ネットワークは失敗，任意のステータスと Content-Type，途中で切れた本文も返す．libFuzzer に作らせる入力は 1MiB まで（課題パネルは 64KiB）．
+  - 入力は手加減しない（2026-10-07 に見直した）．文字列は入力のビット列を 16 ビットずつ（すべての符号単位），8 ビットずつ（ASCII が出やすい），UTF-8 のいずれかで読む．数は任意の 64 ビットのパターンと境目の値，値は undefined，null，BigInt，任意の深さの入れ子などを含む．ネットワークは失敗，任意のステータスと Content-Type，途中で切れた本文も返す．
+  - 大きさは段で作る．入力そのもの（libFuzzer に作らせるバイト列）と，その下の段で作る値は 4,096 単位まで．入力は最初に段数を選び，段を上がるたびに，入力が繰り返す片を 2 倍の回数繰り返す．最上段で作る値は，Chrome の runtime メッセージ 1 通が運べる量（JSON の UTF-8 で 64MiB．1 単位は 6 バイト以内なので 11,184,810 単位）まで．
+  - 段から段へ，仕事の増えが前の段の増えの 2^1.5 倍（n log n の仕事が増える量）を超えたら，速い伸びとみる．伸びを読むのは，コードが段の足した分をたどった（1 単位に 1 歩以上を使った）ときだけ．一度だけの速い伸びは，繰り返しが初めて行を閉じたときなどの段差なので，速い伸びがあった段の上の段にだけ，下の段の仕事量から外挿した上限を走らせる前に与え，超えたら止めて失敗とする．線形でない入力は，速い伸びが 2 段続いた所で止まり，何時間も走らない．ほかの段は，線形のコードがするはずの上限（数える場所の数 × (U+1) × ⌈log₂(U+2)⌉ ＋ 入力が空のときの仕事量）で判定する．
+  - 時間は，数え方を確かめるために見る．2 段離れた段どうしで，時間の伸びの次数が仕事量の伸びの次数を 0.5 より多く上回ったら，数えていない仕事があるとして失敗とする（下の「時計の揺れ」）．
+  - 時計で止めるのは，何も数えない所で終わらないものだけ．CI はジョブの終わるべき時刻を `ci/fuzz.sh --until` に渡し，各対象は残りの時間を残りの対象で等しく分けたものを使う．
   - 拡張が自分で捕まえて警告だけ出すエラーのうち，プログラムの誤りを示すもの（TypeError などの文言）も失敗とする．B19 と B20 はこれで見つかった．
   - シードと既知の問題の入力は，`fuzz/inputs.mjs` が，対象の読む値の並びから書く（`fuzz/encode.mjs` が FuzzedDataProvider の逆をたどる）．入力の読み方を変えたときに，これらが黙って別の入力になるのを防ぐためで，テストは，既知の入力がその問題だけを起こすことも確かめる．
-  - 修正ブランチは，`KULMS_EXTENSION_DIR` でその拡張を指し，`KULMS_FUZZ_LOOK_FOR` で直した問題を避けずに探して，ファジングで確かめる．2026-10-07 に 6 本のブランチを各 60 秒（i18n-lookup は 120 秒）確かめ，13 本の修正をすべて当てた拡張でも全対象を確かめた．i18n-lookup で B10 の取りこぼしが，すべて当てた拡張で B19 の別の経路が見つかったほかは，失敗は無かった（下の「ファジングで避けている既知の問題」）．
+  - 修正ブランチは，`KULMS_EXTENSION_DIR` でその拡張を指し，`KULMS_FUZZ_LOOK_FOR` で直した問題を避けずに探して，ファジングで確かめる（下の「ファジングで避けている既知の問題」）．
 - **CI**（[yumasansansan/ADLplug-Next](https://github.com/yumasansansan/ADLplug-Next) にならう）:
   - 素の git でチェックアウトし，submodule も含める．Node は最新版を，pnpm は `packageManager` の版を，`ci/setup.sh` が SHA-256 を確かめて入れる．外部の action は，commit で固定した `actions/upload-artifact` だけ．
   - `ci.yml`（push ごと）: Ubuntu と Windows でのテスト，lint（このリポジトリには ESLint のすべての指摘で失敗し，submodule の拡張には DOM XSS と ReDoS のルールを掛けて報告だけする），REUSE，canary と各対象 1 分のファジング．落ちた入力は artifact に残す．
   - `fuzz.yml`（毎日）: 各対象 20 分のファジング．コーパスを artifact で引き継ぎ，前回落ちた入力を最初に再生する．
+  - どちらのジョブも，始めに，ファジングが終わるべき時刻（GitHub がジョブを止める 6 時間から，残したものを保存する 30 分を引いた時刻．`fuzz.yml` はジョブ自身の上限 330 分の 5 分前）を記録して `ci/fuzz.sh --until` に渡す．
+
+## 時計の揺れ
+
+ファジングで時間を確かめる値（[fuzz/lib.mjs](../fuzz/lib.mjs) の `NOISE`，`TIME_FLOOR`，`TIME_SPAN`）は，時計の揺れを測って決めた．時間は機械と実装によるので，理屈からは決まらない．測るのは [fuzz/noise.mjs](../fuzz/noise.mjs) で，段を上がるシード 4 つを，最上段を高くして 3 回ずつ流し，2 段離れた段どうしで，時間の伸びの次数が仕事量の伸びの次数をどれだけ上回るかを見る．数えていない 2 乗の仕事なら，1 上回る．
+
+2026-10-07 に，13th Gen Intel Core i7-1360P，Windows 11，Node 26.10.0 で，電源につなぎ，高パフォーマンスの電源プランで測った．表の値は，上回った量の最大である．
+
+| 流し方 | 2 段下からの時間の増えが 0.1 秒以上 | 0.3 秒以上 | 1 秒以上 |
+|---|---|---|---|
+| node fuzz/noise.mjs | 0.32 | 0.10 | −0.04 |
+| node fuzz/noise.mjs --jazzer（ファジングと同じ計装の下） | 0.16 | 0.09 | 0.02 |
+
+- `NOISE` は，捕まえるべき最小の信号（数えていない 2 乗の仕事で 1）の半分の 0.5 とした．
+- `TIME_FLOOR` は，測った揺れの最大が `NOISE` の半分（0.25）以下に収まる，最小の時間の増えとした．0.1 秒では 0.32 まで揺れるので，0.3 秒である．そこでの揺れの最大は 0.10 で，`NOISE` はその 5 倍ある．
+- 隣の段どうしで比べると，揺れがずっと大きい．ある段の時間が少し長く（短く）出ると，その段の下と上の増えが逆向きに変わるためである．電源につながず，ふだんと違う電源プランで似た入力を流したときは，隣の段どうしでは 0.3 秒以上の増えでも 1.22 まで揺れ，2 段離すと 0.14（Jazzer の下で 0.19）だった．数えていない仕事の信号は，離しても変わらない．そこで 2 段離して比べる（`TIME_SPAN` = 2）．
+- 揺れの違う機械では，環境変数 `KULMS_FUZZ_NOISE` で `NOISE` を変えられる．
 
 ## ファジングで避けている既知の問題
 
@@ -512,9 +560,10 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
 | ID | 対象 | 避けているもの |
 |---|---|---|
 | S1 | `background-message` | content script への応答にシークレットがあるかを見ない（LMS の設定パネルが受け取るため） |
-| S2 | `site-contact`，`background-message` | サイト情報のページを 512 バイトで切る |
+| S2 | `site-contact`，`background-message` | その正規表現を V8 の線形エンジンで動かし，進んだ長さで数える（入力は切らない） |
 | S7 | `background-message` | リスナーが例外を投げる形のメッセージを送らない |
-| S8 | `syllabus-detail`，`syllabus-search`，`background-message` | KULASIS のページ（シラバスと検索結果）を 16,384 バイトで切る |
+| S8 | `syllabus-detail`，`syllabus-search`，`background-message` | その正規表現を V8 の線形エンジンで動かす（同上） |
+| S9 | `assignments`，`background-message` | その正規表現を V8 の線形エンジンで動かす（同上） |
 | B10 | `i18n` | `$` を含む置換値があるときは，結果を確かめない |
 | B15 | `i18n` | どのオブジェクトにもあるキー（`constructor`，`toString` など）を引かない |
 | B16 | `grading-status` | `%` の並びが壊れたリンクを読ませない |
@@ -523,6 +572,15 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
 | B19 | `assignments` | 科目の一覧と科目ごとの取得が捕まえたプログラムの誤りを数えない |
 | B20 | `site-contact`，`background-message` | `fetchSakaiSiteContact()` が捕まえたプログラムの誤りを数えない |
 | B21 | `i18n` | 値を 1 つだけ，空文字列で渡したときは，値が無いものとして確かめる |
+
+S2，S8，S9 の正規表現は，以前は入力を切って避けていた（サイト情報のページを 512 バイト，KULASIS のページを 16,384 バイトで）．今は入力を切らず，正規表現だけを線形のエンジンに移す．線形のエンジンは同じ一致を入力長に比例する時間で見つけるので，ほかの部分の遅さは，そのまま数えて判定できる．
+
+このほか，次の境界は意図して残している（[fuzz/README.md](../fuzz/README.md) の「入力の作り方」）．
+
+- 拡張の内部の関数を直接呼ぶ対象では，呼び出し元が渡す型を守る（`t()` の置換値は文字列）．
+- runtime メッセージと chrome.storage は JSON を，ページの世界からの値はストラクチャードクローンを通す（Chrome と同じ）．
+- 入力そのものと，その下の段で作る値は 4,096 単位まで．大きな値は段を上がって作り，最上段は runtime メッセージ 1 通が運べる量まで．
+- 段で大きくなるのは，入力が繰り返す片（文字列，バイト列，配列の穴）だけで，一覧の件数（サイドバーの科目や提出の数）は段で増えない．件数の多い一覧の仕事量は，[tests/large.test.mjs](../tests/large.test.mjs) が次数で確かめる（課題 5,000 件，メモ 2 万件など）．
 
 修正ブランチでのファジング（2026-10-07，直した問題を避けずに探した）:
 
@@ -534,7 +592,15 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
 | fix/message-shape | `background-message` | S7 | 60 秒で失敗なし |
 | fix/site-contact-regex | `site-contact` | S2 | 60 秒で失敗なし |
 | fix/syllabus-parse | `syllabus-detail` | S8 | 60 秒で失敗なし |
+| fix/sakai-answer-shape | `assignments` | B19 | 120 秒で失敗なし（その前に，jsdom の URL の解析の遅さで時間切れになる入力が出たので，サイドバーの href の長さに上限を設けた） |
+| fix/site-contact-pages | `site-contact`，`background-message` | B20 | 各 120 秒で失敗なし |
 | 13 本すべてを当てたもの | 7 対象すべて | S2，S7，S8，B10，B15〜B18，B21 | `assignments` が，科目の一覧でも B19 と同じ誤りが起きるのを見つけた（B19 に加えた）．避ける範囲を広げた後は，`assignments` を 120 秒，ほかの 6 対象を各 60 秒回して失敗なし．入力の件数などの上限を外した後も，7 対象を各 60 秒回して失敗なし |
+
+段で判定するようにした後のファジング（2026-10-07）:
+
+- 段の最初の規則（一度でも n log n より速く伸びた段の上で止める）では，5 つの対象が止まった．どれも，ごく小さな仕事の増えの後の段差（繰り返しが行を閉じたとき，数の偶奇で道筋が変わったとき）だった．伸びを読むのは，コードが段の足した分をたどったときだけにし，速い伸びが 2 段続いたときに止めるようにした後は，7 対象を各 60 秒回して失敗はなかった（時間の確かめも入れて，電源につないだ状態で）．
+- 直した問題を避けずに探すと，main では S8 が検索結果で 1 秒以内に，シラバスで 3 秒で見つかり，S2 が 4 秒で見つかった．どれも，仕事の増えが段ごとに 3.6〜3.9 倍になり，2 段続けて 2^1.5 倍を超えた．直したブランチ（fix/syllabus-parse の続く修正，fix/backtracking-regexes，fix/site-contact-regex）では，それぞれの対象を各 60 秒回して失敗はなかった．
+- S9 は，main でも 60 秒では見つからなかった．曜日と時限，フォルダの深さ，TOTP のシークレットを読む部分には，どのファズ対象も届かないためで，そこは [tests/runs.test.mjs](../tests/runs.test.mjs) が次数で確かめる．
 
 ## 進める順序
 

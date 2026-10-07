@@ -17,7 +17,10 @@
 // in the order a target reads them, and lays out the bytes the provider reads
 // them from; encode() runs a plan with longer and longer lengths until the
 // plan fills the length exactly.
-import { DECODINGS, MAX_DEPTH, SPECIAL, WORDS } from "./lib.mjs";
+import { BOTTOM, DECODINGS, MAX_UNITS, SPECIAL, TOP_BITS, WORDS } from "./lib.mjs";
+
+// The number of binary digits of n (0 for 0), for n below 2^32.
+const digits = (n) => 32 - Math.clz32(n);
 
 // How many bytes the provider reads for an integer between min and min + range.
 function width(range) {
@@ -34,6 +37,35 @@ export class Writer {
     this.left = length; // the provider's remainingBytes, while it is not below 0
     this.ended = false; // the rest of the input has been taken
     this.fits = true; // the values took no more than `length` bytes
+    this.room = BOTTOM; // what the input may still make on its bottom rung (fuzz/lib.mjs)
+    this.top = 1; // how many times more its top rung repeats a piece
+    this.roomTop = MAX_UNITS; // what the input may still make on its top rung
+  }
+
+  // A string or bytes of `n` units made, `scaled` when the rungs repeat it
+  // more: no more than the bottom rung of an input may make, which lib.mjs
+  // would cut short.
+  made(n, scaled = false) {
+    if (n > this.room) throw new RangeError(`a plan makes more than the ${BOTTOM} units of an input's bottom rung`);
+    this.room -= n;
+    this.roomTop -= scaled ? n * this.top : n;
+  }
+
+  // many() of lib.mjs gives v, as many as `max` at most.
+  many(max, v) {
+    if (max < 1) { // the provider reads nothing and gives 0
+      if (v !== 0) this.fits = false; // as with a count bounded by what is left: the length is too short yet
+      return;
+    }
+    const bits = digits(max);
+    if (v === 0) return this.int(0, 2 ** bits - 1, 0);
+    if (v > max) {
+      this.fits = false;
+      v = max;
+    }
+    const k = digits(v) - 1;
+    this.int(0, 2 ** bits - 1, 2 ** (bits - k - 1));
+    this.int(0, 2 ** k - 1, v - 2 ** k);
   }
 
   // The provider's remainingBytes at this point.
@@ -106,11 +138,15 @@ export class Writer {
   }
 }
 
-// The input on which the provider reads what plan(writer) hands the writer.
-export function encode(plan) {
+// The input on which the provider reads what plan(writer) hands the writer,
+// with a top rung `doublings` doublings up (fuzz/lib.mjs), which provider()
+// reads first.
+export function encode(plan, { doublings = 0 } = {}) {
   let length = 0;
   for (let round = 0; round < 64; round++) {
     const w = new Writer(length);
+    w.top = 2 ** doublings;
+    w.int(0, 2 ** TOP_BITS - 1, doublings === 0 ? 0 : 2 ** (TOP_BITS - doublings - 1));
     plan(w);
     if (w.fits && w.used() === length) return w.input();
     length = Math.max(w.used(), length + 1);
@@ -139,11 +175,13 @@ export function string(w, s, { how, word = false, rest = false } = {}) {
   if (word) {
     w.int(0, 5, 0);
     w.pick(WORDS, s);
+    w.made(s.length);
     return;
   }
   const name = how || ["latin1", "utf8", "units"].find((n) => ENCODERS[n](s) !== null);
   const data = ENCODERS[name](s);
   if (data === null) throw new RangeError(`${name} cannot hold ${JSON.stringify(s)}`);
+  w.made(s.length);
   w.int(0, 5, rest ? 2 : 3);
   w.pick(DECODINGS, DECODINGS[NAMES.indexOf(name)]);
   if (rest) {
@@ -154,9 +192,37 @@ export function string(w, s, { how, word = false, rest = false } = {}) {
   }
 }
 
+// string() gives `piece` repeated `times` times on the bottom rung, and the
+// rungs' times as many above it: the bytes that the decoding `how` reads it
+// from (by default the first of latin1, utf8 and units that holds it).
+export function repeated(w, piece, times, { how } = {}) {
+  const name = how || ["latin1", "utf8", "units"].find((n) => ENCODERS[n](piece) !== null);
+  const data = ENCODERS[name](piece);
+  if (data === null || data.length === 0) throw new RangeError(`${name} cannot hold ${JSON.stringify(piece)} as a piece`);
+  w.int(0, 5, 1);
+  w.bool(false); // not a word
+  w.pick(DECODINGS, DECODINGS[NAMES.indexOf(name)]);
+  w.many(w.remaining, data.length);
+  w.bytes(data);
+  w.many(Math.min(Math.floor(w.room / piece.length), Math.floor(w.roomTop / (piece.length * w.top))), times);
+  w.made(piece.length * times, true);
+}
+
+// bytes() gives `data` repeated `times` times on the bottom rung, and the
+// rungs' times as many above it.
+export function repeatedBytes(w, data, times) {
+  if (data.length === 0) throw new RangeError("no bytes to repeat");
+  w.int(0, 3, 1);
+  w.many(w.remaining, data.length);
+  w.bytes([...data]);
+  w.many(Math.min(Math.floor(w.room / data.length), Math.floor(w.roomTop / (data.length * w.top))), times);
+  w.made(data.length * times, true);
+}
+
 // bytes() gives data, taken as many as they are or, with `rest`, as the rest
 // of the input.
 export function bytes(w, data, { rest = false } = {}) {
+  w.made(data.length);
   if (rest) {
     w.int(0, 3, 0);
     w.rest([...data]);
@@ -182,9 +248,9 @@ export function number(w, x) {
 
 // value() gives v: undefined, null, a boolean, a number, a string, a BigInt,
 // or an array or plain object of such values, none of its arrays with holes.
-export function value(w, v, depth = 0) {
+export function value(w, v) {
   if (w.remaining === 0 && v === undefined) return;
-  const max = depth < MAX_DEPTH ? 15 : 10;
+  const max = 15;
   if (v === undefined) return w.int(0, max, 0);
   if (v === null) return w.int(0, max, 1);
   switch (typeof v) {
@@ -200,7 +266,7 @@ export function value(w, v, depth = 0) {
     w.int(0, w.remaining, v.length);
     for (const x of v) {
       if (w.remaining === 0) w.fits = false; // the provider stops at the end of the input
-      value(w, x, depth + 1);
+      value(w, x);
     }
     w.bool(false); // no holes
     return;
@@ -212,7 +278,7 @@ export function value(w, v, depth = 0) {
     for (const [k, x] of entries) {
       if (w.remaining === 0) w.fits = false;
       string(w, k);
-      value(w, x, depth + 1);
+      value(w, x);
     }
     return;
   }

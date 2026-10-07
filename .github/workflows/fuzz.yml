@@ -58,14 +58,20 @@ jobs:
   fuzz:
     name: fuzzing, ${{ github.event.inputs.minutes || '20' }} minutes a target
     runs-on: ubuntu-26.04
-    # Seven targets one after another, each with up to five minutes past its
-    # time to start, replay its corpus and merge it: thirty minutes a target is
-    # room for that at the longest choice, which is 330 minutes in all.
+    # Seven targets one after another, each allowed an equal share of the time
+    # left (ci/fuzz.sh --until). The job may run as long as GitHub lets a job
+    # run, six hours, less half an hour in which the steps below keep what it
+    # found, as they do whatever became of the job; ci/fuzz.sh ends five
+    # minutes before that, so that it, not the limit, stops what does not end.
+    # At the longest choice the fuzzing itself takes 210 minutes of it.
     timeout-minutes: 330
     env:
       MINUTES: ${{ github.event.inputs.minutes || '20' }}
 
     steps:
+      - name: Note when the fuzzing must end
+        run: echo "FUZZ_UNTIL=$(( $(date +%s) + 325 * 60 ))" >> "$GITHUB_ENV"
+
       - name: Check out
         run: |
           # The commit, and the submodule at the commit it names.
@@ -107,10 +113,10 @@ jobs:
             || echo "Run $last kept no inputs that failed."
 
       - name: Check that the fuzzer is looking
-        run: bash ci/fuzz.sh --canary 60 fuzz-run/canary-corpora fuzz-run/canary-crashes
+        run: bash ci/fuzz.sh --until "$FUZZ_UNTIL" --canary 60 fuzz-run/canary-corpora fuzz-run/canary-crashes
 
       - name: Fuzz each target
-        run: bash ci/fuzz.sh --merge "$((MINUTES * 60))" fuzz-run/corpora fuzz-run/crashes fuzz-run/earlier
+        run: bash ci/fuzz.sh --until "$FUZZ_UNTIL" --merge "$((MINUTES * 60))" fuzz-run/corpora fuzz-run/crashes fuzz-run/earlier
 
       # What a run found is kept whatever became of the job, its own time limit
       # included: a job that the limit stops counts as cancelled, and that is

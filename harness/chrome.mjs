@@ -18,10 +18,20 @@
 // kept in browser.errors rather than lost, and so is a promise of any
 // context that is rejected with nothing to handle it.
 import { record } from "./log.mjs";
+import { finished, started, step } from "./work.mjs";
 import { manifest, read } from "./paths.mjs";
 
 const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
-const later = (f) => setTimeout(f, 0);
+const later = (f) => {
+  started();
+  setTimeout(() => {
+    try {
+      f();
+    } finally {
+      finished();
+    }
+  }, 0);
+};
 
 class ChromeEvent {
   constructor() { this.listeners = []; }
@@ -155,6 +165,13 @@ export class Browser {
 
   unregister(context) {
     this.contexts = this.contexts.filter((c) => c !== context);
+  }
+
+  // Forgets what the logs hold: the messages, the tabs opened, the scripts
+  // run, and what each context wrote to its console (harness/log.mjs).
+  forget() {
+    for (const log of [this.traffic, this.created, this.injected]) log.length = 0;
+    for (const c of this.contexts) if (c.logs) c.logs.length = 0;
   }
 
   close() {
@@ -297,7 +314,13 @@ export class Browser {
       },
     };
     const i18n = {
-      getMessage: (key, subs) => formatMessage(this.messages[key], subs),
+      // Finding the message hashes its key; formatting it goes through it and
+      // what is put in it.
+      getMessage: (key, subs) => {
+        const text = formatMessage(this.messages[key], subs);
+        step(1 + String(key).length + (this.messages[key] ? String(this.messages[key].message).length : 0) + text.length);
+        return text;
+      },
       getUILanguage: () => this.uiLanguage,
     };
     const storage = {

@@ -24,6 +24,7 @@ export const OPEN = new Set([
   "S6", // the popup saves secrets no code can be made from
   "S7", // the message listeners throw on messages that are not objects
   "S8", // the syllabus parser's regular expressions are quadratic
+  "S9", // the regular expressions of course names, TOTP secrets and folders are quadratic
   "B10", // t() expands replacement patterns in what it puts in a placeholder
   "B15", // t() looks a key up through the prototype: t("hasOwnProperty") is undefined
   "B16", // grading-ta.js throws URIError on a link with a malformed %-sequence

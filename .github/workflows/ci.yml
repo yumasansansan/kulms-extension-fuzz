@@ -31,8 +31,12 @@
 # with a bug planted in it, must be found within a minute. Silence from the
 # other targets could not be told apart from a fuzzer that never saw their
 # code. Then it fuzzes every target for a minute (ci/fuzz.sh); an input that
-# fails is kept as an artifact. The longer fuzzing, which carries its corpus
-# over from one run to the next, is fuzz.yml's, once a day.
+# fails is kept as an artifact. It has no time limit of its own: ci/fuzz.sh
+# ends by the time the job notes as it starts (--until), six hours, GitHub's
+# limit for a job, less half an hour for keeping the inputs that failed, and
+# a clock stops only what does not end where no work is counted. The longer
+# fuzzing, which carries its corpus over from one run to the next, is
+# fuzz.yml's, once a day.
 #
 # Each job checks the commit out with plain git, the submodule at its commit,
 # and ci/setup.sh installs the newest Node and the pnpm of package.json. The
@@ -145,9 +149,11 @@ jobs:
   fuzz:
     name: fuzzing, a minute a target
     runs-on: ubuntu-26.04
-    timeout-minutes: 45
 
     steps:
+      - name: Note when the fuzzing must end
+        run: echo "FUZZ_UNTIL=$(( $(date +%s) + 330 * 60 ))" >> "$GITHUB_ENV"
+
       - name: Check out
         run: |
           git config --global core.autocrlf false
@@ -167,10 +173,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check that the fuzzer is looking
-        run: bash ci/fuzz.sh --canary 60 fuzz-run/canary-corpora fuzz-run/canary-crashes
+        run: bash ci/fuzz.sh --until "$FUZZ_UNTIL" --canary 60 fuzz-run/canary-corpora fuzz-run/canary-crashes
 
       - name: Fuzz for a minute each
-        run: bash ci/fuzz.sh 60 fuzz-run/corpora fuzz-run/crashes
+        run: bash ci/fuzz.sh --until "$FUZZ_UNTIL" 60 fuzz-run/corpora fuzz-run/crashes
 
       - name: Keep the inputs that failed
         if: ${{ failure() }}

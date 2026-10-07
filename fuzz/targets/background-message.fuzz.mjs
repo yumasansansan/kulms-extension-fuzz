@@ -13,44 +13,42 @@
 // value that JSON cannot hold (a BigInt) cannot be sent: Chrome throws in the
 // sender, the background sees nothing, and the input is left. The network
 // answers the background's fetches as the input says (answer() of lib.mjs):
-// the body is made first, then the answers to the first eight fetches, in
-// order (a message makes five at most: fetchTextbooks searches twice, reads
-// the site's contact in two and the syllabus in one), and any later fetch
-// gets the body as it is.
+// the body is made first, then the answers to the fetches, in order: as many
+// as a message makes at most, which is five (fetchTextbooks searches by the
+// lecture code and by the name, reads the site's contact in two fetches,
+// pages.json and the Site Info page, and the syllabus in one). A message that
+// makes more fails the input, as the count above would then be out of date.
 // The background keeps its state between inputs, the TOTP store in IndexedDB
 // among it, as a service worker does between messages.
 //
 // It fails when a listener throws, when a promise of the background is
-// rejected with nothing to handle it, when the message gets no answer at all
-// within 5 seconds (its sender would wait for ever), when the answer to a
-// content script holds a TOTP secret (S1), or when a detector of the harness
-// sees something. Both listeners catch what their work throws and answer
-// with an error.
+// rejected with nothing to handle it, when the message gets no answer though
+// the background has nothing left to do (idle() of harness/work.mjs: no
+// fetch, IndexedDB request or Web Crypto operation left, its sender would
+// wait for ever), when the answer to a content script holds a TOTP secret
+// (S1), or when a detector of the harness sees something. Both listeners
+// catch what their work throws and answer with an error.
+//
+// It also fails when the extension's work grows faster than n log n from rung
+// to rung of the input, or passes what linear code does with an input of its
+// size (ladder() and judge() of fuzz/lib.mjs, harness/work.mjs): no clock
+// decides. A regular expression's work is the steps of a backtracking engine
+// (harness/backtrack.mjs), but for those of a finding that stands, which run
+// on V8's linear engine (fuzz/lib.mjs).
 //
 // The extension catches its own errors in many places and only warns; the
 // target fails too on a warning or an error that tells of a slip of the code
 // (warnings() of fuzz/lib.mjs), not on an HTTP error, a network that fails
 // or an answer that is not JSON, which the catching is there for.
-import { Browser, Net, openBackground, openPopup, openTab, settle, watch } from "../../harness/index.mjs";
-import { FuzzedDataProvider, answer, brief, bytes, fail, json, open, string, value, warnings } from "../lib.mjs";
+import { Browser, Net, idle, openBackground, openPopup, openTab, watch } from "../../harness/index.mjs";
+import { answer, brief, bytes, calibrate, fail, json, judge, ladder, open, provider, string, value, warnings } from "../lib.mjs";
 
 const LMS = "https://lms.gakusei.kyoto-u.ac.jp";
 let replies = [];
 let body = new Uint8Array();
-
-// Known: S2 and S8 (docs/findings.md). While they are open, an answer to the
-// Site Info page is cut at 512 bytes, and one from KULASIS (the syllabus and
-// the search's results) at 16,384, as in site-contact and syllabus-detail,
-// so that their slow regular expressions do not stop the fuzzing here.
-function cut(url, a) {
-  const limit = open("S2") && url.startsWith(`${LMS}/portal/tool/`) ? 512
-    : open("S8") && url.startsWith("https://www.k.kyoto-u.ac.jp/") ? 16384 : Infinity;
-  if (!a.body || a.body.length <= limit) return a;
-  const b = typeof a.body === "string" ? new TextEncoder().encode(a.body) : a.body;
-  return { ...a, body: b.subarray(0, limit) };
-}
-
-const net = new Net().on(() => true, (request) => cut(request.url, replies.shift() || { headers: { "content-type": "text/html" }, body }));
+// The most fetches a message makes (the head of this file).
+const FETCHES = 5;
+const net = new Net().on(() => true, () => replies.shift() || { headers: { "content-type": "text/html" }, body });
 const browser = new Browser();
 const bg = openBackground(browser, { net });
 const senders = {
@@ -58,7 +56,7 @@ const senders = {
   login: openTab(browser, { url: "https://auth.iimc.kyoto-u.ac.jp/user/otplogin.cgi", scripts: [] }),
   popup: openPopup(browser),
 };
-await settle(100);
+await idle();
 
 const TOTP = ["kulms-totp-save", "kulms-totp-load", "kulms-totp-has", "kulms-totp-delete", "kulms-totp-code"];
 const field = (fdp) => (fdp.consumeBoolean() ? string(fdp) : value(fdp));
@@ -96,11 +94,13 @@ export function read(fdp) {
   const from = fdp.pickValue(Object.keys(senders));
   const m = message(fdp);
   const b = bytes(fdp);
-  return { from, message: m, body: b, replies: Array.from({ length: 8 }, () => answer(fdp, b, "text/html")) };
+  return { from, message: m, body: b, replies: Array.from({ length: FETCHES }, () => answer(fdp, b, "text/html")) };
 }
 
-export async function fuzz(data) {
-  const input = read(new FuzzedDataProvider(data));
+async function run(data) {
+  browser.forget();
+  net.forget();
+  const input = read(provider(data));
   const from = senders[input.from];
   const m = input.message;
   ({ body, replies } = input);
@@ -111,11 +111,12 @@ export async function fuzz(data) {
   if (open("S7") && knownToThrowS7(sent.value)) return;
   const w = watch(bg);
   const log = warnings(bg);
-  const result = await Promise.race([
-    browser.deliver(from, [bg], m).then((response) => ({ response }), (error) => ({ error })),
-    settle(5000).then(() => ({ timedOut: true })),
-  ]);
-  if (result.timedOut) fail(`message ${brief(sent.value)} from ${input.from}: no answer in 5 seconds`);
+  let settled = false;
+  const delivery = browser.deliver(from, [bg], m).then((response) => ({ response }), (error) => ({ error }));
+  delivery.then(() => { settled = true; });
+  const result = await Promise.race([delivery, idle().then(() => (settled ? delivery : { unanswered: true }))]);
+  if (result.unanswered) fail(`message ${brief(sent.value)} from ${input.from}: no answer, and the background has nothing left to do`);
+  if (net.requests.length > FETCHES) fail(`message ${brief(sent.value)} made ${net.requests.length} fetches, more than the ${FETCHES} the target answers: count them anew`);
   for (const line of log.slips()) {
     // Known: B20. While it is open, a slip that fetchSakaiSiteContact()
     // catches is not counted (fuzz/targets/site-contact.fuzz.mjs).
@@ -129,4 +130,12 @@ export async function fuzz(data) {
   }
   const problems = w.check();
   if (problems.length) fail(`message ${brief(sent.value)} from ${input.from}:\n${problems.join("\n")}`);
+  judge();
 }
+
+// The target's work for an input, on each of its rungs (fuzz/lib.mjs).
+export async function fuzz(data) {
+  await ladder(data, run);
+}
+
+await calibrate(fuzz);

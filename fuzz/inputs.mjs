@@ -13,7 +13,8 @@
 // (fuzz/regressions/<target>/<ID>-<name>) of the fuzz targets from the plans
 // below.
 // A plan hands a Writer of fuzz/encode.mjs the values the target is to read,
-// in the order the target reads them through fuzz/lib.mjs. When the target or
+// in the order the target reads them through fuzz/lib.mjs, and may climb
+// rungs (`doublings` up: the rungs of fuzz/lib.mjs). When the target or
 // lib.mjs comes to read its input another way, the files on disk would read
 // as something else, so they are written anew from the plans.
 //
@@ -31,7 +32,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { read } from "../harness/index.mjs";
-import { answer, bytes, encode, string, value } from "./encode.mjs";
+import { answer, bytes, encode, repeatedBytes, string, value } from "./encode.mjs";
 
 const FUZZ = path.dirname(fileURLToPath(import.meta.url));
 const utf8 = (s) => new TextEncoder().encode(s);
@@ -58,6 +59,11 @@ const CONTACT = `<table><tr><th>サイト連絡先・メール</th>
 <td>
   京大 太郎, <a href="mailto:taro@example.com">taro@example.com</a></td></tr></table>
 `;
+
+// One row of KULASIS's search results, and one book of a syllabus, as the
+// pages above write them, for the seeds that repeat them on rungs.
+const ROW = '<tr><td>線形代数学Ａ</td><td>京大 太郎</td><td>月1</td><td><a href="la_syllabus?lectureNo=12345"><img src="syllabus.gif" alt="シラバス"></a></td></tr>\n';
+const BOOK = '<span class="lesson_plan_subheading">(教科書)</span>京大 太郎『線形代数入門』(京都大学学術出版会) ISBN:978-4-00-000000-0 <br/>\n';
 
 // A contact row with two names and the half-width middle dot.
 const TWO_CONTACTS = "<tr><th>サイト連絡先･メール</th><td>京大 花子<br>, 京大 太郎</td></tr>";
@@ -119,6 +125,29 @@ export const INPUTS = [
     expect: { keyword: "U-LAS10 10001 LJ55", expectedName: "線形代数学Ｂ", teacher: null, page: ok("text/html; charset=utf-8", utf8(SEARCH)) },
   },
   {
+    // A syllabus of eight books, and on its rungs 2^8 times as many.
+    file: "seeds/syllabus-detail/many-books",
+    doublings: 8,
+    plan: (w) => {
+      string(w, "1");
+      w.bool(true); string(w, "2");
+      repeatedBytes(w, utf8(BOOK), 8); answer(w, { utf8: true });
+    },
+    expect: { lectureNo: "1", departmentNo: "2", page: ok("text/html; charset=utf-8", utf8(BOOK.repeat(8))) },
+  },
+  {
+    // Search results of eight rows, and on their rungs 2^8 times as many.
+    file: "seeds/syllabus-search/many-rows",
+    doublings: 8,
+    plan: (w) => {
+      string(w, "線形代数学Ａ");
+      w.bool(false);
+      w.bool(false);
+      repeatedBytes(w, utf8(ROW), 8); answer(w, { utf8: true });
+    },
+    expect: { keyword: "線形代数学Ａ", expectedName: undefined, teacher: null, page: ok("text/html; charset=utf-8", utf8(ROW.repeat(8))) },
+  },
+  {
     file: "seeds/site-contact/contact-row",
     plan: (w) => {
       string(w, "S1");
@@ -139,9 +168,23 @@ export const INPUTS = [
     expect: { siteId: "S1", pages: ok("application/json", JSON.stringify(SITE_INFO_TOOLS)), page: ok("text/html", utf8(TWO_CONTACTS)) },
   },
   {
+    // A Site Info page of eight contact rows, and on its rungs 2^8 times as
+    // many.
+    file: "seeds/site-contact/many-contacts",
+    doublings: 8,
+    plan: (w) => {
+      string(w, "S1");
+      w.bool(false); w.bool(true); w.bool(true); string(w, "p");
+      answer(w);
+      repeatedBytes(w, utf8(TWO_CONTACTS), 8); answer(w);
+    },
+    expect: { siteId: "S1", pages: ok("application/json", JSON.stringify(SITE_INFO_TOOLS)), page: ok("text/html", utf8(TWO_CONTACTS.repeat(8))) },
+  },
+  {
     // A content script of the LMS asks for a course's books: the search, the
     // site's contact and the syllabus are answered with the same page, which
-    // holds the search's results and the books.
+    // holds the search's results and the books. The target answers five
+    // fetches (FETCHES of fuzz/targets/background-message.fuzz.mjs).
     file: "seeds/background-message/textbooks",
     plan: (w) => {
       w.int(0, 2, 0);
@@ -150,13 +193,34 @@ export const INPUTS = [
       w.bool(true); string(w, "");
       w.bool(true); string(w, "S1");
       bytes(w, utf8(SEARCH + BOOKS));
-      for (let i = 0; i < 8; i++) answer(w, { utf8: true });
+      for (let i = 0; i < 5; i++) answer(w, { utf8: true });
     },
     expect: {
       from: "lms",
       message: { action: "fetchTextbooks", courseName: "線形代数学Ａ", lectureCode: "", siteId: "S1" },
       body: utf8(SEARCH + BOOKS),
-      replies: Array.from({ length: 8 }, () => ok("text/html; charset=utf-8", utf8(SEARCH + BOOKS))),
+      replies: Array.from({ length: 5 }, () => ok("text/html; charset=utf-8", utf8(SEARCH + BOOKS))),
+    },
+  },
+  {
+    // The same message, its pages a row of the search's results and a book
+    // repeated eight times, and on their rungs 2^8 times as many.
+    file: "seeds/background-message/many-books",
+    doublings: 8,
+    plan: (w) => {
+      w.int(0, 2, 0);
+      w.int(0, 3, 0);
+      w.bool(true); string(w, "線形代数学Ａ");
+      w.bool(true); string(w, "");
+      w.bool(true); string(w, "S1");
+      repeatedBytes(w, utf8(ROW + BOOK), 8);
+      for (let i = 0; i < 5; i++) answer(w, { utf8: true });
+    },
+    expect: {
+      from: "lms",
+      message: { action: "fetchTextbooks", courseName: "線形代数学Ａ", lectureCode: "", siteId: "S1" },
+      body: utf8((ROW + BOOK).repeat(8)),
+      replies: Array.from({ length: 5 }, () => ok("text/html; charset=utf-8", utf8((ROW + BOOK).repeat(8)))),
     },
   },
   {
@@ -262,10 +326,10 @@ export function onDisk() {
 // writes, or that no plan writes.
 export function problems() {
   const out = [];
-  for (const { file, plan } of INPUTS) {
+  for (const { file, plan, doublings } of INPUTS) {
     const p = path.join(FUZZ, file);
     if (!fs.existsSync(p)) out.push(`${file} is missing`);
-    else if (!encode(plan).equals(fs.readFileSync(p))) out.push(`${file} is not what its plan writes`);
+    else if (!encode(plan, { doublings }).equals(fs.readFileSync(p))) out.push(`${file} is not what its plan writes`);
   }
   const planned = new Set(INPUTS.map((i) => i.file));
   for (const file of onDisk()) if (!planned.has(file)) out.push(`${file} has no plan`);
@@ -278,10 +342,10 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     for (const p of found) console.error(p);
     process.exit(found.length ? 1 : 0);
   }
-  for (const { file, plan } of INPUTS) {
+  for (const { file, plan, doublings } of INPUTS) {
     const p = path.join(FUZZ, file);
     fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(p, encode(plan));
+    fs.writeFileSync(p, encode(plan, { doublings }));
     console.log(`wrote fuzz/${file}`);
   }
   const planned = new Set(INPUTS.map((i) => i.file));

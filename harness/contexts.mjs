@@ -24,12 +24,83 @@ import path from "node:path";
 import vm from "node:vm";
 import { pathToFileURL } from "node:url";
 import { JSDOM, VirtualConsole } from "jsdom";
-import { IDBFactory } from "fake-indexeddb";
+import { IDBDatabase, IDBFactory } from "fake-indexeddb";
 import { loadedSource } from "./source.mjs";
 import { EXT, manifest, read } from "./paths.mjs";
 import { globToRegExp, matchesPattern } from "./chrome.mjs";
 import { record } from "./log.mjs";
 import { Net, response } from "./net.mjs";
+import { backtrackingRegExp, costedClass, costedFunction, installCosts } from "./install.mjs";
+import { compare, finished, forIn, has, instanceOf, key, spread, started, step, tracked, trackedCrypto, uncounted } from "./work.mjs";
+
+// What the extension's code calls to count its work (harness/work.mjs,
+// harness/install.mjs), in each context.
+const COUNTING = {
+  __kulmsWork: step,
+  __kulmsBacktracking: backtrackingRegExp,
+  __kulmsCompare: compare,
+  __kulmsKey: key,
+  __kulmsSpread: spread,
+  __kulmsInstanceOf: instanceOf,
+  __kulmsIn: has,
+  __kulmsForIn: forIn,
+};
+
+// The units of a value as IndexedDB keeps it, which its structured clone
+// goes through: strings, elements, properties and bytes, at any depth.
+function cloneUnits(root) {
+  let n = 0;
+  const seen = new Set();
+  const stack = [root];
+  while (stack.length) {
+    const v = stack.pop();
+    n++;
+    if (typeof v === "string") n += v.length;
+    if (v === null || typeof v !== "object" || seen.has(v)) continue;
+    seen.add(v);
+    if (ArrayBuffer.isView(v) || v instanceof ArrayBuffer) {
+      n += v.byteLength;
+      continue;
+    }
+    for (const k of Reflect.ownKeys(v)) {
+      n += typeof k === "string" ? k.length : 1;
+      const d = Object.getOwnPropertyDescriptor(v, k);
+      if (d && "value" in d) stack.push(d.value);
+    }
+  }
+  return n;
+}
+
+// IndexedDB's requests to open or delete a database, and its transactions,
+// are followed until they end (idle() of harness/work.mjs).
+function follow(target, events) {
+  started();
+  let done = false;
+  const end = () => {
+    if (!done) {
+      done = true;
+      finished();
+    }
+  };
+  target.addEventListener("success", () => {
+    const result = uncounted(() => target.result);
+    if (result !== undefined && (typeof result !== "object" || result === null || !("objectStoreNames" in result))) step(1 + uncounted(() => cloneUnits(result)));
+  });
+  for (const e of events) target.addEventListener(e, end);
+  return target;
+}
+for (const name of ["open", "deleteDatabase"]) {
+  const original = IDBFactory.prototype[name];
+  IDBFactory.prototype[name] = function (...args) {
+    return follow(Reflect.apply(original, this, args), ["success", "error"]);
+  };
+}
+{
+  const transaction = IDBDatabase.prototype.transaction;
+  IDBDatabase.prototype.transaction = function (...args) {
+    return follow(Reflect.apply(transaction, this, args), ["complete", "abort"]);
+  };
+}
 
 const EMPTY_PAGE = "<!doctype html><html><head></head><body></body></html>";
 const TYPES = { ".json": "application/json", ".js": "text/javascript", ".css": "text/css", ".html": "text/html", ".png": "image/png" };
@@ -44,7 +115,7 @@ function quietConsole(context) {
 function run(context, rel) {
   const { code, file } = loadedSource(rel);
   if (context.kind === "background") vm.runInContext(code, context.global, { filename: file });
-  else context.global.eval(code + "\n//# sourceURL=" + pathToFileURL(file).href);
+  else context.evaluate(code + "\n//# sourceURL=" + pathToFileURL(file).href);
 }
 
 // The scripts manifest.json injects into a frame at `url`, in its order.
@@ -62,7 +133,7 @@ function webAccessible(rel, pageUrl) {
 function fetchFor(browser, context) {
   const base = `chrome-extension://${browser.id}/`;
   const viaNet = context.net.fetchFor(context);
-  return async (input, init) => {
+  const fetch = async (input, init) => {
     const raw = typeof input === "object" && input && "url" in input ? input.url : String(input);
     if (!raw.startsWith(base)) return viaNet(input, init);
     const rel = decodeURIComponent(new URL(raw).pathname.slice(1));
@@ -71,6 +142,7 @@ function fetchFor(browser, context) {
     if (!allowed || !file.startsWith(EXT + path.sep) || !fs.existsSync(file)) throw new context.realm.TypeError("Failed to fetch");
     return response(context.realm, raw, { body: fs.readFileSync(file), headers: { "content-type": TYPES[path.extname(rel)] || "application/octet-stream" } });
   };
+  return (input, init) => tracked(fetch(input, init));
 }
 
 export function openBackground(browser, { net = new Net() } = {}) {
@@ -78,8 +150,9 @@ export function openBackground(browser, { net = new Net() } = {}) {
   const g = vm.createContext({});
   context.global = g;
   // A vm context's global, seen from outside, holds only what was put on it;
-  // its own built-ins (the realm values arrive in) are reached from inside.
-  context.realm = vm.runInContext("({ JSON, Object, Array, Function, String, Uint8Array, TypeError, Error, Promise })", g);
+  // its own built-ins (the realm values arrive in) are on its global object,
+  // reached from inside.
+  context.realm = vm.runInContext("globalThis", g);
   context.indexedDB = browser.indexedDB || (browser.indexedDB = new IDBFactory());
   Object.assign(g, {
     self: g,
@@ -87,12 +160,21 @@ export function openBackground(browser, { net = new Net() } = {}) {
     fetch: fetchFor(browser, context),
     indexedDB: context.indexedDB,
     navigator: { storage: { persist: async () => true, persisted: async () => true } },
-    crypto: globalThis.crypto,
-    TextEncoder, TextDecoder, URL, URLSearchParams, btoa, atob,
+    crypto: trackedCrypto,
+    // Node's own, which the harness and jsdom use as well: subclasses that
+    // count, by the rules of their web interfaces.
+    TextEncoder: costedClass(TextEncoder, "TextEncoder"),
+    TextDecoder: costedClass(TextDecoder, "TextDecoder"),
+    URL: costedClass(URL, "URL"),
+    URLSearchParams: costedClass(URLSearchParams, "URLSearchParams"),
+    btoa: costedFunction(btoa),
+    atob: costedFunction(atob),
     setTimeout, clearTimeout, setInterval, clearInterval, queueMicrotask,
     console: quietConsole(context),
     Fuzzer: globalThis.Fuzzer,
+    ...COUNTING,
   });
+  installCosts(context.realm);
   context.close = () => browser.unregister(context);
   run(context, "background.js");
   return context;
@@ -112,20 +194,46 @@ function openWindow(browser, context, html, url) {
   w.fetch = fetchFor(browser, context);
   w.matchMedia = (query) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
   // jsdom has no SubtleCrypto, which the TOTP code uses; Node's stands in.
-  if (!w.crypto || !w.crypto.subtle) Object.defineProperty(w, "crypto", { value: globalThis.crypto, configurable: true });
+  Object.defineProperty(w, "crypto", { value: trackedCrypto, configurable: true });
   w.Fuzzer = globalThis.Fuzzer;
+  Object.assign(w, COUNTING);
+  // The harness runs the extension's scripts with the window's own eval, not
+  // the counted one: loading a script is not the extension's work.
+  context.evaluate = w.eval.bind(w);
+  installCosts(w, { web: w });
   w.__kulmsExpose = (file, internals) => { context.internals[file] = internals; };
   w.console = quietConsole(context);
   // The page's timers do not keep Node running: a test or a fuzz target ends
   // when its own work does, though the extension leaves intervals behind (the
   // assignment panel fetches anew every two minutes). They run as Node's
-  // timers, unreferenced, which a script uses as it would a browser's.
+  // timers, unreferenced, which a script uses as it would a browser's, and
+  // stop when the page closes, as a closed tab's do.
   const callable = (f) => (typeof f === "function" ? f : () => w.eval(String(f)));
-  w.setTimeout = (f, ms, ...args) => setTimeout(callable(f), ms, ...args).unref();
-  w.setInterval = (f, ms, ...args) => setInterval(callable(f), ms, ...args).unref();
-  w.clearTimeout = (t) => clearTimeout(t);
-  w.clearInterval = (t) => clearInterval(t);
+  const timers = new Set();
+  w.setTimeout = (f, ms, ...args) => {
+    const t = setTimeout((...a) => {
+      timers.delete(t);
+      callable(f)(...a);
+    }, ms, ...args).unref();
+    timers.add(t);
+    return t;
+  };
+  w.setInterval = (f, ms, ...args) => {
+    const t = setInterval(callable(f), ms, ...args).unref();
+    timers.add(t);
+    return t;
+  };
+  w.clearTimeout = (t) => {
+    timers.delete(t);
+    clearTimeout(t);
+  };
+  w.clearInterval = (t) => {
+    timers.delete(t);
+    clearInterval(t);
+  };
   context.close = () => {
+    for (const t of timers) clearTimeout(t);
+    timers.clear();
     browser.unregister(context);
     w.close();
   };

@@ -36,7 +36,7 @@ import { pathToFileURL } from "node:url";
 import { replay } from "../fuzz/replay.mjs";
 import { OPEN } from "../fuzz/open-findings.mjs";
 import { INPUTS, problems } from "../fuzz/inputs.mjs";
-import { FuzzedDataProvider } from "../fuzz/lib.mjs";
+import { reading } from "../fuzz/lib.mjs";
 import { EXT, ROOT } from "../harness/index.mjs";
 
 const FUZZ = path.join(ROOT, "fuzz");
@@ -91,7 +91,7 @@ for (const { file, expect } of INPUTS.filter((i) => i.expect)) {
   test(`fuzz/${file} reads as its plan says`, async () => {
     const target = file.split("/")[1];
     const { read } = await import(pathToFileURL(path.join(FUZZ, "targets", `${target}.fuzz.mjs`)).href);
-    assert.deepEqual(read(new FuzzedDataProvider(fs.readFileSync(path.join(FUZZ, file)))), expect);
+    assert.deepEqual(read(reading(fs.readFileSync(path.join(FUZZ, file)))), expect);
   });
 }
 

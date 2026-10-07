@@ -21,15 +21,23 @@
 // that is not one (a string name, status and time, a kind it knows), or when
 // a detector of the harness sees something.
 //
+// It also fails when the extension's work grows faster than n log n from rung
+// to rung of the input, or passes what linear code does with an input of its
+// size (ladder() and judge() of fuzz/lib.mjs, harness/work.mjs): no clock
+// decides. A regular expression's work is the steps of a backtracking engine
+// (harness/backtrack.mjs), but for those of a finding that stands, which run
+// on V8's linear engine (fuzz/lib.mjs).
+//
 // The extension catches its own errors in many places and only warns; the
 // target fails too on a warning or an error that tells of a slip of the code
 // (warnings() of fuzz/lib.mjs), not on an HTTP error, a network that fails
 // or an answer that is not JSON, which the catching is there for.
-import { Browser, openTab, settle, watch } from "../../harness/index.mjs";
-import { FuzzedDataProvider, brief, clone, fail, jsonText, open, string, value, warnings } from "../lib.mjs";
+import { Browser, idle, openTab, watch } from "../../harness/index.mjs";
+import { brief, calibrate, clone, fail, jsonText, judge, ladder, open, provider, string, value, warnings } from "../lib.mjs";
 
-const tab = openTab(new Browser(), { url: "https://lms.gakusei.kyoto-u.ac.jp/portal/site/S/tool/T", scripts: ["src/settings.js", "src/grading-ta.js"] });
-await settle(100);
+const browser = new Browser();
+const tab = openTab(browser, { url: "https://lms.gakusei.kyoto-u.ac.jp/portal/site/S/tool/T", scripts: ["src/settings.js", "src/grading-ta.js"] });
+await idle();
 const g = tab.internals["src/grading-ta.js"];
 const w = tab.window;
 const KINDS = new Set(["pendingGrade", "inProgress", "notSubmitted", "graded", "returned", "unknown"]);
@@ -72,15 +80,29 @@ function submissions(fdp, status) {
 // Known: B18 (docs/findings.md). Whether v holds, at any depth, an object with
 // a toString or valueOf of its own, which String() cannot convert when it is
 // not a function.
-function hasOwnConversion(v, seen = new Set()) {
-  if (!v || typeof v !== "object" || seen.has(v)) return false;
-  seen.add(v);
-  if (Object.hasOwn(v, "toString") || Object.hasOwn(v, "valueOf")) return true;
-  return Object.values(v).some((x) => hasOwnConversion(x, seen));
+// (A stack of its own rather than recursion: a value can nest as deep as the
+// input says.)
+function hasOwnConversion(root) {
+  const seen = new Set();
+  const stack = [root];
+  while (stack.length) {
+    const v = stack.pop();
+    if (!v || typeof v !== "object" || seen.has(v)) continue;
+    seen.add(v);
+    if (Object.hasOwn(v, "toString") || Object.hasOwn(v, "valueOf")) return true;
+    for (const x of Object.values(v)) stack.push(x);
+  }
+  return false;
 }
 
-export async function fuzz(data) {
-  const fdp = new FuzzedDataProvider(data);
+async function run(data) {
+  await check(data);
+  judge();
+}
+
+async function check(data) {
+  browser.forget();
+  const fdp = provider(data);
   const status = fdp.pickValue(ICONS) + fdp.pickValue(ICONS) + (fdp.consumeBoolean() ? fdp.pickValue(STATUS) : "") + string(fdp);
   const href = (fdp.consumeBoolean() ? "?assignmentId=/assignment/a/" : "") + string(fdp) + (fdp.consumeBoolean() ? "&submissionId=/assignment/s/" : "") + string(fdp);
   const payload = { requestId: "@REQUEST@", submissions: fdp.consumeBoolean() ? value(fdp) : submissions(fdp, status) };
@@ -127,3 +149,10 @@ export async function fuzz(data) {
   const problems = watcher.check();
   if (problems.length) fail(problems.join("\n"));
 }
+
+// The target's work for an input, on each of its rungs (fuzz/lib.mjs).
+export async function fuzz(data) {
+  await ladder(data, run);
+}
+
+await calibrate(fuzz);
