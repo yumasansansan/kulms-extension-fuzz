@@ -17,6 +17,7 @@
 // chrome.runtime.lastError while it runs. An exception a listener throws is
 // kept in browser.errors rather than lost, and so is a promise of any
 // context that is rejected with nothing to handle it.
+import { record } from "./log.mjs";
 import { manifest, read } from "./paths.mjs";
 
 const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
@@ -208,7 +209,7 @@ export class Browser {
   deliver(from, targets, message, cb) {
     const payload = JSON.stringify(message === undefined ? null : message); // throws as Chrome does on what JSON cannot hold
     const exchange = { from: from.kind, url: from.url, message: JSON.parse(payload) };
-    this.traffic.push(exchange);
+    record(this.traffic, exchange);
     const pending = new Promise((resolve) => later(() => {
       let responded = false;
       let open = false;
@@ -278,7 +279,7 @@ export class Browser {
         return browser.answer(context, cb, copyInto(context.realm, found));
       },
       create(props, cb) {
-        browser.created.push(copyInto(null, props));
+        record(browser.created, copyInto(null, props));
         return browser.answer(context, cb, copyInto(context.realm, { id: 1000 + browser.created.length, url: props && props.url }));
       },
       sendMessage(tabId, message, ...rest) {
@@ -291,7 +292,7 @@ export class Browser {
     };
     const scripting = {
       executeScript(injection, cb) {
-        browser.injected.push(injection);
+        record(browser.injected, injection);
         return browser.answer(context, cb, copyInto(context.realm, []), "Cannot access contents of the page.");
       },
     };

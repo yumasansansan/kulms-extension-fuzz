@@ -28,6 +28,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { loadedSource } from "./source.mjs";
 import { EXT, manifest, read } from "./paths.mjs";
 import { globToRegExp, matchesPattern } from "./chrome.mjs";
+import { record } from "./log.mjs";
 import { Net, response } from "./net.mjs";
 
 const EMPTY_PAGE = "<!doctype html><html><head></head><body></body></html>";
@@ -36,7 +37,7 @@ const TYPES = { ".json": "application/json", ".js": "text/javascript", ".css": "
 // A console that keeps what the extension writes instead of printing it.
 function quietConsole(context) {
   context.logs = [];
-  const keep = (level) => (...args) => context.logs.push({ level, args });
+  const keep = (level) => (...args) => record(context.logs, { level, args });
   return { log: keep("log"), info: keep("info"), warn: keep("warn"), error: keep("error"), debug: keep("debug") };
 }
 

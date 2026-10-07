@@ -10,6 +10,7 @@
 // fuzzing. See each module for what it does.
 export { Browser, matchesPattern } from "./chrome.mjs";
 export { Net } from "./net.mjs";
+export { LOG_LIMIT } from "./log.mjs";
 export { openBackground, openTab, openPopup, contentScriptsFor, settle, until } from "./contexts.mjs";
 export { watch, assertClean } from "./detectors.mjs";
 export { exposeInternals, loadedFile, loadedSource } from "./source.mjs";

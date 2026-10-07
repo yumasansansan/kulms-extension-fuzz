@@ -10,6 +10,8 @@
 // fuzz target gives, and a URL with no route fails as an unreachable host
 // does. What a response holds comes out as objects of the realm of the
 // context that fetched it.
+import { record } from "./log.mjs";
+
 const encoder = new TextEncoder();
 
 function matches(match, url) {
@@ -38,7 +40,7 @@ export class Net {
       const raw = typeof input === "object" && input && "url" in input ? input.url : String(input);
       const url = new URL(raw, context.url).href;
       const request = { url, method: (init.method || "GET").toUpperCase(), body: init.body, from: context.kind };
-      this.requests.push(request);
+      record(this.requests, request);
       const route = this.routes.find((r) => matches(r.match, url));
       if (!route) throw new context.realm.TypeError("Failed to fetch");
       const answer = (await route.handler(request)) || {};
