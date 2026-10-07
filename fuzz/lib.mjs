@@ -119,6 +119,17 @@ export const BOTTOM = 4096;
 //   rung whose work grew by fewer steps than the units it added (a step a
 //   unit is the least that reading them takes) has not reached them yet, and
 //   gives nothing to read growth from.
+// - Growth is read only from the rung on which the part of the input that the
+//   rungs repeat is at least as long as the rest, which they do not make
+//   longer. Below it, how the code goes through the one part against the
+//   other changes from rung to rung: a search for a string of the rest in a
+//   repeated one goes through no place while the repeated one is shorter,
+//   and through a place more for each unit once it is longer (searchSteps()
+//   of harness/costs.mjs), so that strings of the rest whose lengths are a
+//   doubling apart make the work grow as fast as the square, on as many rungs
+//   in a row as there are of them, until the repeated part is longer than the
+//   longest. Once it outweighs the rest, every such crossing has been passed,
+//   and what is left of growth faster than n log n is the repeated part's own.
 // - A rung whose work grew faster than n log n once is a step, not yet a
 //   growth: where the input's repeats first make something whole that the
 //   code then reads (a row that closes), or the parity of a count changes its
@@ -308,6 +319,12 @@ export function ladderSync(data, run) {
 // grew by at least a step a unit added.
 const reads = (x, y) => y.work - x.work >= Math.max(1, y.units - x.units);
 
+// Whether on rung `x` the part of the input that the rungs repeat is at least
+// as long as the rest (the head of this section): its units, `repeated` on
+// the bottom rung and `x.m` times as many on `x`, against what is left of
+// the rung's.
+const outweighs = (x) => 2 * repeated * x.m >= x.units;
+
 // Gets the next rung ready: how many times more it repeats a piece, and the
 // work and the time that the rungs below allow it.
 function climb(rungs) {
@@ -320,7 +337,7 @@ function climb(rungs) {
     const [a, b, c] = rungs.slice(-3);
     const before = b.work - a.work;
     const after = c.work - b.work;
-    if (reads(a, b) && reads(b, c) && after > GROWTH * before) {
+    if (outweighs(a) && reads(a, b) && reads(b, c) && after > GROWTH * before) {
       rungCap = c.work + GROWTH * after;
       capNote = `its work grew faster than n log n from ×${b.m} to ×${c.m}, by ${after}, more than ${GROWTH.toFixed(2)} times the ${before} it grew from ×${a.m} to ×${b.m}, and may grow ${GROWTH.toFixed(2)} times ${after} more to ×${rung}`;
     }

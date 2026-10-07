@@ -158,6 +158,16 @@ test("an attribute selector goes through the value it searches: a query for each
   assert.ok(d > LINEAR, `degree ${d}`);
 });
 
+test(":not() goes through the selectors in it: a query of each element, the attribute searched in it, is quadratic", async () => {
+  const d = await degreeIn(200, "", (w, k) => {
+    const el = w.document.createElement("i");
+    el.setAttribute("data-x", "a".repeat(k));
+    w.document.body.append(el);
+    for (let i = 0; i < k; i++) w.document.querySelector('i:not([data-x*="b"])');
+  });
+  assert.ok(d > LINEAR, `degree ${d}`);
+});
+
 test("getElementById goes through the page as the DOM says: a query of each element is quadratic", async () => {
   const d = await degreeIn(200, "<i></i>", (w, k) => {
     const els = w.document.body.children;

@@ -151,9 +151,10 @@ function mutated(parent) {
 //
 // The costs know the selectors the extension's selectors are made of: types,
 // IDs, classes, attribute selectors, :scope, the descendant and the child
-// combinator, and lists of them. Any other kind throws, so that none goes
-// uncounted; tests/costs.test.mjs parses every selector of the extension's
-// code.
+// combinator, and lists of them; and :not() of a list of them, which matches
+// an element that none of the list matches, each of them matched against it.
+// Any other kind throws, so that none goes uncounted; tests/costs.test.mjs
+// parses every selector of the extension's code.
 
 const WHITE = /[ \t\n\r\f]/;
 const parsedSelectors = new Map();
@@ -237,36 +238,49 @@ export function parseSelectors(text) {
       else if (s[i] === ":") {
         i++;
         if (s[i] === ":") fail("a pseudo-element");
-        const pseudo = name();
-        if (pseudo.toLowerCase() !== "scope" || s[i] === "(") fail(`:${pseudo}`);
-        simples.push({ kind: "scope" });
+        const pseudo = name().toLowerCase();
+        if (pseudo === "not" && s[i] === "(") {
+          i++;
+          const list = complexList(")");
+          if (s[i] !== ")") fail(`no ) at ${i}`);
+          i++;
+          simples.push({ kind: "not", list });
+        } else if (pseudo === "scope" && s[i] !== "(") simples.push({ kind: "scope" });
+        else fail(`:${pseudo}`);
       } else break;
     }
     if (simples.length === 0) fail(`no selector at ${i}`);
     return simples;
   };
-  const list = [];
-  skipWhite();
-  for (;;) {
-    const complex = { compounds: [compound()], combinators: [] };
-    for (;;) {
-      const from = i;
-      skipWhite();
-      if (i >= s.length || s[i] === ",") break;
-      if (s[i] === ">") {
-        i++;
-        skipWhite();
-        complex.combinators.push(">");
-      } else if (s[i] === "+" || s[i] === "~") fail(`the combinator ${s[i]}`);
-      else if (i > from) complex.combinators.push(" ");
-      else fail(`${JSON.stringify(s[i])} at ${i}`);
-      complex.compounds.push(compound());
-    }
-    list.push(complex);
-    if (i >= s.length) break;
-    i++; // the comma
+  // Complex selectors separated by commas, up to `close` (the ) of :not())
+  // or the end.
+  function complexList(close) {
+    const list = [];
     skipWhite();
+    for (;;) {
+      const complex = { compounds: [compound()], combinators: [] };
+      for (;;) {
+        const from = i;
+        skipWhite();
+        if (i >= s.length || s[i] === "," || s[i] === close) break;
+        if (s[i] === ">") {
+          i++;
+          skipWhite();
+          complex.combinators.push(">");
+        } else if (s[i] === "+" || s[i] === "~") fail(`the combinator ${s[i]}`);
+        else if (i > from) complex.combinators.push(" ");
+        else fail(`${JSON.stringify(s[i])} at ${i}`);
+        complex.compounds.push(compound());
+      }
+      list.push(complex);
+      if (i >= s.length || s[i] === close) break;
+      i++; // the comma
+      skipWhite();
+    }
+    return list;
   }
+  const list = complexList(undefined);
+  if (i < s.length) fail(`${JSON.stringify(s[i])} at ${i}`);
   parsedSelectors.set(s, list);
   return list;
 }
@@ -274,9 +288,11 @@ export function parseSelectors(text) {
 const lower = (x) => String(x).toLowerCase();
 const attributeOf = (el, name) => (typeof el.getAttribute === "function" ? el.getAttribute(name) : null);
 
-// What matching `simple` against `el` goes through.
-function simpleSteps(simple, el) {
+// What matching `simple` against `el` (with `scope` its scoping root) goes
+// through.
+function simpleSteps(simple, el, scope) {
   if (simple.kind === "universal" || simple.kind === "scope") return 1;
+  if (simple.kind === "not") return 1 + elementSteps(simple.list, el, scope);
   if (simple.kind === "type" || simple.kind === "id") return 1 + simple.name.length;
   if (simple.kind === "class") return 1 + (el.classList ? el.classList.length : 0) * (1 + simple.name.length);
   const found = 1 + attributeCount(el) * (1 + simple.name.length);
@@ -291,7 +307,7 @@ function simpleSteps(simple, el) {
   return found + searchSteps(value, v, 0, at);
 }
 
-const compoundSteps = (simples, el) => simples.reduce((n, simple) => n + simpleSteps(simple, el), 0);
+const compoundSteps = (simples, el, scope) => simples.reduce((n, simple) => n + simpleSteps(simple, el, scope), 0);
 
 // Whether `el` may match the compound `simples` (with `scope` its scoping
 // root): false only when it does not, so that the walk counted after a
@@ -299,7 +315,7 @@ const compoundSteps = (simples, el) => simples.reduce((n, simple) => n + simpleS
 // case, which matches whatever case a document or a selector ignores.
 function mayMatch(simples, el, scope) {
   return simples.every((simple) => {
-    if (simple.kind === "universal") return true;
+    if (simple.kind === "universal" || simple.kind === "not") return true; // :not() may match: what is walked for it is not less
     if (simple.kind === "scope") return el === scope || el === (documentOf(scope) || {}).documentElement;
     if (simple.kind === "type") return lower(el.localName) === lower(simple.name);
     if (simple.kind === "id") return lower(attributeOf(el, "id") ?? "") === lower(simple.name);
@@ -323,18 +339,18 @@ function mayMatch(simples, el, scope) {
 // combinators, and, past a descendant combinator, every ancestor above.
 function complexSteps({ compounds, combinators }, el, scope) {
   const last = compounds.length - 1;
-  let n = compoundSteps(compounds[last], el);
+  let n = compoundSteps(compounds[last], el, scope);
   if (last === 0 || !mayMatch(compounds[last], el, scope)) return n;
   let at = el;
   let above = false;
   for (let j = last - 1; j >= 0; j--) {
     if (combinators[j] === " ") above = true;
     if (above) {
-      for (let a = at.parentNode; a && a.nodeType === ELEMENT; a = a.parentNode) n += compoundSteps(compounds[j], a);
+      for (let a = at.parentNode; a && a.nodeType === ELEMENT; a = a.parentNode) n += compoundSteps(compounds[j], a, scope);
     } else {
       at = at.parentNode;
       if (!at || at.nodeType !== ELEMENT) break;
-      n += compoundSteps(compounds[j], at);
+      n += compoundSteps(compounds[j], at, scope);
     }
   }
   return n;
@@ -391,7 +407,7 @@ const textOf = (el, args, r) => subtreeSize(el) + units(r); // a text content go
 // The members of HTML and SVG elements that reflect a content attribute.
 const REFLECTED = new Set(["action", "alt", "autocomplete", "background", "className", "default", "disabled", "headers", "height", "hidden", "id", "kind",
   "label", "max", "min", "name", "placeholder", "rel", "rows", "size", "src", "tabIndex", "target", "type", "value", "version", "width", "open", "href",
-  "content", "title"]);
+  "content", "title", "code"]);
 const URLS = new Set(["action", "href", "src"]);
 
 // --- The rules, by interface and member.
@@ -446,6 +462,7 @@ export const WEB = {
   "Element.prototype.innerHTML (get)": textOf,
   "Element.prototype.innerHTML (set)": { before: (self) => subtreeSize(self), after: (self, [html]) => units(html) * (1 + maxDepth(self)) + subtreeSize(self) + mutated(self) },
   "ShadowRoot.prototype.innerHTML (get)": textOf,
+  "ShadowRoot.prototype.host (get)": NOTHING, // the element it is attached to
   "ShadowRoot.prototype.innerHTML (set)": { before: (self) => subtreeSize(self), after: (self, [html]) => units(html) * (1 + maxDepth(self)) + subtreeSize(self) + mutated(self) },
   "Element.prototype.getAttribute": (self, [name]) => attributeCount(self) * (1 + stringUnits(name)),
   "Element.prototype.setAttribute": (self, [name, value]) => attributeCount(self) * (1 + stringUnits(name)) + units(value) + mutated(self),
@@ -595,6 +612,9 @@ export const WEB = {
     observedNodes.delete(self);
     return n;
   },
+  // The record queue, cloned and emptied (the DOM's takeRecords()): a step a
+  // record.
+  "MutationObserver.prototype.takeRecords": (self, args, r) => (Array.isArray(r) ? r.length : 0),
 
   // Layout (CSSOM View): left to the engine; Chrome's.
   "HTMLElement.prototype.offsetHeight (get)": (self) => layout(self),
@@ -773,7 +793,7 @@ function family(iface, member, kind) {
     if (kind === "set") return reflectSet;
   }
   // The parts of an anchor's or an area's URL: the href parsed.
-  if (/^(?:HTMLAnchorElement|HTMLAreaElement)$/.test(iface) && ["origin", "pathname", "search"].includes(member)) {
+  if (/^(?:HTMLAnchorElement|HTMLAreaElement)$/.test(iface) && ["origin", "protocol", "username", "password", "host", "hostname", "port", "pathname", "search", "hash"].includes(member)) {
     if (kind === "get") return urlGet;
     if (kind === "set") return (self, [v]) => units(self.href) + units(v) + attributeSet(self, self.href);
   }

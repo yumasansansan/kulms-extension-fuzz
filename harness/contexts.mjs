@@ -118,10 +118,22 @@ function run(context, rel) {
   else context.evaluate(code + "\n//# sourceURL=" + pathToFileURL(file).href);
 }
 
-// The scripts manifest.json injects into a frame at `url`, in its order.
+// Whether `url` matches `glob` of a content script's include_globs or
+// exclude_globs: * stands for any characters, ? for one, the rest for itself.
+function globMatches(glob, url) {
+  return new RegExp("^" + [...glob].map((c) => (c === "*" ? ".*" : c === "?" ? "." : c.replace(/[.+^${}()|[\]\\]/g, "\\$&"))).join("") + "$").test(url);
+}
+
+// The scripts manifest.json injects into a frame at `url`, in its order: of
+// the content scripts whose matches it is in, and none of whose
+// exclude_matches; and, where they are given, one of whose include_globs and
+// none of whose exclude_globs.
 export function contentScriptsFor(url, topFrame = true) {
   return manifest.content_scripts
-    .filter((cs) => (topFrame || cs.all_frames) && cs.matches.some((p) => matchesPattern(p, url)))
+    .filter((cs) => (topFrame || cs.all_frames) && cs.matches.some((p) => matchesPattern(p, url)) &&
+      !(cs.exclude_matches || []).some((p) => matchesPattern(p, url)) &&
+      (!cs.include_globs || cs.include_globs.some((g) => globMatches(g, url))) &&
+      !(cs.exclude_globs || []).some((g) => globMatches(g, url)))
     .flatMap((cs) => cs.js || []);
 }
 

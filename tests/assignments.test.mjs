@@ -164,16 +164,96 @@ test("B7: a quiz drawn from the cache links to the quiz tool", { todo: "B7: the 
   assert.equal(new URL(link.href).pathname, "/portal/site/C1/tool/QUIZ");
 });
 
+test("B7: the assignments of a course the sidebar does not show link to its tool, looked up once and kept", { todo: "B7: each item sends for pages.json in turn, each time the panel opens, and what it finds is not kept" }, async (t) => {
+  const timestamp = Date.now();
+  const items = ["A1", "A2", "A3"].map((id, i) => assignment(id, `レポート${i + 1}`, Date.now() + (30 + 10 * i) * H, { courseId: "C9", url: `${LMS}/portal/site/C9` }));
+  const browser = browserWith({ "kulms-assignments": { timestamp, assignments: items } });
+  t.after(() => browser.close());
+  const net = new Net().on(`${LMS}/direct/site/C9/pages.json`, { headers: { "content-type": "application/json" }, body: JSON.stringify([{ tools: [{ toolId: "sakai.assignment.grades", id: "T9" }] }]) });
+  const panel = await openPanel(openCoursePage(browser, { net }));
+  assert.deepEqual([...panel.querySelectorAll(".kulms-assign-card-name a")].map((link) => new URL(link.href).pathname), Array(3).fill("/portal/site/C9/tool/T9"));
+  assert.equal(net.requests.filter((r) => r.url.endsWith("/pages.json")).length, 1);
+  await settle(100);
+  const kept = browser.storage.local.dump()["kulms-assignments"];
+  assert.equal(kept.timestamp, timestamp);
+  assert.deepEqual(kept.assignments.map((x) => x.url), Array(3).fill(`${LMS}/portal/site/C9/tool/T9`));
+});
+
 test("B8: drawing the list twice in a row leaves one banner of each kind", { todo: "B8: each draw appends its banners when storage answers, after the next draw" }, async (t) => {
   const browser = browserWith(cached([assignment("A1", "レポート1", Date.now() + 30 * H)]));
   t.after(() => browser.close());
   const panel = await openPanel(openCoursePage(browser));
+  await settle(100); // the banners come when storage answers
   assert.equal(panel.querySelectorAll(".kulms-tester-banner").length, 2);
   const checkbox = () => panel.querySelector(".kulms-checkbox");
   checkbox().click();
   checkbox().click();
   await settle(100);
   assert.equal(panel.querySelectorAll(".kulms-tester-banner").length, 2);
+});
+
+test("B8: the list's banners do not come into the settings view opened before storage answers", { todo: "B8: each draw appends its banners when storage answers, to whatever the panel shows then" }, async (t) => {
+  const browser = browserWith(cached([assignment("A1", "レポート1", Date.now() + 30 * H)]));
+  t.after(() => browser.close());
+  const tab = openCoursePage(browser);
+  const panel = await openPanel(tab);
+  // The list drawn again, its banners to come when storage answers, and the
+  // settings view opened before it does.
+  panel.querySelector(".kulms-checkbox").click();
+  tab.internals["src/assignments.js"].showSettingsView();
+  await settle(100);
+  assert.equal(panel.querySelectorAll(".kulms-tester-banner").length, 0);
+});
+
+test("B9: a refresh asked for while the list loads is carried out after it, and only then answered", { todo: "B9: loadAssignments() returns at once while a load is under way, and the refresh asked for is dropped" }, async (t) => {
+  const json = (body) => ({ headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const net = new Net()
+    .on(`${LMS}/direct/assignment/site/C1.json`, json({ assignment_collection: [] }))
+    .on(`${LMS}/direct/sam_pub/context/C1.json`, json({ sam_pub_collection: [] }));
+  const tab = openCoursePage(browser, { net });
+  await until(() => tab.internals["src/assignments.js"] && tab.document.getElementById("kulms-assign-toggle"));
+  await settle(100);
+  const a = tab.internals["src/assignments.js"];
+  const fetches = () => net.requests.filter((r) => r.url.endsWith("/direct/assignment/site/C1.json")).length;
+  const before = fetches();
+  a.loadAssignments(true);
+  // The popup's button, while the list loads: answered once the list is
+  // fetched anew after the load under way.
+  await a.loadAssignments(true);
+  assert.equal(fetches() - before, 2);
+});
+
+test("a textbook list cached by the course's name, as the extension has kept it, is drawn with its names", async (t) => {
+  const browser = browserWith({ "kulms-textbooks-v3": { timestamp: Date.now(), data: {
+    "[2026前期火２]英語リーディング": { books: [], syllabusUrl: "", status: "not_found" },
+    "[2026前期月１]線形代数": { books: [{ title: "線形代数入門", author: "", publisher: "", isbn: "", type: "textbook" }], syllabusUrl: "", status: "found" },
+  } } });
+  t.after(() => browser.close());
+  const tab = openCoursePage(browser);
+  await until(() => tab.window.__kulmsTextbookAPI);
+  const list = tab.document.createElement("div");
+  tab.document.body.append(list);
+  tab.window.__kulmsTextbookAPI.loadInto(list, false);
+  await until(() => list.querySelector(".kulms-textbook-course"), { timeout: 5000 });
+  assert.deepEqual([...list.querySelectorAll(".kulms-textbook-course-name")].map((n) => n.textContent), ["[2026前期月１]線形代数", "[2026前期火２]英語リーディング"]);
+});
+
+test("B11: two courses of the same name each have their own entry in the textbook list", { todo: "B11: the list is keyed by the course's name, so one course's entry replaces the other's" }, async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const net = new Net().on(`${LMS}/direct/site.json`, { headers: { "content-type": "application/json" }, body: JSON.stringify({ site_collection: [
+    { id: "2026-110-1001-000", title: "英語リーディング", type: "course" },
+    { id: "2026-110-1002-000", title: "英語リーディング", type: "course" },
+  ] }) });
+  const tab = openCoursePage(browser, { net });
+  await until(() => tab.window.__kulmsTextbookAPI);
+  const list = tab.document.createElement("div");
+  tab.document.body.append(list);
+  tab.window.__kulmsTextbookAPI.loadInto(list, true);
+  await until(() => list.querySelector(".kulms-textbook-course"), { timeout: 5000 });
+  assert.equal(list.querySelectorAll(".kulms-textbook-course").length, 2);
 });
 
 // A course page whose fetch reaches Sakai's API: the course's assignments and

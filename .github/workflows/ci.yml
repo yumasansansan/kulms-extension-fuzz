@@ -34,9 +34,10 @@
 # fails is kept as an artifact. It has no time limit of its own: ci/fuzz.sh
 # ends by the time the job notes as it starts (--until), six hours, GitHub's
 # limit for a job, less half an hour for keeping the inputs that failed, and
-# a clock stops only what does not end where no work is counted. The longer
-# fuzzing, which carries its corpus over from one run to the next, is
-# fuzz.yml's, once a day.
+# a clock stops only what does not end where no work is counted. The time of
+# the rungs, which checks the counting where the clock's noise was measured,
+# is not looked at on a runner, whose noise was not. The longer fuzzing, which
+# carries its corpus over from one run to the next, is fuzz.yml's, once a day.
 #
 # Each job checks the commit out with plain git, the submodule at its commit,
 # and ci/setup.sh installs the newest Node and the pnpm of package.json. The
@@ -149,6 +150,12 @@ jobs:
   fuzz:
     name: fuzzing, a minute a target
     runs-on: ubuntu-26.04
+    # The time of the rungs is not looked at (fuzz/lib.mjs, NOISE): the noise of
+    # the clock was measured on a machine kept quiet for it (docs/findings.md),
+    # and a runner shares its machine with other jobs, whose noise nothing has
+    # measured. The counted work is judged as everywhere.
+    env:
+      KULMS_FUZZ_NOISE: Infinity
 
     steps:
       - name: Note when the fuzzing must end

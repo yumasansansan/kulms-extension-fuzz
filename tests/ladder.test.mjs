@@ -71,15 +71,38 @@ test("an input that repeats nothing is run once, however high its top rung", asy
 });
 
 test("work that grows as the square stops on the second rung in a row where that shows", async () => {
+  // The input's 12 bytes are the rest of it, which the 8 units of the bottom
+  // rung do not outweigh: growth is read from ×2 up, and fails on ×16.
   const rungs = [];
-  await assert.rejects(ladder(input(6), target((n) => n * n + 10 * n, rungs)), /on the rung of ×8 passed .*on two rungs in a row/);
-  assert.deepEqual(rungs, [8, 16, 32, 64]);
+  await assert.rejects(ladder(input(6), target((n) => n * n + 10 * n, rungs)), /on the rung of ×16 passed .*on two rungs in a row/);
+  assert.deepEqual(rungs, [8, 16, 32, 64, 128]);
 });
 
 test("a step in the work, where the code first reads what the rungs add, climbs to the top rung", async () => {
   const rungs = [];
   await ladder(input(6), target((n) => (n >= 64 ? 30 * n : 50), rungs));
   assert.equal(rungs.length, 7);
+});
+
+test("work that crosses strings of the rest of the input one rung after another climbs to the top rung", async () => {
+  // A search for each of four strings of the rest, of 32 to 256 units, in the
+  // repeated one of n units, which goes through no place until n passes the
+  // string's length (searchSteps() of harness/costs.mjs): until n passes 256,
+  // the work grows faster than n log n on every rung.
+  const rest = [32, 64, 128, 256];
+  const rungs = [];
+  const run = async (data) => {
+    const fdp = provider(data);
+    const s = string(fdp);
+    string(fdp);
+    rungs.push(s.length);
+    try {
+      for (let i = 10 * s.length + rest.reduce((w, r) => w + Math.max(0, s.length - r + 1) * r, 0); i > 0; i--) step(1);
+    } catch { /* what the counting threw */ }
+    judge();
+  };
+  await ladder(encode((w) => { repeated(w, "ab", 4); written(w, "x".repeat(480)); }, { doublings: 8 }), run);
+  assert.equal(rungs.length, 9);
 });
 
 test("work that grows by less than what the rungs add is not read for growth", async () => {

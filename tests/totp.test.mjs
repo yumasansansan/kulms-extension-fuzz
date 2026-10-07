@@ -15,11 +15,18 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import vm from "node:vm";
 import fc from "fast-check";
-import { Browser, openBackground, openPopup, openTab, settle, until } from "../harness/index.mjs";
+import { Browser, contentScriptsFor, openBackground, openPopup, openTab, settle, until } from "../harness/index.mjs";
 import { cached, openCoursePage, openPanel } from "./lms.mjs";
 
 const OTP_PAGE = '<!doctype html><html><head></head><body><form id="login"><input id="password_input"></form></body></html>';
 const OTP_URL = "https://auth.iimc.kyoto-u.ac.jp/user/otplogin.cgi";
+const QR_URL = "https://auth.iimc.kyoto-u.ac.jp/user/index.php?app=qrsecret";
+
+test("P4: jsQR goes only into the page of auth.iimc that reads a QR", { todo: "P4: it goes into every page of auth.iimc, the login page among them" }, () => {
+  assert.equal(contentScriptsFor(OTP_URL).includes("vendor/jsqr.min.js"), false, "the login page");
+  assert.ok(contentScriptsFor(QR_URL).includes("vendor/jsqr.min.js"), "the page of the QR");
+  assert.ok(contentScriptsFor(OTP_URL).includes("src/auth-totp-register.js"), "the registration helper, which looks at every page for the end of a registration");
+});
 
 function base32(bytes) {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";

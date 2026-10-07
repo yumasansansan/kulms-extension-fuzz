@@ -37,14 +37,14 @@ specification: the GNU General Public License, version 3 or any later version
 | [B1](#b1) | **高** | 複数タブを開いていると，メモ・完了チェック・非表示が消える | 再現 | PR 中（[#75](https://github.com/Radian0523/kulms-extension/pull/75)） | |
 | [B2](#b2) | 中 | 非表示にした課題が 30 日後に一覧へ戻る | 再現 | PR 中（[#76](https://github.com/Radian0523/kulms-extension/pull/76)） | [#74](https://github.com/Radian0523/kulms-extension/issues/74) |
 | [B3](#b3) | 中 | サイドバーの色分けで，期限切れが最も弱く扱われる | 再現 | 対応中（[fix/sidebar-overdue-color](https://github.com/yumasansansan/kulms-extension/tree/fix/sidebar-overdue-color)） | |
-| [B4](#b4) | 中 | ツール表示管理が 200ms ごとの再処理を止めない | 再現 | 未着手 | |
-| [B5](#b5) | 中 | Safari 版に `vendor/` が同梱されない | 再現（ビルド） | 未着手 | |
-| [B6](#b6) | 中 | 配布用 zip に `node_modules/` などが入る | 再現（ビルド） | 未着手 | |
-| [B7](#b7) | 低 | キャッシュから描画すると，クイズのリンクが課題ツールを指す | 再現 | 未着手 | |
-| [B8](#b8) | 低 | バナーが重複し，設定タブにも紛れ込む | 再現 | 未着手 | |
-| [B9](#b9) | 低 | 読み込み中の更新要求が，成功扱いのまま捨てられる | 読解 | 未着手 | |
+| [B4](#b4) | 中 | ツール表示管理が 200ms ごとの再処理を止めない | 再現 | 対応中（[fix/tool-visibility-loop](https://github.com/yumasansansan/kulms-extension/tree/fix/tool-visibility-loop)） | |
+| [B5](#b5) | 中 | Safari 版に `vendor/` が同梱されない | 再現（ビルド） | 対応中（[fix/build-contents](https://github.com/yumasansansan/kulms-extension/tree/fix/build-contents)） | |
+| [B6](#b6) | 中 | 配布用 zip に `node_modules/` などが入る | 再現（ビルド） | 対応中（[fix/build-contents](https://github.com/yumasansansan/kulms-extension/tree/fix/build-contents)） | |
+| [B7](#b7) | 低 | キャッシュから描画すると，クイズのリンクが課題ツールを指す | 再現 | 対応中（[fix/cached-tool-links](https://github.com/yumasansansan/kulms-extension/tree/fix/cached-tool-links)） | |
+| [B8](#b8) | 低 | バナーが重複し，設定タブにも紛れ込む | 再現 | 対応中（[fix/assignment-banners](https://github.com/yumasansansan/kulms-extension/tree/fix/assignment-banners)） | |
+| [B9](#b9) | 低 | 読み込み中の更新要求が，成功扱いのまま捨てられる | 読解・再現 | 対応中（[fix/refresh-while-loading](https://github.com/yumasansansan/kulms-extension/tree/fix/refresh-while-loading)） | |
 | [B10](#b10) | 低 | i18n の置換で，値の中の `$&` や置き場所の名前が展開され，結果が値の長さの 3 乗まで伸びる（潜在） | 再現・ファズ | 対応中（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)） | |
-| [B11](#b11) | 低 | 教科書一覧が科目名をキーにしていて，同名の科目が衝突する | 読解 | 未着手 | |
+| [B11](#b11) | 低 | 教科書一覧が科目名をキーにしていて，同名の科目が衝突する | 読解・再現 | 対応中（[fix/textbooks-by-site](https://github.com/yumasansansan/kulms-extension/tree/fix/textbooks-by-site)） | |
 | [B12](#b12) | 低 | ページから書き換えられる Web Storage の値で例外になる | 読解 | 対応中（[fix/web-storage-values](https://github.com/yumasansansan/kulms-extension/tree/fix/web-storage-values)） | |
 | [B13](#b13) | 低 | シラバス検索の最後のフォールバックが無関係な科目を選びうる | 読解 | 未着手 | |
 | [B14](#b14) | 低 | Shift_JIS にない文字を検索語から黙って落とす | 再現 | 未着手 | |
@@ -58,7 +58,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [P1](#p1) | **高** | 課題取得の N+1 と，タブごとの短い間隔での再取得（LMS への負荷） | 読解 | 未着手 | [#32](https://github.com/Radian0523/kulms-extension/issues/32), [#27](https://github.com/Radian0523/kulms-extension/issues/27) |
 | [P2](#p2) | 中 | フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行う | 読解 | 未着手 | [#62](https://github.com/Radian0523/kulms-extension/issues/62) |
 | [P3](#p3) | 中 | `document.body` 全体を監視する MutationObserver が多く，重い | 読解 | 未着手 | |
-| [P4](#p4) | 低 | jsQR（256KB）と qrcode-gen（56KB）を広すぎる範囲に注入する | 読解 | 未着手 | |
+| [P4](#p4) | 低 | jsQR（256KB）と qrcode-gen（56KB）を広すぎる範囲に注入する | 読解 | 対応中（jsQR：[fix/jsqr-where-read](https://github.com/yumasansansan/kulms-extension/tree/fix/jsqr-where-read)） | |
 | [P5](#p5) | 低 | 教科書の取得が科目ごとの直列処理 | 読解 | 未着手 | |
 | [P6](#p6) | 低 | Service Worker の起動ごとに Shift_JIS 変換表を作り直す | 計測 | 未着手 | |
 | [M1](#保守性) | — | TOTP の実装が 4 か所に重複している | 読解 | 未着手 | |
@@ -66,7 +66,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [M3](#保守性) | — | テストが無く，CI は PR 時の ESLint だけ．IIFE 構造でテストしにくい | 読解 | 未着手 | |
 | [M4](#保守性) | — | Safari の Resources がコミットされた複製で，本体から遅れる | 読解 | 未着手 | |
 | [M5](#保守性) | — | 動かないコード（textbooks.js の設定確認，popup.js の SVG 走査） | 読解 | 未着手 | |
-| [D1](#d1) | 低 | プライバシーポリシーの TOTP の記述が実装と合わない | 読解 | 未着手 | |
+| [D1](#d1) | 低 | プライバシーポリシーの TOTP の記述が実装と合わない | 読解 | 対応中（[fix/privacy-storage](https://github.com/yumasansansan/kulms-extension/tree/fix/privacy-storage)） | |
 
 ## 問題ではないもの：TOTP の HMAC-SHA-1
 
@@ -91,6 +91,7 @@ specification: the GNU General Public License, version 3 or any later version
   2. `load`・`save`・`delete` は拡張ページ（`sender.tab` が無く，`sender.url` が `chrome.runtime.getURL("")` で始まる）からだけ受け付ける．登録は auth.iimc の送信元に限った専用メッセージにする．
   3. QR とシークレットの表示は popup かオプションページだけで行い，LMS の設定パネルからはそこへ誘導する（挙動の変更になるので，先に上流で Issue を立てる）．
 - 対応: 前半として，自動入力が background で計算したコードだけを受け取るようにし（`kulms-totp-code`），認証ページの content script には `kulms-totp-load` でシークレットを返さないようにした（[fix/totp-code-from-background](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-code-from-background)）．時刻は background が決めるので，content script は先の時刻のコードを求められない．LMS の設定パネルでのコードと QR の表示（直し方の 3）は，表示の場所が変わるので，上流で Issue を立ててから行う．
+- 前半のブランチが background に置いた base32 のデコードは，末尾の = を `/=+$/` で取っていた（S9 の正規表現の写し）．すべての修正ブランチを当てたときに見つけ，同じブランチで S9 と同じ書き方に直した．
 - テスト: `tests/totp.test.mjs` の「S1」の 3 件．前半で，ログインページと認証ページの 2 件が通る．設定パネルの 1 件は，後半まで失敗する．
 
 ### S2
@@ -192,6 +193,7 @@ specification: the GNU General Public License, version 3 or any later version
   - 曜日と時限は，先に「曜日 時限 ]」を探し，同じ括弧の中（前の `]` から曜日まで）に，年の 4 桁が続く `[` か，曜日の直前の `[` があるかを確かめる．どの括弧の中も一度しか見ない．最初の書き換えでは，`[` を探す `indexOf` が括弧の外まで走っていたため，「月1]」が長く続くと 2 乗になった（数えた仕事量の次数 1.98）．下のテストの「月1]」の連なりは，これを確かめる．
   - フォルダの深さは，`collectionId` の後に `='…'` が無い行の残りを丸ごと一致させて，次の行へ進む．
   - 新しい正規表現はどれもオートマトンで線形と判定された．関わる文字だけでできたランダムな文字列で，元の正規表現と答えが一致した（曜日と時限は 20 万件，ほかは各 3 万件．`cleanCourseName()` は前後の空白を除いた結果が一致し，関数はその結果を返す）．
+- S1 の前半のブランチ（[fix/totp-code-from-background](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-code-from-background)）が background に置いた base32 のデコードにも同じ `/=+$/` があったので，そのブランチで同じように直した．2 つのブランチは `src/auth-totp.js` で重なる（S1 の前半はそこからデコードを除き，S9 はそこを直す）ので，後に取り込むほうで，デコードを除くほうを採る．
 - テスト: [tests/regexp.test.mjs](../tests/regexp.test.mjs) の「S9」（オートマトン），[tests/runs.test.mjs](../tests/runs.test.mjs)（それぞれの連なりの長さ n，2n，4n で数えた仕事量の伸びの次数．main では 2.00，修正後は 1）．
 
 ## 不具合
@@ -239,15 +241,17 @@ specification: the GNU General Public License, version 3 or any later version
 - 根拠: 3 秒で 15 回，1.5 秒で 8 回の変更が起きた．全科目に隠すツールがある場合は 1 回で止まる．
 - 影響: LMS を開いている間，CPU と電池を使い続ける（この機能は既定でオフ）．
 - 直し方: 処理済みの印を明示的に付ける．並びが変わるときだけ並べ替える．監視はサイドバーに絞る．自分の変更は `takeRecords()` で読み捨てる．
+- 対応: 表示ツールがすでにその順で並んでいれば付け直さず，処理の後に自分の変更の通知を `takeRecords()` で読み捨てる（[fix/tool-visibility-loop](https://github.com/yumasansansan/kulms-extension/tree/fix/tool-visibility-loop)）．効いていなかった処理中のフラグは外した．監視の範囲は P3 で扱う．
 - テスト: `tests/sidebar.test.mjs` の「B4」．
 
 ### B5
 **Safari 版に `vendor/` が同梱されない**（中・再現（ビルド））
 
-- 場所: [build.sh:49](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/build.sh#L49)．Xcode プロジェクトも `vendor` を参照していない．
+- 場所: [build.sh:49](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/build.sh#L49)．Xcode プロジェクトは，ビルドの段（Sync Web Extension Resources）で Resources/ の中身をすべて appex に写すので，Resources/ に置けば入る．
 - 何が起きるか: v1.18.0 以降，manifest は `vendor/jsqr.min.js` と `vendor/qrcode-gen.js` を参照している．しかし Safari への同期と Xcode のリソースには `vendor/` が無い．そのため Safari では，auth.iimc の登録補助（jsQR と同じ組）と QR 表示が動かないはずである（Safari 実機では未確認）．
 - 根拠: コピーで `build.sh safari` を実行すると，manifest が参照する 2 ファイルが Resources に無かった．
-- 直し方: 同期の対象と Xcode プロジェクトに `vendor` を加える．あわせて，各ビルド出力に manifest の参照するファイルが揃っているかを CI で検査する．
+- 直し方: 同期の対象に `vendor` を加える．あわせて，各ビルド出力に manifest の参照するファイルが揃っているかを CI で検査する．
+- 対応: 拡張機能が動くのに要るものを build.sh の 1 か所に並べ，Safari への同期と zip の両方でそれを使う（[fix/build-contents](https://github.com/yumasansansan/kulms-extension/tree/fix/build-contents)，B6 と同じ）．
 - テスト: `tests/build.test.mjs` の「B5」．
 
 ### B6
@@ -257,6 +261,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: 除外リストに `node_modules/`，`package.json`，`bun.lock`，`eslint.config.js` が無い．bun に移行してからは開発者の手元に `node_modules/` があるので，ストアに出す zip に開発用の依存が入る．
 - 根拠: `node_modules` があるコピーで `build.sh chrome` を実行すると，4 つとも zip に入った．
 - 直し方: 除外リスト方式をやめ，入れるものを列挙する（manifest.json，background.js，popup.*，styles.css，src，vendor，icons，_locales）．
+- 対応: そのとおりに列挙し，zip には今までどおり LICENSE も入れる（[fix/build-contents](https://github.com/yumasansansan/kulms-extension/tree/fix/build-contents)，B5 と同じ）．Chrome と Firefox の zip に開発用のファイルが入らず，Safari の Resources に manifest の参照するファイルがすべて揃うことを確かめた．
 - テスト: `tests/build.test.mjs` の「B6」．
 
 ### B7
@@ -267,7 +272,8 @@ specification: the GNU General Public License, version 3 or any later version
   - 課題ツールの地図を，クイズにも当てはめてしまう．
   - サイドバーに無い科目では，項目ごとに `pages.json` を直列に取りに行く．そして解決した URL をキャッシュに書き戻さないので，パネルを開くたびに繰り返す．
 - 直し方: 地図は種類ごとに当てる．解決は科目ごとに 1 回，並行して行い，結果をキャッシュに残す．
-- テスト: `tests/assignments.test.mjs` の「B7」．
+- 対応: 課題には課題ツールの，クイズにはテスト・クイズツールの地図を当てる．地図に無い科目の課題は，科目ごとに 1 回だけ並行して引き，キャッシュが読んだときのままなら，タイムスタンプを変えずにそこへ残す（[fix/cached-tool-links](https://github.com/yumasansansan/kulms-extension/tree/fix/cached-tool-links)）．
+- テスト: `tests/assignments.test.mjs` の「B7」の 2 件（クイズのリンク，サイドバーに無い科目の課題を 1 回だけ引いて残すこと）．
 
 ### B8
 **バナーが重複し，設定タブにも紛れ込む**（低・再現）
@@ -276,14 +282,17 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: 描画のたびにストレージを非同期に読み，読み終わったときにバナーを付け足す．そのとき，まだ同じ描画のままか，今のタブが課題一覧かを確かめていない．
 - 根拠: 2 回続けて描画すると，バナーが 2 個から 4 個になった．設定タブにも現れた．
 - 直し方: 描画ごとに世代番号を持たせて照合する．あるいは，バナーを出すかどうかを初期化時に一度だけ読む．
-- テスト: `tests/assignments.test.mjs` の「B8」．
+- 対応: 描画のときにバナーの場所に目印を置き，ストレージを読み終えたときに，目印がまだパネルの中身にあるときだけバナーに置き換える（[fix/assignment-banners](https://github.com/yumasansansan/kulms-extension/tree/fix/assignment-banners)）．描画し直すか別のタブに移ると，中身ごと目印も消える．
+- テスト: `tests/assignments.test.mjs` の「B8」の 2 件（2 回続けて描画したとき，設定タブに移ったとき）．
 
 ### B9
-**読み込み中の更新要求が，成功扱いのまま捨てられる**（低・読解）
+**読み込み中の更新要求が，成功扱いのまま捨てられる**（低・読解・再現）
 
 - 場所: [src/assignments.js:2891-2893](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2891-L2893)，[:3043-3047](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L3043-L3047)，[:577](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L577)
 - 何が起きるか: 読み込み中に `loadAssignments` を呼ぶと，何もせずに返る．そのため，popup の更新ボタンは成功と表示するが，実際には更新していない．提出直後に強制する再取得も，同じ理由で捨てられることがある．
 - 直し方: 進行中の Promise を返す．強制更新の要求は，今の処理が終わった後に 1 回実行する．
+- 対応: そのとおりに直し，続けて頼まれた強制更新は 1 回にまとめる（[fix/refresh-while-loading](https://github.com/yumasansansan/kulms-extension/tree/fix/refresh-while-loading)）．読み込み中かどうかを表す `isLoading` は，B1 の修正がタブ間の同期で読むので残し，読み込みの間 true にする．
+- テスト: `tests/assignments.test.mjs` の「B9」．
 
 ### B10
 **i18n の置換で，値の中の `$&` や置き場所の名前が展開され，結果が値の長さの 3 乗まで伸びる（潜在）**（低・再現・ファズ）
@@ -299,10 +308,13 @@ specification: the GNU General Public License, version 3 or any later version
 - テスト: `fuzz/known/i18n/B10-placeholder-in-value`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/i18n.test.mjs` の「B10」の 4 件（settings.js と popup.js の `t()` が，値をそのまま入れることと，仕事が値の長さに線形に伸びること）．
 
 ### B11
-**教科書一覧が科目名をキーにしていて，同名の科目が衝突する**（低・読解）
+**教科書一覧が科目名をキーにしていて，同名の科目が衝突する**（低・読解・再現）
 
 - 場所: [src/textbooks.js:368-373](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L368-L373)
+- 何が起きるか: 名前が同じ科目があると，後の科目の項目が前の科目の項目を上書きし，一覧には 1 つしか出ない．
 - 直し方: サイト ID をキーにし，表示名は別に持つ．
+- 対応: そのとおりに直した（[fix/textbooks-by-site](https://github.com/yumasansansan/kulms-extension/tree/fix/textbooks-by-site)）．以前に科目名をキーにして保存したキャッシュは，表示名を持たないので，キーを表示名として読む．
+- テスト: `tests/assignments.test.mjs` の「B11」と，科目名をキーにしたキャッシュを描画するテスト．
 
 ### B12
 **ページから書き換えられる Web Storage の値で例外になる**（低・読解）
@@ -453,6 +465,8 @@ specification: the GNU General Public License, version 3 or any later version
 
 - 場所: [manifest.json:29-33](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/manifest.json#L29-L33)（jsQR 256KB を auth.iimc の全ページに），[:54-58](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/manifest.json#L54-L58)（qrcode-gen 56KB を LMS の全ページに）
 - 直し方: `include_globs` で範囲を絞るか，必要になったときに `chrome.scripting` で注入する．
+- 対応: jsQR は，TOTP の登録補助が QR を読む `app=qrsecret` のページでしか使わないので，別の組に分けて `include_globs` でそのページにだけ注入する（[fix/jsqr-where-read](https://github.com/yumasansansan/kulms-extension/tree/fix/jsqr-where-read)）．登録補助は，登録の完了を確かめるため，これまでどおり全ページに注入する．qrcode-gen は課題パネルの中の QR の表示に使い，必要になったときに注入するには `scripting` の権限が要るので，残した．
+- テスト: `tests/totp.test.mjs` の「P4」（ハーネスは manifest の `include_globs`，`exclude_globs`，`exclude_matches` を Chrome と同じに読む）．
 
 ### P5
 **教科書の取得が科目ごとの直列処理**（低・読解）
@@ -481,6 +495,8 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか:
   - `docs/privacy.html` は「暗号文は chrome.storage.local に，鍵は IndexedDB に置く」と書いているが，v1.21.0 からはどちらも同じ IndexedDB にある．
   - 鍵が暗号文の隣にあるので，ディスクを読める攻撃者には平文とほぼ同じである．「AES-256-GCM で暗号化」という書き方は，実際より強く見える．
+  - 扱うデータはすべて chrome.storage.local にあると書いているが，サイドバーのツール表示設定と幅は LMS のページの localStorage に，パネルの開閉や提出の目印，登録途中の TOTP シークレット（S3）は sessionStorage にある．2段階認証の設定ガイドとセキュリティのページも同じ書き方である．
+- 対応: 3 つのページの保存先の記述を実装に合わせ，鍵が同じ端末にあるので端末のデータを読める人からは守れないことを書いた（[fix/privacy-storage](https://github.com/yumasansansan/kulms-extension/tree/fix/privacy-storage)）．
 
 ## 上流 Issue との対応
 
@@ -526,8 +542,8 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
 - **ファジング**（[fuzz/](../fuzz/)）: 外から入力が来る面ごとの 7 つの対象と canary．対象の一覧と運用は [fuzz/README.md](../fuzz/README.md) にある．
   - 入力は手加減しない（2026-10-07 に見直した）．文字列は入力のビット列を 16 ビットずつ（すべての符号単位），8 ビットずつ（ASCII が出やすい），UTF-8 のいずれかで読む．数は任意の 64 ビットのパターンと境目の値，値は undefined，null，BigInt，任意の深さの入れ子などを含む．ネットワークは失敗，任意のステータスと Content-Type，途中で切れた本文も返す．
   - 大きさは段で作る．入力そのもの（libFuzzer に作らせるバイト列）と，その下の段で作る値は 4,096 単位まで．入力は最初に段数を選び，段を上がるたびに，入力が繰り返す片を 2 倍の回数繰り返す．最上段で作る値は，Chrome の runtime メッセージ 1 通が運べる量（JSON の UTF-8 で 64MiB．1 単位は 6 バイト以内なので 11,184,810 単位）まで．
-  - 段から段へ，仕事の増えが前の段の増えの 2^1.5 倍（n log n の仕事が増える量）を超えたら，速い伸びとみる．伸びを読むのは，コードが段の足した分をたどった（1 単位に 1 歩以上を使った）ときだけ．一度だけの速い伸びは，繰り返しが初めて行を閉じたときなどの段差なので，速い伸びがあった段の上の段にだけ，下の段の仕事量から外挿した上限を走らせる前に与え，超えたら止めて失敗とする．線形でない入力は，速い伸びが 2 段続いた所で止まり，何時間も走らない．ほかの段は，線形のコードがするはずの上限（数える場所の数 × (U+1) × ⌈log₂(U+2)⌉ ＋ 入力が空のときの仕事量）で判定する．
-  - 時間は，数え方を確かめるために見る．2 段離れた段どうしで，時間の伸びの次数が仕事量の伸びの次数を 0.5 より多く上回ったら，数えていない仕事があるとして失敗とする（下の「時計の揺れ」）．
+  - 段から段へ，仕事の増えが前の段の増えの 2^1.5 倍（n log n の仕事が増える量）を超えたら，速い伸びとみる．伸びを読むのは，コードが段の足した分をたどった（1 単位に 1 歩以上を使った）ときだけで，繰り返す部分が入力の残り以上の長さになった段から．それまでは，繰り返す部分と残りとの掛け合わせ（繰り返す文字列の中で残りの文字列を探すなど）が，段ごとに伸びの割合を変える．一度だけの速い伸びは，繰り返しが初めて行を閉じたときなどの段差なので，速い伸びがあった段の上の段にだけ，下の段の仕事量から外挿した上限を走らせる前に与え，超えたら止めて失敗とする．線形でない入力は，速い伸びが 2 段続いた所で止まり，何時間も走らない．ほかの段は，線形のコードがするはずの上限（数える場所の数 × (U+1) × ⌈log₂(U+2)⌉ ＋ 入力が空のときの仕事量）で判定する．
+  - 時間は，数え方を確かめるために見る．2 段離れた段どうしで，時間の伸びの次数が仕事量の伸びの次数を 0.5 より多く上回ったら，数えていない仕事があるとして失敗とする（下の「時計の揺れ」）．CI では見ない．
   - 時計で止めるのは，何も数えない所で終わらないものだけ．CI はジョブの終わるべき時刻を `ci/fuzz.sh --until` に渡し，各対象は残りの時間を残りの対象で等しく分けたものを使う．
   - 拡張が自分で捕まえて警告だけ出すエラーのうち，プログラムの誤りを示すもの（TypeError などの文言）も失敗とする．B19 と B20 はこれで見つかった．
   - シードと既知の問題の入力は，`fuzz/inputs.mjs` が，対象の読む値の並びから書く（`fuzz/encode.mjs` が FuzzedDataProvider の逆をたどる）．入力の読み方を変えたときに，これらが黙って別の入力になるのを防ぐためで，テストは，既知の入力がその問題だけを起こすことも確かめる．
@@ -553,6 +569,7 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
 - `TIME_FLOOR` は，測った揺れの最大が `NOISE` の半分（0.25）以下に収まる，最小の時間の増えとした．0.1 秒では 0.32 まで揺れるので，0.3 秒である．そこでの揺れの最大は 0.10 で，`NOISE` はその 5 倍ある．
 - 隣の段どうしで比べると，揺れがずっと大きい．ある段の時間が少し長く（短く）出ると，その段の下と上の増えが逆向きに変わるためである．電源につながず，ふだんと違う電源プランで似た入力を流したときは，隣の段どうしでは 0.3 秒以上の増えでも 1.22 まで揺れ，2 段離すと 0.14（Jazzer の下で 0.19）だった．数えていない仕事の信号は，離しても変わらない．そこで 2 段離して比べる（`TIME_SPAN` = 2）．
 - 揺れの違う機械では，環境変数 `KULMS_FUZZ_NOISE` で `NOISE` を変えられる．
+- CI の機械は，ほかのジョブと分け合うので静かにできず，揺れも測っていない．そのため CI では時間を確かめない（`KULMS_FUZZ_NOISE=Infinity`）．続く修正の後の CI では，`assignments` の ×65536 から ×262144 までの 2 段で，仕事量は 4.0 倍なのに時間が 8.45 倍（12.6 秒から 106.5 秒）になり，0.54 上回った．手元では，同じ入力が Node だけでも Jazzer の下でも 4.4 倍ほどで，GC はその段の時間の 13% だった．
 
 ## ファジングで避けている既知の問題
 
@@ -596,6 +613,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 | fix/sakai-answer-shape | `assignments` | B19 | 120 秒で失敗なし（その前に，jsdom の URL の解析の遅さで時間切れになる入力が出たので，サイドバーの href の長さに上限を設けた） |
 | fix/site-contact-pages | `site-contact`，`background-message` | B20 | 各 120 秒で失敗なし |
 | 13 本すべてを当てたもの | 7 対象すべて | S2，S7，S8，B10，B15〜B18，B21 | `assignments` が，科目の一覧でも B19 と同じ誤りが起きるのを見つけた（B19 に加えた）．避ける範囲を広げた後は，`assignments` を 120 秒，ほかの 6 対象を各 60 秒回して失敗なし．入力の件数などの上限を外した後も，7 対象を各 60 秒回して失敗なし |
+| 24 本すべてを当てたもの（2026-10-08） | 7 対象すべて | S2，S6，S7，S8，S9，B10，B15〜B21 | 各 60 秒，続けて各 300 秒で失敗なし．当てると，S1 の前半と S9 が `src/auth-totp.js` で重なる（S1 の前半がデコードを除くほうを採る）．S1 の前半が background に移したデコードに S9 の正規表現が残っていたのと，B1 の修正が読む `isLoading` を B9 の修正が消していたのを，それぞれのブランチで直した．テストは失敗 0 で，todo 62 件のうち 58 件が通る（残りは，判断の要る B14，S1 の後半，コミットを `git archive` してビルドする B5 と B6） |
 
 段で判定するようにした後のファジング（2026-10-07）:
 
@@ -604,6 +622,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 - S9 は，main でも 60 秒では見つからなかった．曜日と時限，フォルダの深さ，TOTP のシークレットを読む部分には，どのファズ対象も届かないためで，そこは [tests/runs.test.mjs](../tests/runs.test.mjs) が次数で確かめる．
 - その後の CI では，`site-contact` と `background-message` が止まったが，どちらもファジングの側の誤りだった．応答の本文を途中で切る位置を，本文の長さまでの位置として読んでいたので，段で本文が長くなると，位置を書くバイト数が変わり，その後の読み方がずれて，段どうしが別の入力になっていた．`background-message` は「答えが返らない」として止まった．上限を超えた後は数える一歩がどれも例外を投げるので，ハーネスが答えを送り手の realm に写すところで答えが失われていた．これは，同じ background で前の入力が Shift_JIS の表（最初の検索で約 16 万歩）を作り終えていたときだけ起きる．表を作る最初の段では，次の段で仕事が減るので伸びを読まないからである．切る位置は本文に対する割合として読み，どの段も provider に同じ問いをすることを，ファジングの最中とテストで確かめるようにした．答えは写しが例外を投げても届け，失敗の文言は，上限を超えたことを先に述べる．
 - 直した後のファジングでは，この突き合わせが，`i18n` の対象の読み方のずれを見つけた（B15 を避ける判定を入力を読み終える前にしていたので，繰り返したキーの段では続きを読んでいた）．また `grading-status` が，拡張が要求の ID に使う乱数の長さが段ごとに違うことで止まった（同じ入力を 1 つのプロセスで 300 回流すと 1 回）．判定は入力を読み終えてからにし，拡張の `Math.random` は，入力のバイト列から作るシードで始まる乱数に替えて，同じ入力のどの段にも同じ並びを返すようにした．続いて `i18n` が，B10 の値が置換の記法として読まれることで，結果と仕事が値の長さの 3 乗まで伸びるのを見つけた（B10 に加え，避ける範囲を `t()` を呼ぶことまで広げた）．その後は，7 対象を各 60 秒回して失敗はなかった．
+- それを直した後の CI では，`syllabus-search` が，探す科目名を繰り返した入力で止まった．科目名の中で検索結果の行の名前を探す処理は，科目名が行の名前より短いうちは試す場所が無く，追い越すと 1 単位ごとに行の名前の長さだけ増える．長さの違う行が 2 つあったので，その追い越しが 2 段にまたがり，速い伸びが 2 段続いて見えた（×16 から先は線形）．伸びは，繰り返す部分が入力の残り以上の長さになった段から読むようにした．また `assignments` が，大きな段で時間の伸びが仕事量の伸びを 0.54 上回って止まった．手元では起きないので，CI では時間を確かめないことにした（「時計の揺れ」）．その後は，CI と同じ設定で 7 対象を各 300 秒回して失敗はなく，canary も 4 秒で見つかった．
 
 ## 進める順序
 
