@@ -7,6 +7,7 @@
 // (LICENSES/GPL-3.0-or-later.txt).
 //
 // Where the extension and the harness's own files are.
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,9 +21,13 @@ if (!fs.existsSync(path.join(EXT, "manifest.json"))) {
   throw new Error(`no extension at ${EXT}: run git submodule update --init, or set KULMS_EXTENSION_DIR`);
 }
 
-// What the harness writes for itself (the scripts as it runs them). Git
-// ignores it.
-export const CACHE = path.join(ROOT, ".harness");
+// What the harness writes for itself (the scripts as it runs them), in a
+// directory of each checkout of the extension, so that runs on several
+// checkouts at once (KULMS_EXTENSION_DIR) do not write over one another's
+// scripts. Git ignores it.
+const checkout = EXT === path.join(ROOT, "kulms-extension") ? "submodule"
+  : `${path.basename(EXT)}-${createHash("sha256").update(EXT).digest("hex").slice(0, 8)}`;
+export const CACHE = path.join(ROOT, ".harness", checkout);
 
 export const read = (rel) => fs.readFileSync(path.join(EXT, rel), "utf8");
 export const manifest = JSON.parse(read("manifest.json"));

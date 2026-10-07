@@ -10,8 +10,8 @@
 // manifest has them, drawn from a fresh cache so that nothing is fetched.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Browser, openPopup, settle, until } from "../harness/index.mjs";
-import { D, H, LMS, assignment, cached, card, openCoursePage, openPanel } from "./lms.mjs";
+import { Browser, Net, openPopup, settle, until } from "../harness/index.mjs";
+import { COURSE_PAGE, D, H, LMS, assignment, cached, card, openCoursePage, openPanel } from "./lms.mjs";
 
 function browserWith(stored) {
   const browser = new Browser();
@@ -174,4 +174,49 @@ test("B8: drawing the list twice in a row leaves one banner of each kind", { tod
   checkbox().click();
   await settle(100);
   assert.equal(panel.querySelectorAll(".kulms-tester-banner").length, 2);
+});
+
+// A course page whose fetch reaches Sakai's API: the course's assignments and
+// quizzes are `assignments` and `quizzes`, and anything else is not found. It
+// returns the names of what fetchAllAssignments() fetches.
+async function fetchedNames(t, assignments, quizzes) {
+  const json = (body) => ({ headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const net = new Net()
+    .on(`${LMS}/direct/assignment/site/C1.json`, json({ assignment_collection: assignments }))
+    .on(`${LMS}/direct/sam_pub/context/C1.json`, json({ sam_pub_collection: quizzes }));
+  const tab = openCoursePage(browser, { net });
+  await until(() => tab.internals["src/assignments.js"]);
+  return Array.from(await tab.internals["src/assignments.js"].fetchAllAssignments(), (a) => a.name);
+}
+
+const due = { epochSecond: Math.floor(Date.now() / 1000) + 3 * 86400 };
+const B19 = "B19: the fetches read Sakai's answers without looking at their shape, so a TypeError on one item takes out all of the courses of the list, or all of a course's assignments or quizzes";
+
+test("B19: one malformed assignment does not take the course's other assignments out", { todo: B19 }, async (t) => {
+  for (const bad of [null, { title: "状態が数の課題", entityId: "A2", dueTime: due, submissions: [{ status: 1 }] }]) {
+    const names = await fetchedNames(t, [bad, { title: "レポート1", entityId: "A1", dueTime: due }], []);
+    assert.ok(names.includes("レポート1"), `${JSON.stringify(bad)}: ${JSON.stringify(names)}`);
+  }
+});
+
+test("B19: one malformed quiz does not take the course's other quizzes out", { todo: B19 }, async (t) => {
+  const names = await fetchedNames(t, [], [null, { title: "小テスト1", publishedAssessmentId: 7, dueDate: due }]);
+  assert.ok(names.includes("小テスト1"), JSON.stringify(names));
+});
+
+test("B19: one malformed site in Sakai's list of courses does not take the other courses out", { todo: B19 }, async (t) => {
+  const json = (body) => ({ headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const net = new Net()
+    .on(`${LMS}/direct/site.json`, json({ site_collection: [null, { id: "C1", title: "線形代数", type: "course" }] }))
+    .on(`${LMS}/direct/assignment/site/C1.json`, json({ assignment_collection: [{ title: "レポート1", entityId: "A1", dueTime: due }] }));
+  // No course in the page's sidebar, so that the courses come from Sakai's API.
+  const html = COURSE_PAGE.replace(/<nav[\s\S]*<\/nav>/, '<nav id="portal-nav-sidebar"><ul></ul></nav>');
+  const tab = openCoursePage(browser, { net, html });
+  await until(() => tab.internals["src/assignments.js"]);
+  const names = Array.from(await tab.internals["src/assignments.js"].fetchAllAssignments(), (a) => a.name);
+  assert.deepEqual(names, ["レポート1"]);
 });

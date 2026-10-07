@@ -69,6 +69,21 @@ earlier=${4:-}
 grace=300
 per_input_ms=10000
 
+# The longest input libFuzzer makes for a target (it makes none longer than
+# 4,096 bytes unless told). A megabyte lets a page, a message or an answer of
+# the network be as large as the extension can meet; fuzz/lib.mjs also makes
+# strings and arrays of millions of units out of a few bytes. The assignment
+# panel takes 64 KiB: from a megabyte it would draw tens of thousands of
+# assignments, which jsdom takes longer than --timeout over even in linear
+# time, so that slowness could not be told from a hang. tests/large.test.mjs
+# draws large lists with a time limit of its own.
+max_len_of() {
+  case "$1" in
+    assignments) echo 65536 ;;
+    *) echo 1048576 ;;
+  esac
+}
+
 # Sets `cmd` to the command that runs Jazzer.js on fuzz/targets/<target>.fuzz.mjs:
 #   command_for <target> [corpus directories...] -- [libFuzzer's options...]
 command_for() {
@@ -135,7 +150,7 @@ for target in "${targets[@]}"; do
 
   dirs=("$corpora/$target")
   if [ -d "fuzz/seeds/$target" ]; then dirs+=("fuzz/seeds/$target"); fi
-  options=(-max_total_time="$seconds" -rss_limit_mb=4096 -artifact_prefix="$crashes/$target/" -print_final_stats=1)
+  options=(-max_total_time="$seconds" -max_len="$(max_len_of "$target")" -rss_limit_mb=4096 -artifact_prefix="$crashes/$target/" -print_final_stats=1)
   if [ -f "fuzz/dict/$target.dict" ]; then options+=(-dict="fuzz/dict/$target.dict"); fi
   before=$(find "$corpora/$target" -type f | wc -l)
   log=$(mktemp)

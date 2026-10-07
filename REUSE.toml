@@ -23,11 +23,11 @@ precedence = "override"
 SPDX-FileCopyrightText = "2026 Yuma Kakei <yumasansansan@gmail.com>"
 SPDX-License-Identifier = "GPL-3.0-or-later"
 
-# Inputs of the fuzz targets (fuzz/README.md): the seeds, written by hand; the
-# inputs that once made a target fail and pass since its fix; the inputs that
-# fail while a finding of docs/findings.md stands; and the input the canary
-# must fail on. A fuzzer made some of them, from nothing but the targets and
-# the extension's code; they hold no one's data.
+# Inputs of the fuzz targets (fuzz/README.md): the seeds; the inputs that once
+# made a target fail and pass since its fix; the inputs that fail while a
+# finding of docs/findings.md stands, all of which fuzz/inputs.mjs writes from
+# the values written out in it; and the input the canary must fail on. They
+# hold no one's data.
 [[annotations]]
 path = ["fuzz/seeds/**", "fuzz/regressions/**", "fuzz/known/**", "fuzz/canary/planted-input"]
 precedence = "override"

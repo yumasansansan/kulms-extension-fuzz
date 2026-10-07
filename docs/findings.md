@@ -11,15 +11,15 @@ specification: the GNU General Public License, version 3 or any later version
 # KULMS+ 拡張機能 レビューの記録
 
 - **対象**: [Radian0523/kulms-extension](https://github.com/Radian0523/kulms-extension) の [`087452e`](https://github.com/Radian0523/kulms-extension/commit/087452e33d14c117e6fa584fe3dd4b19f8f9a76c)（v1.21.0 と提出検知の修正）
-- **日付**: 2026-10-06
-- **方法**: 全ソースを通読した．そのうえで，実コードを Node 26.10.0 と jsdom 30.1.2 の上で動かして確かめた．その後，拡張を Node の上で動かすハーネス（[harness/](../harness/)）を作り，確かめたことをテスト（[tests/](../tests/)）にした．また，Jazzer.js でファジング（[fuzz/](../fuzz/)）を行い，B15〜B18 と，S7 の新しい例を見つけた
+- **日付**: 2026-10-06（B19〜B21 は 2026-10-07）
+- **方法**: 全ソースを通読した．そのうえで，実コードを Node 26.10.0 と jsdom 30.1.2 の上で動かして確かめた．その後，拡張を Node の上で動かすハーネス（[harness/](../harness/)）を作り，確かめたことをテスト（[tests/](../tests/)）にした．また，Jazzer.js でファジング（[fuzz/](../fuzz/)）を行い，B15〜B21 と，S7 の新しい例を見つけた
 - 行番号は上記コミット時点のもの．リンクはそのコミットへの固定リンク
 
 ## 凡例
 
 - **重さ**: 高（利用者のデータが消える，広く効く）／中／低
 - **確認**: 再現（tests/ のテストで再現した）／計測（時間を測った）／ビルド（build.sh を実行した）／ファズ（ファジングで見つかった）／読解（コードを読んで判断した）
-- **状態**: 未着手／対応中（直したブランチへのリンクを書く）／PR 中（PR へのリンクを書く）／修正済（上流に取り込まれた）．上流に取り込まれたら，tests/ の該当テストから `todo` を外し，ID を `fuzz/open-findings.mjs` から外す
+- **状態**: 未着手／対応中（直したブランチへのリンクを書く）／PR 中（PR へのリンクを書く）／修正済（上流に取り込まれた）．上流に取り込まれたら，tests/ の該当テストから `todo` を外し，ID を `fuzz/open-findings.mjs` から外し，`fuzz/inputs.mjs` での既知の入力の書き出し先を `fuzz/regressions/` に移す
 
 ## 一覧
 
@@ -42,7 +42,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [B7](#b7) | 低 | キャッシュから描画すると，クイズのリンクが課題ツールを指す | 再現 | 未着手 | |
 | [B8](#b8) | 低 | バナーが重複し，設定タブにも紛れ込む | 再現 | 未着手 | |
 | [B9](#b9) | 低 | 読み込み中の更新要求が，成功扱いのまま捨てられる | 読解 | 未着手 | |
-| [B10](#b10) | 低 | i18n の置換で `$&` などが展開される（潜在） | 再現 | 対応中（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)） | |
+| [B10](#b10) | 低 | i18n の置換で，値の中の `$&` や置き場所の名前が展開される（潜在） | 再現・ファズ | 対応中（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)） | |
 | [B11](#b11) | 低 | 教科書一覧が科目名をキーにしていて，同名の科目が衝突する | 読解 | 未着手 | |
 | [B12](#b12) | 低 | ページから書き換えられる Web Storage の値で例外になる | 読解 | 対応中（[fix/web-storage-values](https://github.com/yumasansansan/kulms-extension/tree/fix/web-storage-values)） | |
 | [B13](#b13) | 低 | シラバス検索の最後のフォールバックが無関係な科目を選びうる | 読解 | 未着手 | |
@@ -51,6 +51,9 @@ specification: the GNU General Public License, version 3 or any later version
 | [B16](#b16) | 低 | TA 採点支援が壊れた `%` の並びで URIError を投げ，装飾が止まる | ファズ | 対応中（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)） | |
 | [B17](#b17) | 中 | 保存されたメモに null が 1 つあると，課題パネルの描画が止まる | ファズ | 対応中（[fix/invalid-memo](https://github.com/yumasansansan/kulms-extension/tree/fix/invalid-memo)） | |
 | [B18](#b18) | 低 | TA 採点支援が，ページから届く提出の status の型を確かめず TypeError で止まる | ファズ | 対応中（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)） | |
+| [B19](#b19) | 低 | Sakai の応答に形の崩れた項目が 1 つあると，ほかの科目や課題も一覧から消える | ファズ | 未着手 | |
+| [B20](#b20) | 低 | サイト連絡先の取得で，pages.json の形の崩れたページが，後のページを隠す | ファズ | 未着手 | |
+| [B21](#b21) | 低 | `t()` に値を 1 つだけ空文字列で渡すと，`$HOURS$` などが残る（潜在） | ファズ | 対応中（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)） | |
 | [P1](#p1) | **高** | 課題取得の N+1 と，タブごとの短い間隔での再取得（LMS への負荷） | 読解 | 未着手 | [#32](https://github.com/Radian0523/kulms-extension/issues/32), [#27](https://github.com/Radian0523/kulms-extension/issues/27) |
 | [P2](#p2) | 中 | フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行う | 読解 | 未着手 | [#62](https://github.com/Radian0523/kulms-extension/issues/62) |
 | [P3](#p3) | 中 | `document.body` 全体を監視する MutationObserver が多く，重い | 読解 | 未着手 | |
@@ -163,9 +166,10 @@ specification: the GNU General Public License, version 3 or any later version
 
 - 場所: [background.js:370](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L370)（`<[^>]+>`），[:433](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L433)（`^(.*?)『(.+?)』`）
 - 根拠: 閉じない `<` や対にならない `『` が 20,000 字続くと，それぞれ約 0.2 秒かかる．
-- そのほか: 同じ型の正規表現が，ほかに 3 つある．
+- そのほか: 同じ型の正規表現が，ほかにもある．
   - 出版社を読む `[（(]([^）)]+)[）)]`（閉じない括弧が続くとき）と，書名の末尾の区切りを除く `[\s,、;；]+$`（区切りが途中に長く続くとき）．4 万字で 1〜3 秒かかる．
   - 出版社のフォールバックの `[,、]\s*([^,、]+?(?:社|…))`．`\s*` と `[^,、]+?` が空白を取り合い，読点の後に全角空白などが長く続くと遅くなる（2 万字で約 0.2 秒）．答えを変えずに直すには，出版社の語の並びを 2 回書く必要がある．起きる条件も考えにくいので，まだ直していない．
+  - 検索結果を読む [background.js:228](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L228)（行の `<tr[^>]*>([\s\S]*?)<\/tr>`），[:244](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L244)（列の `<td[^>]*>([\s\S]*?)<\/td>`），[:248](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L248)（列の中のタグを除く `<[^>]+>`）．閉じない `<`，`>` の無い `<tr`，`</tr>` の無い `<tr>`，`</td>` の無い `<td>` が 4 万字続くと，それぞれ約 0.75 秒，0.25 秒，0.09 秒，0.09 秒かかる（2026-10-07，ファズ対象が S8 を避けずに届くことに気づいて測った）．fix/syllabus-parse は，これらをまだ直していない．
 - 補足: 教員が書いた文字は，KULASIS がエスケープして HTML に出す（`<` は `&lt;` になる）．そのため，タグを除く `<[^>]+>` が遅くなる入力は，教員の入力からは作りにくい．
 - 対応: 370 行，433 行，出版社の括弧，書名の末尾の 4 つを，答えを変えずに線形の時間にした（[fix/syllabus-parse](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-parse)）．ランダムな 10 万件のページで古い実装と答えを突き合わせると，行の途中に U+2028 などの改行扱いの文字があるときを除いて一致した．そのとき古い実装は，『』を書名として読まなかった．
 - テスト: `tests/background.test.mjs` の「S8」．4 つの正規表現を，4 万字の入力でそれぞれ測る．
@@ -262,13 +266,16 @@ specification: the GNU General Public License, version 3 or any later version
 - 直し方: 進行中の Promise を返す．強制更新の要求は，今の処理が終わった後に 1 回実行する．
 
 ### B10
-**i18n の置換で `$&` などが展開される（潜在）**（低・再現）
+**i18n の置換で，値の中の `$&` や置き場所の名前が展開される（潜在）**（低・再現・ファズ）
 
 - 場所: [src/settings.js:112](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/settings.js#L112)，[popup.js:29](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L29)
-- 何が起きるか: 値を `String.prototype.replace` の置換文字列として渡しているので，`$&` は `$MINS$` に，`$$` は `$` に変わる．今の呼び出しは数値しか渡さないので，表には出ていない．
-- 直し方: `msg.replace(re, () => value)` のように関数で渡す．
-- 対応: 値は関数で渡し，そのまま入れる（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)，B15 と同じブランチ）．
-- テスト: `tests/i18n.test.mjs` の「B10」の 2 件（settings.js と popup.js の `t()`）．
+- 何が起きるか: 値が，置いたとおりに入らない．今の呼び出しは数値しか渡さないので，表には出ていない．
+  - 値を `String.prototype.replace` の置換文字列として渡しているので，`$&` は `$MINS$` に，`$$` は `$` に変わる．
+  - 置き場所ごとに順に置き換えるので，前に入れた値の中に後の置き場所の名前（`$MINS$` など）があると，それも置き換わる．`t("remainDaysHoursMins", ["$HOURS$", "5", "7"])` は「残り5日5時間7分」になる．
+- 根拠: 後半は，前半を直したブランチを読んで気づき，ファズ対象 `i18n` もそのブランチで見つけた（2026-10-07，期待する結果と比べる確かめ方にしてから）．
+- 直し方: メッセージを 1 回だけ置き換え，値は関数で返す．
+- 対応: メッセージを 1 回だけ置き換え，値は関数で返してそのまま入れる（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)，B15，B21 と同じブランチ）．
+- テスト: `fuzz/known/i18n/B10-placeholder-in-value`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/i18n.test.mjs` の「B10」の 2 件（settings.js と popup.js の `t()`）．
 
 ### B11
 **教科書一覧が科目名をキーにしていて，同名の科目が衝突する**（低・読解）
@@ -308,7 +315,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: 読み込んだ messages.json を `__kulmsOverrideMessages[key]` で引くので，`constructor`，`toString`，`hasOwnProperty` などのキーは Object.prototype の関数に当たる．その `message` は undefined なので，`t()` は文字列でなく undefined を返す．今の呼び出しはキーが定数なので，表には出ていない．
 - 根拠: ファズ対象 `i18n` が，起動から 1 秒足らず（390 回目）で見つけた．
 - 直し方: `Object.hasOwn(messages, key)` で引く．
-- 対応: 辞書自身のキーだけを引き，それ以外は `chrome.i18n.getMessage` に任せる（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)，B10 と同じブランチ）．
+- 対応: 辞書自身のキーだけを引き，それ以外は `chrome.i18n.getMessage` に任せる（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)，B10，B21 と同じブランチ）．
 - テスト: `fuzz/known/i18n/B15-hasOwnProperty`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/i18n.test.mjs` の「B15」（popup の `t()`）．
 
 ### B16
@@ -340,6 +347,47 @@ specification: the GNU General Public License, version 3 or any later version
 - 直し方: ページから届いた値は型を確かめてから使う（文字列でなければ空として扱う）．
 - 対応: 届いた提出は，ブリッジが送るのと同じ形に揃える（文字列の項目は文字列，真偽の項目は真偽値）．`stripStatusIcon()` も文字列でないものを空として扱う（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)，B16 と同じブランチ）．
 - テスト: `fuzz/known/grading-status/B18-status-object`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/grading-ta.test.mjs` の「B18」（ページのスクリプトがブリッジの代わりに答える）．
+
+### B19
+**Sakai の応答に形の崩れた項目が 1 つあると，ほかの科目や課題も一覧から消える**（低・ファズ）
+
+- 場所: [src/assignments.js:265-367](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L265-L367)（課題），[:380-413](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L380-L413)（クイズ），[:103-113](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L103-L113)，[:155-166](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L155-L166)（科目の一覧）
+- 何が起きるか: 科目ごとの取得は，Sakai の API の応答を，形を確かめずに読む．次のようなときに TypeError になる．
+  - 応答や項目が null のとき（`data.assignment_collection`，`a.entityId`，`a.dueTime`）
+  - 提出の `status` が文字列でないとき（`toLowerCase` が無い）
+  - 一覧が配列でないとき（`map` が無い）
+
+  取得全体を囲む try がこれを受けて `console.warn` に書き，その科目の課題を空にする．そのため，形の崩れた項目が 1 つあるだけで，同じ科目の正しい課題も一覧から黙って消える．クイズの取得は，警告も出さずに，その科目のクイズをすべて捨てる．
+
+  科目の一覧（`site.json`）でも同じで，項目が 1 つ崩れていると，API から得た一覧をすべて捨てて，ポータルのページから科目を読む方法に切り替わる．ポータルのページから読めない科目は，課題ごと一覧から消える（ページも読めなければ「科目が見つからない」になる）．
+- 根拠: ファズ対象 `assignments` が，拡張の捕まえたプログラムの誤りも失敗とするようにした最初の実行で見つけた（課題の一覧の応答が JSON の `null` だった）．次の 2 つのとき，同じ科目の正しい課題も消えることを確かめた．
+  - 項目に null があるとき
+  - 提出の `status` が数のとき
+
+  クイズでも，null の項目があると同じことが起きる．科目の一覧の経路は，13 本の修正をすべて当てた拡張のファジングで見つけた（`site.json` の応答が `null` だった）．
+- 見立て: Sakai の API がこの形を返すことは，まず無い．ただ，期限を知らせる拡張で，科目ごと期限の一覧から黙って消えるのは重い失敗になる．
+- 直し方: 応答と項目の形を確かめ，形の崩れた項目だけを飛ばす．文字列の項目は，文字列のときだけ使う．
+- テスト: `fuzz/known/assignments/B19-null-assignment`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B19」の 3 件（課題，クイズ，科目の一覧）．
+
+### B20
+**サイト連絡先の取得で，pages.json の形の崩れたページが，後のページを隠す**（低・ファズ）
+
+- 場所: [background.js:75-83](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L75-L83)
+- 何が起きるか: `fetchSakaiSiteContact()` は，pages.json の各ページの `tools` を，形を確かめずに読む．ページが null のとき（`p.tools`）や，`tools` が反復できない値のときに TypeError になる．関数全体を囲む try がこれを受けて null を返すので，後に Site Info のツールがあっても連絡先が見つからない．
+- 根拠: ファズ対象 `site-contact` が，拡張の捕まえたプログラムの誤りも失敗とするようにした最初の実行で見つけた（pages.json が `[null]` だった）．
+- 見立て: Sakai がこの形を返すことは，まず無い．失うのも，同名の科目を教員名で絞り込む手がかりだけなので，影響は小さい．
+- 直し方: オブジェクトでないページと，配列でない `tools` を飛ばす．
+- テスト: `fuzz/known/site-contact/B20-null-page`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/background.test.mjs` の「B20」．
+
+### B21
+**`t()` に値を 1 つだけ空文字列で渡すと，`$HOURS$` などが残る（潜在）**（低・ファズ）
+
+- 場所: [src/settings.js:107](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/settings.js#L107)，[popup.js:24](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L24)
+- 何が起きるか: `t()` は，置換値を `if (substitutions && entry.placeholders)` で確かめる．そのため，1 つだけ渡した値が空文字列だと置換しない．たとえば `t("sectionDanger", "")` は `$HOURS$時間以内` を返す．配列で渡した `[""]` なら空文字列が入るので，渡し方によって結果が食い違う．今の呼び出しはどれも配列で渡すので，表には出ていない．
+- 根拠: ファズ対象 `i18n` の確かめ方を，値が結果のどこかにあるかを見るものから，期待する結果と比べるものに変えたところで見つけた．
+- 直し方: `substitutions != null` で確かめる．
+- 対応: 値が null か undefined のときだけ置換しない（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)，B10，B15 と同じブランチ）．
+- テスト: `fuzz/known/i18n/B21-empty-value`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/i18n.test.mjs` の「B21」の 2 件（settings.js と popup.js の `t()`）．
 
 ## 速度・負荷
 
@@ -448,10 +496,45 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
 - **検出器**（[harness/detectors.mjs](../harness/detectors.mjs)）: 例外のほか，ページに入り込んだスクリプトを動かすマークアップ（DOM XSS），プロトタイプの汚染，誰も受けない Promise の拒否を失敗とする．
 - **テスト**（[tests/](../tests/)）: 各問題の再現（todo），ハーネス自体のテスト，ファズ対象のシードと回帰入力と既知の失敗入力の再生．
 - **ファジング**（[fuzz/](../fuzz/)）: 外から入力が来る面ごとの 7 つの対象と canary．対象の一覧と運用は [fuzz/README.md](../fuzz/README.md) にある．
+  - 入力は手加減しない（2026-10-07 に見直した）．文字列は入力のビット列を 16 ビットずつ（すべての符号単位），8 ビットずつ（ASCII が出やすい），UTF-8 のいずれかで読む．数は任意の 64 ビットのパターンと境目の値，値は undefined，null，BigInt，入れ子などを含む．数バイトから数百万字の入力も作り，ネットワークは失敗，任意のステータスと Content-Type，途中で切れた本文も返す．libFuzzer に作らせる入力は 1MiB まで（課題パネルは 64KiB）．
+  - 拡張が自分で捕まえて警告だけ出すエラーのうち，プログラムの誤りを示すもの（TypeError などの文言）も失敗とする．B19 と B20 はこれで見つかった．
+  - シードと既知の問題の入力は，`fuzz/inputs.mjs` が，対象の読む値の並びから書く（`fuzz/encode.mjs` が FuzzedDataProvider の逆をたどる）．入力の読み方を変えたときに，これらが黙って別の入力になるのを防ぐためで，テストは，既知の入力がその問題だけを起こすことも確かめる．
+  - 修正ブランチは，`KULMS_EXTENSION_DIR` でその拡張を指し，`KULMS_FUZZ_LOOK_FOR` で直した問題を避けずに探して，ファジングで確かめる．2026-10-07 に 6 本のブランチを各 60 秒（i18n-lookup は 120 秒）確かめ，13 本の修正をすべて当てた拡張でも全対象を確かめた．i18n-lookup で B10 の取りこぼしが，すべて当てた拡張で B19 の別の経路が見つかったほかは，失敗は無かった（下の「ファジングで避けている既知の問題」）．
 - **CI**（[yumasansansan/ADLplug-Next](https://github.com/yumasansansan/ADLplug-Next) にならう）:
   - 素の git でチェックアウトし，submodule も含める．Node は最新版を，pnpm は `packageManager` の版を，`ci/setup.sh` が SHA-256 を確かめて入れる．外部の action は，commit で固定した `actions/upload-artifact` だけ．
   - `ci.yml`（push ごと）: Ubuntu と Windows でのテスト，lint（このリポジトリには ESLint のすべての指摘で失敗し，submodule の拡張には DOM XSS と ReDoS のルールを掛けて報告だけする），REUSE，canary と各対象 1 分のファジング．落ちた入力は artifact に残す．
   - `fuzz.yml`（毎日）: 各対象 20 分のファジング．コーパスを artifact で引き継ぎ，前回落ちた入力を最初に再生する．
+
+## ファジングで避けている既知の問題
+
+ファザーは最初の失敗で止まる．そのため，まだ直っていない問題を起こす入力は，ファズ対象の側で避けている（`fuzz/open-findings.mjs`）．避けている場所にはどれも `Known:` で始まるコメントがあり，[fuzz/README.md](../fuzz/README.md) にも同じ表がある．直った問題は `open-findings.mjs` から外し，対象はまたそれを探す．
+
+| ID | 対象 | 避けているもの |
+|---|---|---|
+| S1 | `background-message` | content script への応答にシークレットがあるかを見ない（LMS の設定パネルが受け取るため） |
+| S2 | `site-contact`，`background-message` | サイト情報のページを 512 バイトで切る |
+| S7 | `background-message` | リスナーが例外を投げる形のメッセージを送らない |
+| S8 | `syllabus-detail`，`syllabus-search`，`background-message` | KULASIS のページ（シラバスと検索結果）を 16,384 バイトで切る |
+| B10 | `i18n` | `$` を含む置換値があるときは，結果を確かめない |
+| B15 | `i18n` | どのオブジェクトにもあるキー（`constructor`，`toString` など）を引かない |
+| B16 | `grading-status` | `%` の並びが壊れたリンクを読ませない |
+| B17 | `assignments` | 保存されたメモから null を除く |
+| B18 | `grading-status` | `toString` か `valueOf` を自分に持つオブジェクトを含む応答を読ませない．提出の項目の型を確かめない |
+| B19 | `assignments` | 科目の一覧と科目ごとの取得が捕まえたプログラムの誤りを数えない |
+| B20 | `site-contact`，`background-message` | `fetchSakaiSiteContact()` が捕まえたプログラムの誤りを数えない |
+| B21 | `i18n` | 値を 1 つだけ，空文字列で渡したときは，値が無いものとして確かめる |
+
+修正ブランチでのファジング（2026-10-07，直した問題を避けずに探した）:
+
+| ブランチ | 対象 | 探した問題 | 結果 |
+|---|---|---|---|
+| fix/i18n-lookup | `i18n` | B10，B15（のちに B21 も） | 前半の修正では，値の中の置き場所の名前が後から置き換わる（B10 の後半）のを見つけた．直した後は 120 秒で失敗なし |
+| fix/grading-ta-input | `grading-status` | B16，B18 | 60 秒で失敗なし |
+| fix/invalid-memo | `assignments` | B17 | 60 秒で失敗なし |
+| fix/message-shape | `background-message` | S7 | 60 秒で失敗なし |
+| fix/site-contact-regex | `site-contact` | S2 | 60 秒で失敗なし |
+| fix/syllabus-parse | `syllabus-detail` | S8 | 60 秒で失敗なし |
+| 13 本すべてを当てたもの | 7 対象すべて | S2，S7，S8，B10，B15〜B18，B21 | `assignments` が，科目の一覧でも B19 と同じ誤りが起きるのを見つけた（B19 に加えた）．避ける範囲を広げた後は，`assignments` を 120 秒，ほかの 6 対象を各 60 秒回して失敗なし．入力の件数などの上限を外した後も，7 対象を各 60 秒回して失敗なし |
 
 ## 進める順序
 

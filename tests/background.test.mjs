@@ -99,3 +99,12 @@ test("B14: encodeShiftJIS says when it cannot encode a character", { todo: "B14:
   // 𠮷 (U+20BB7) has no Shift_JIS code; the search keyword loses it without a word.
   assert.notEqual(g.encodeShiftJIS("𠮷野家"), g.encodeShiftJIS("野家"));
 });
+
+test("B20: a page of pages.json that is null does not hide the Site Info tool after it", { todo: "B20: pages.json is read without looking at its shape, so a TypeError on a page that is null ends the search" }, async (t) => {
+  const net = new Net()
+    .on(`${LMS}/direct/site/`, { headers: { "content-type": "application/json" }, body: JSON.stringify([null, { tools: [{ toolId: "sakai.siteinfo", placementId: "p" }] }]) })
+    .on(`${LMS}/portal/tool/p`, { headers: { "content-type": "text/html; charset=utf-8" }, body: '<th>サイト連絡先・メール</th>\n<td>\n  京大 太郎, <a href="mailto:x@example.com">x</a></td>' });
+  const { browser, g } = background(net);
+  t.after(() => browser.close());
+  assert.equal(await g.fetchSakaiSiteContact("site"), "京大 太郎");
+});

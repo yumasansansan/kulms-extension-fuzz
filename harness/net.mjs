@@ -28,8 +28,9 @@ export class Net {
 
   // Answers the URLs that `match` (a prefix, a RegExp or a predicate) accepts
   // with what `handler(request)` returns: { status, headers, body, url }, body
-  // a string or bytes, url the final URL after a redirect. The newest route
-  // that matches wins.
+  // a string or bytes, url the final URL after a redirect, or { failed: true }
+  // for a network that fails (fetch() rejects, as it does when a host cannot be
+  // reached). The newest route that matches wins.
   on(match, handler) {
     this.routes.unshift({ match, handler: typeof handler === "function" ? handler : () => handler });
     return this;
@@ -44,6 +45,7 @@ export class Net {
       const route = this.routes.find((r) => matches(r.match, url));
       if (!route) throw new context.realm.TypeError("Failed to fetch");
       const answer = (await route.handler(request)) || {};
+      if (answer.failed) throw new context.realm.TypeError("Failed to fetch");
       return response(context.realm, url, answer);
     };
   }

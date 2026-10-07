@@ -26,11 +26,14 @@ test("t() puts a number in its placeholder", async (t) => {
   assert.equal(w.t("lastUpdatedMins", ["5"]), "最終更新: 5分前");
 });
 
-test("B10: t() puts any text in its placeholder as it is", { todo: "B10: the value is a replacement pattern of String.prototype.replace, so $& and $` expand" }, async (t) => {
+const B10 = "B10: the value is a replacement pattern of String.prototype.replace, so $& and $` expand, and each placeholder is replaced in turn, so a value with the name of a later one in it is replaced again";
+
+test("B10: t() puts any text in its placeholder as it is", { todo: B10 }, async (t) => {
   const w = await settings(t);
   for (const value of ["$&", "$$", "$`", "$'", "$1"]) {
     assert.equal(w.t("lastUpdatedMins", [value]), `最終更新: ${value}分前`);
   }
+  assert.equal(w.t("remainDaysHoursMins", ["$HOURS$", "5", "7"]), "残り$HOURS$日5時間7分");
 });
 
 // t() of popup.js, a copy of that of settings.js, once the popup has loaded
@@ -43,11 +46,12 @@ async function popupT(t) {
   return popup.internals["popup.js"].t;
 }
 
-test("B10: t() of the popup puts any text in its placeholder as it is", { todo: "B10: the value is a replacement pattern of String.prototype.replace, so $& and $` expand" }, async (t) => {
+test("B10: t() of the popup puts any text in its placeholder as it is", { todo: B10 }, async (t) => {
   const popupt = await popupT(t);
   for (const value of ["$&", "$$", "$`", "$'", "$1"]) {
     assert.equal(popupt("lastUpdatedMins", [value]), `最終更新: ${value}分前`);
   }
+  assert.equal(popupt("remainDaysHoursMins", ["$HOURS$", "5", "7"]), "残り$HOURS$日5時間7分");
 });
 
 test("B15: t() of the popup answers a key that every object has with a string", { todo: "B15: the key is looked up through the prototype, and t(\"hasOwnProperty\") is undefined" }, async (t) => {
@@ -55,4 +59,16 @@ test("B15: t() of the popup answers a key that every object has with a string", 
   for (const key of ["hasOwnProperty", "constructor", "toString", "__proto__"]) {
     assert.equal(typeof popupt(key), "string", key);
   }
+});
+
+const B21 = "B21: the values are tested for truth, so an empty value given alone is not put in, and $HOURS$ stays";
+
+test("B21: t() puts an empty value given alone in its placeholder", { todo: B21 }, async (t) => {
+  const w = await settings(t);
+  assert.equal(w.t("sectionDanger", ""), "時間以内");
+});
+
+test("B21: t() of the popup puts an empty value given alone in its placeholder", { todo: B21 }, async (t) => {
+  const popupt = await popupT(t);
+  assert.equal(popupt("sectionDanger", ""), "時間以内");
 });
