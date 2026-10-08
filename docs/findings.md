@@ -33,7 +33,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [S6](#s6) | 低 | 不正な TOTP シークレットを保存できる | 再現 | 対応中（[fix/validate-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/validate-totp-secret)） | |
 | [S7](#s7) | 低 | 形の崩れたメッセージで onMessage リスナーが例外を投げる | 再現 | 対応中（[fix/message-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/message-shape)） | |
 | [S8](#s8) | 低 | シラバス解析の正規表現が入力長の 2 乗で遅くなる | 再現・計測 | 対応中（[fix/syllabus-parse](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-parse)） | |
-| [S9](#s9) | 低 | 科目名，TOTP のシークレット，フォルダを読む正規表現が入力長の 2 乗で遅くなる | 解析・再現・計測 | 対応中（[fix/backtracking-regexes](https://github.com/yumasansansan/kulms-extension/tree/fix/backtracking-regexes)） | |
+| [S9](#s9) | 低 | 科目名，TOTP のシークレット，フォルダを読む正規表現が入力長の 2 乗で遅くなる | 解析・再現・計測 | 対応中（[fix/backtracking-regexes](https://github.com/yumasansansan/kulms-extension/tree/fix/backtracking-regexes)．ログインページの分は S1 の前半） | |
 | [B1](#b1) | **高** | 複数タブを開いていると，メモ・完了チェック・非表示が消える | 再現 | PR 中（[#75](https://github.com/Radian0523/kulms-extension/pull/75)） | |
 | [B2](#b2) | 中 | 非表示にした課題が 30 日後に一覧へ戻る | 再現 | PR 中（[#76](https://github.com/Radian0523/kulms-extension/pull/76)） | [#74](https://github.com/Radian0523/kulms-extension/issues/74) |
 | [B3](#b3) | 中 | サイドバーの色分けで，期限切れが最も弱く扱われる | 再現 | 対応中（[fix/sidebar-overdue-color](https://github.com/yumasansansan/kulms-extension/tree/fix/sidebar-overdue-color)） | |
@@ -91,7 +91,7 @@ specification: the GNU General Public License, version 3 or any later version
   2. `load`・`save`・`delete` は拡張ページ（`sender.tab` が無く，`sender.url` が `chrome.runtime.getURL("")` で始まる）からだけ受け付ける．登録は auth.iimc の送信元に限った専用メッセージにする．
   3. QR とシークレットの表示は popup かオプションページだけで行い，LMS の設定パネルからはそこへ誘導する（挙動の変更になるので，先に上流で Issue を立てる）．
 - 対応: 前半として，自動入力が background で計算したコードだけを受け取るようにし（`kulms-totp-code`），認証ページの content script には `kulms-totp-load` でシークレットを返さないようにした（[fix/totp-code-from-background](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-code-from-background)）．時刻は background が決めるので，content script は先の時刻のコードを求められない．LMS の設定パネルでのコードと QR の表示（直し方の 3）は，表示の場所が変わるので，上流で Issue を立ててから行う．
-- 前半のブランチが background に置いた base32 のデコードは，末尾の = を `/=+$/` で取っていた（S9 の正規表現の写し）．すべての修正ブランチを当てたときに見つけ，同じブランチで S9 と同じ書き方に直した．
+- 前半のブランチが background に置いた base32 のデコードは，末尾の = を `/=+$/` で取っていた（S9 の正規表現の写し）．すべての修正ブランチを当てたときに見つけ，同じブランチで S9 と同じ書き方に直した．`src/auth-totp.js` のデコードはこのブランチが取り除くので，S9 のブランチはそこに触れない（2 つのブランチが衝突しないように）．
 - テスト: `tests/totp.test.mjs` の「S1」の 3 件．前半で，ログインページと認証ページの 2 件が通る．設定パネルの 1 件は，後半まで失敗する．
 
 ### S2
@@ -193,8 +193,8 @@ specification: the GNU General Public License, version 3 or any later version
   - 曜日と時限は，先に「曜日 時限 ]」を探し，同じ括弧の中（前の `]` から曜日まで）に，年の 4 桁が続く `[` か，曜日の直前の `[` があるかを確かめる．どの括弧の中も一度しか見ない．最初の書き換えでは，`[` を探す `indexOf` が括弧の外まで走っていたため，「月1]」が長く続くと 2 乗になった（数えた仕事量の次数 1.98）．下のテストの「月1]」の連なりは，これを確かめる．
   - フォルダの深さは，`collectionId` の後に `='…'` が無い行の残りを丸ごと一致させて，次の行へ進む．
   - 新しい正規表現はどれもオートマトンで線形と判定された．関わる文字だけでできたランダムな文字列で，元の正規表現と答えが一致した（曜日と時限は 20 万件，ほかは各 3 万件．`cleanCourseName()` は前後の空白を除いた結果が一致し，関数はその結果を返す）．
-- S1 の前半のブランチ（[fix/totp-code-from-background](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-code-from-background)）が background に置いた base32 のデコードにも同じ `/=+$/` があったので，そのブランチで同じように直した．2 つのブランチは `src/auth-totp.js` で重なる（S1 の前半はそこからデコードを除き，S9 はそこを直す）ので，後に取り込むほうで，デコードを除くほうを採る．
-- テスト: [tests/regexp.test.mjs](../tests/regexp.test.mjs) の「S9」（オートマトン），[tests/runs.test.mjs](../tests/runs.test.mjs)（それぞれの連なりの長さ n，2n，4n で数えた仕事量の伸びの次数．main では 2.00，修正後は 1）．
+- ログインページの `src/auth-totp.js` のデコードは，このブランチでは直さない．S1 の前半のブランチ（[fix/totp-code-from-background](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-code-from-background)）が，そのデコードを background へ移して取り除くからで，ここで直すと同じ行を変えて衝突する．S1 の前半が background に置いたデコードの `/=+$/` は，そのブランチで同じように直した．そのため，S9 はこの 2 つのブランチがそろって直る．
+- テスト: [tests/regexp.test.mjs](../tests/regexp.test.mjs) の「S9」（オートマトン），[tests/runs.test.mjs](../tests/runs.test.mjs)（それぞれの連なりの長さ n，2n，4n で数えた仕事量の伸びの次数．main では 2.00，修正後は 1）．ログインページのデコードの件と，オートマトンの件は，S1 の前半とそろって通る．
 
 ## 不具合
 
@@ -613,7 +613,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 | fix/sakai-answer-shape | `assignments` | B19 | 120 秒で失敗なし（その前に，jsdom の URL の解析の遅さで時間切れになる入力が出たので，サイドバーの href の長さに上限を設けた） |
 | fix/site-contact-pages | `site-contact`，`background-message` | B20 | 各 120 秒で失敗なし |
 | 13 本すべてを当てたもの | 7 対象すべて | S2，S7，S8，B10，B15〜B18，B21 | `assignments` が，科目の一覧でも B19 と同じ誤りが起きるのを見つけた（B19 に加えた）．避ける範囲を広げた後は，`assignments` を 120 秒，ほかの 6 対象を各 60 秒回して失敗なし．入力の件数などの上限を外した後も，7 対象を各 60 秒回して失敗なし |
-| 24 本すべてを当てたもの（2026-10-08） | 7 対象すべて | S2，S6，S7，S8，S9，B10，B15〜B21 | 各 60 秒，続けて各 300 秒で失敗なし．当てると，S1 の前半と S9 が `src/auth-totp.js` で重なる（S1 の前半がデコードを除くほうを採る）．S1 の前半が background に移したデコードに S9 の正規表現が残っていたのと，B1 の修正が読む `isLoading` を B9 の修正が消していたのを，それぞれのブランチで直した．テストは失敗 0 で，todo 62 件のうち 58 件が通る（残りは，判断の要る B14，S1 の後半，コミットを `git archive` してビルドする B5 と B6） |
+| 24 本すべてを当てたもの（2026-10-08） | 7 対象すべて | S2，S6，S7，S8，S9，B10，B15〜B21 | 各 60 秒，続けて各 300 秒で失敗なし．当てると，S1 の前半と S9 が `src/auth-totp.js` で衝突したので，S9 のブランチはそこに触れないようにした（そのデコードは S1 の前半が取り除く）．その後は，24 本の 2 本ずつのどの組も，24 本を続けて取り込む 40 通りの順も衝突せず，どの順でも同じ結果になる（`git merge-tree` で確かめた）．S1 の前半が background に移したデコードに S9 の正規表現が残っていたのと，B1 の修正が読む `isLoading` を B9 の修正が消していたのも，それぞれのブランチで直した．テストは失敗 0 で，todo 62 件のうち 58 件が通る（残りは，判断の要る B14，S1 の後半，コミットを `git archive` してビルドする B5 と B6） |
 
 段で判定するようにした後のファジング（2026-10-07）:
 
