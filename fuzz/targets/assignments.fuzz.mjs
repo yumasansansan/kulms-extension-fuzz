@@ -170,6 +170,15 @@ async function run(data) {
   // what it found, and the memo form lists the courses kept, so an earlier
   // input's courses would be drawn, and their work counted, for this one.
   a.lastCourses = [];
+  // What the panel drew for the last input: nothing on a panel just opened. A
+  // fetch reads the course links of the whole page (extractCoursesFromDOM()),
+  // the links of the cards drawn among them, so an earlier input's cards, an
+  // earlier rung's among them, would be read, and their work counted, for this
+  // one. Taking them away is the target's work, not the extension's.
+  uncounted(() => {
+    const content = tab.document.querySelector(".kulms-assign-content");
+    if (content) content.replaceChildren();
+  });
   const fdp = provider(data);
   setSidebar(fdp);
   answers = {

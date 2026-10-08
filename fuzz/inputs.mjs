@@ -75,7 +75,7 @@ const SITE_INFO_TOOLS = [{ tools: [{ toolId: "sakai.siteinfo", placementId: "p" 
 // assignments.fuzz.mjs), after its sidebar and the answer to the courses'
 // assignments: each answer of Sakai's shape (either() picks it) with no item,
 // and the portal's page empty.
-function emptyAnswers(w) {
+export function emptyAnswers(w) {
   w.int(0, 7, 1); w.int(0, w.remaining, 0); value(w, undefined); answer(w); // an assignment's submissions
   w.int(0, 7, 1); w.int(0, w.remaining, 0); answer(w); // the quizzes
   w.int(0, 7, 1); w.int(0, w.remaining, 0); answer(w); // the tools of pages.json
