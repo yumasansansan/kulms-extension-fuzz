@@ -134,6 +134,31 @@ test("B17: a stored memo that is null does not stop the popup's list", { todo: "
   assert.ok(text.includes("レポート1") && text.includes("残るメモ"), "the popup lacks the assignment or the memo");
 });
 
+// The stored state of B17 again, the memos a string where their list belongs.
+const withMemosNotAList = () => ({
+  ...cached([assignment("A1", "レポート1", Date.now() + 30 * H)]),
+  "kulms-memos": "メモ",
+});
+
+test("B17: stored memos that are not a list do not stop the drawing of the panel", { todo: "B17: loadMemos() keeps what is stored, and memos.forEach is not a function" }, async (t) => {
+  const browser = browserWith(withMemosNotAList());
+  t.after(() => browser.close());
+  const tab = openCoursePage(browser);
+  await until(() => tab.document.getElementById("kulms-assign-toggle"));
+  tab.document.getElementById("kulms-assign-toggle").click();
+  const panel = tab.document.getElementById("kulms-assign-panel");
+  await until(() => card(panel, "レポート1"), { timeout: 2000 });
+  assert.ok(card(panel, "レポート1"), "the panel lacks the assignment");
+});
+
+test("B17: stored memos that are not a list do not stop the popup's list", { todo: "B17: the popup takes what is stored for the list, and memos.forEach is not a function" }, async (t) => {
+  const browser = browserWith(withMemosNotAList());
+  t.after(() => browser.close());
+  const popup = openPopup(browser);
+  await until(() => popup.document.body.textContent.includes("レポート1"), { timeout: 2000 });
+  assert.ok(popup.document.body.textContent.includes("レポート1"), "the popup lacks the assignment");
+});
+
 test("a memo deleted 31 days ago is deleted for good", async (t) => {
   const memo = { id: 1, text: "古いメモ", created: Date.now() - 40 * D };
   const browser = browserWith({

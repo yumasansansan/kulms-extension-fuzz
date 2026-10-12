@@ -20,6 +20,7 @@
 // web_accessible_resources opens to its page, the background and the popup
 // any of them. Everything else goes to its Net.
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import vm from "node:vm";
 import { pathToFileURL } from "node:url";
@@ -32,6 +33,36 @@ import { record } from "./log.mjs";
 import { Net, response } from "./net.mjs";
 import { backtrackingRegExp, costedClass, costedFunction, installCosts } from "./install.mjs";
 import { compare, finished, forIn, has, instanceOf, key, random, spread, started, step, tracked, trackedCrypto, uncounted } from "./work.mjs";
+
+// jsdom parses a link's URL anew each time its href, host and the like are
+// read, as the standard's "reinitialize url" says, and its selector engine
+// reads host of each element it climbs from. Its parser, whatwg-url, is
+// JavaScript and takes a microsecond or two a character, where Chrome's takes
+// nanoseconds: a sidebar link of millions of characters, as the top rung of an
+// input makes, kept one input of assignments running for over half an hour,
+// its counted work within what linear code does all along. The parse is a
+// function of the string, the document's base URL and its encoding, so the
+// last few are kept, and each caller gets a copy of the URL record, which a
+// link's setters change in place. The work counted is the standard's either
+// way (harness/web-costs.mjs).
+const DocumentImpl = createRequire(import.meta.url)("jsdom/lib/jsdom/living/nodes/Document-impl.js").implementation;
+const encodingParseAURL = DocumentImpl.prototype.encodingParseAURL;
+const KEPT_URLS = 8;
+const keptURLs = new Map(); // the string parsed → { base, encoding, url }
+const copyOfURL = (u) => u && { ...u, host: Array.isArray(u.host) ? [...u.host] : u.host, path: Array.isArray(u.path) ? [...u.path] : u.path };
+DocumentImpl.prototype.encodingParseAURL = function (input) {
+  const base = this.baseURLSerialized();
+  const kept = keptURLs.get(input);
+  keptURLs.delete(input);
+  if (kept && kept.base === base && kept.encoding === this._encoding) {
+    keptURLs.set(input, kept);
+    return copyOfURL(kept.url);
+  }
+  const url = Reflect.apply(encodingParseAURL, this, [input]);
+  keptURLs.set(input, { base, encoding: this._encoding, url });
+  if (keptURLs.size > KEPT_URLS) keptURLs.delete(keptURLs.keys().next().value);
+  return copyOfURL(url);
+};
 
 // What the extension's code calls to count its work (harness/work.mjs,
 // harness/install.mjs), in each context.
@@ -113,7 +144,8 @@ function quietConsole(context) {
 }
 
 function run(context, rel) {
-  const { code, file } = loadedSource(rel);
+  const { code, file, sites } = loadedSource(rel);
+  context.browser.loaded(rel, sites);
   if (context.kind === "background") vm.runInContext(code, context.global, { filename: file });
   else context.evaluate(code + "\n//# sourceURL=" + pathToFileURL(file).href);
 }

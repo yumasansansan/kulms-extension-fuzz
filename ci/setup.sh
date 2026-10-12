@@ -15,13 +15,16 @@
 #   ADLplug-Next builds with the snapshot of LLVM, and so learns of a release
 #   that breaks something the day it comes out. The archive is checked against
 #   the SHASUMS256.txt of that release.
-# - pnpm: the version package.json names in packageManager, which pnpm itself
-#   would switch to, from pnpm's release on GitHub, checked against the SHA-256
-#   GitHub lists for the archive (gh, with the job's token in GH_TOKEN).
-#   Moving to a newer pnpm is moving packageManager.
+# - pnpm: the newest release too, for the same reason: the version the npm
+#   registry tags latest (the dist-tags of pnpm), which is also what pnpm
+#   self-update and Corepack take for the newest. GitHub's list of releases
+#   does not say it as plainly: pnpm releases the next minor version there
+#   before the registry tags it latest, and fixes of its older major versions
+#   besides. package.json names no packageManager, which pnpm would switch to.
+#   The archive comes from pnpm's release on GitHub and is checked against the
+#   SHA-256 GitHub lists for it (gh, with the job's token in GH_TOKEN).
 set -euo pipefail
 
-repo=$PWD
 tools=${RUNNER_TEMP:-$PWD/.tools}/kulms-tools
 mkdir -p "$tools/pnpm"
 cd "$tools"
@@ -48,13 +51,14 @@ get() {  # url file
 # Pipelines here are written so that no command stops reading early: with
 # pipefail, a writer whose reader has gone fails the script, whether SIGPIPE
 # kills it or, where SIGPIPE is ignored (as on GitHub's runners), its write
-# fails. So the list of releases is saved first, and grep stops at its first
-# match reading the file, not a pipe from curl.
+# fails. So each list is saved first, and grep, which stops at its first match
+# in the releases of Node, reads a file, not a pipe from curl.
 get https://nodejs.org/dist/index.json index.json
+get https://registry.npmjs.org/-/package/pnpm/dist-tags dist-tags.json
 node_version=$(grep -m 1 -o '"version":"v[0-9.]*"' index.json | cut -d '"' -f 4)
-pnpm_version=$(grep -o '"packageManager": *"pnpm@[0-9.]*"' "$repo/package.json" | sed 's/.*pnpm@//; s/"$//')
+pnpm_version=$(grep -o '"latest": *"[0-9.]*"' dist-tags.json | cut -d '"' -f 4)
 if [ -z "$node_version" ] || [ -z "$pnpm_version" ]; then
-  echo "error: no version of Node (from nodejs.org) or of pnpm (from package.json)" >&2
+  echo "error: no version of Node (from nodejs.org) or of pnpm (from the npm registry)" >&2
   exit 1
 fi
 
@@ -83,7 +87,7 @@ case "$node_archive" in
     unzip -q "$pnpm_archive" -d pnpm
     ;;
 esac
-rm -f "$node_archive" "$pnpm_archive" SHASUMS256.txt index.json
+rm -f "$node_archive" "$pnpm_archive" SHASUMS256.txt index.json dist-tags.json
 
 export PATH="$node_bin:$tools/pnpm:$PATH"
 if [ -n "${GITHUB_PATH:-}" ]; then

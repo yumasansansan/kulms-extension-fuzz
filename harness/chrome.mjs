@@ -18,7 +18,7 @@
 // kept in browser.errors rather than lost, and so is a promise of any
 // context that is rejected with nothing to handle it.
 import { record } from "./log.mjs";
-import { finished, started, step } from "./work.mjs";
+import { codeGrew, finished, started, step } from "./work.mjs";
 import { manifest, read } from "./paths.mjs";
 
 const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
@@ -132,9 +132,11 @@ class StorageArea {
     };
   }
 
-  // What the area holds, as plain values (for tests to read and seed).
+  // What the area holds, as plain values (for tests and targets to read and
+  // seed, telling no listener).
   dump() { return Object.fromEntries([...this.data].map(([k, v]) => [k, copyInto(null, v)])); }
   load(items) { for (const [k, v] of Object.entries(items)) this.data.set(k, copyInto(null, v)); }
+  unload(keys) { for (const k of keys) this.data.delete(k); }
 }
 
 export class Browser {
@@ -149,6 +151,8 @@ export class Browser {
     this.traffic = []; // runtime messages, as deliver() keeps them
     this.created = []; // tabs the extension asked to open
     this.injected = []; // what chrome.scripting.executeScript was asked to run
+    this.scripts = new Set(); // the extension's scripts its contexts have run
+    this.sites = 0; // their counting sites (harness/work.mjs)
     this.nextTabId = 1;
     this.onRejection = (reason) => this.errors.push({ where: "unhandled rejection", error: reason });
     process.on("unhandledRejection", this.onRejection);
@@ -165,6 +169,16 @@ export class Browser {
 
   unregister(context) {
     this.contexts = this.contexts.filter((c) => c !== context);
+  }
+
+  // A context of this browser runs the extension's script `rel`, of `sites`
+  // counting sites: the code of the browser, which bounds the work of an
+  // input run in it (harness/work.mjs), counts them once.
+  loaded(rel, sites) {
+    if (this.scripts.has(rel)) return;
+    this.scripts.add(rel);
+    this.sites += sites;
+    codeGrew(this);
   }
 
   // Forgets what the logs hold: the messages, the tabs opened, the scripts

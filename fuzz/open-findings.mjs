@@ -28,11 +28,12 @@ export const OPEN = new Set([
   "B10", // t() expands replacement patterns in what it puts in a placeholder
   "B15", // t() looks a key up through the prototype: t("hasOwnProperty") is undefined
   "B16", // grading-ta.js throws URIError on a link with a malformed %-sequence
-  "B17", // a stored memo that is null stops the drawing of the assignment panel
+  "B17", // stored memos that are not a list, or hold a null, stop the drawing of the assignment panel
   "B18", // grading-ta.js throws on a submission whose status String() cannot convert
   "B19", // one malformed item of Sakai's answer takes out all of a course's assignments
   "B20", // one malformed page of pages.json ends the search for the site's contact
   "B21", // t() puts nothing in a placeholder whose value, given alone, is empty
+  "P6", // the background builds its Shift_JIS table on its first search, about 156,000 steps
 ]);
 for (const id of (process.env.KULMS_FUZZ_LOOK_FOR || "").split(",")) OPEN.delete(id.trim());
 

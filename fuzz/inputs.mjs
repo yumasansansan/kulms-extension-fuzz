@@ -285,6 +285,17 @@ export const INPUTS = [
     },
   },
   {
+    // No course is found, and the stored memos are "メモ", not a list.
+    file: "known/assignments/B17-memos-not-a-list",
+    plan: (w) => {
+      w.int(0, w.remaining, 0);
+      w.int(0, 7, 1); w.int(0, w.remaining, 0); answer(w);
+      emptyAnswers(w);
+      w.bool(false); value(w, "メモ");
+      value(w, undefined); value(w, undefined);
+    },
+  },
+  {
     // One course, whose assignments are [null, { title: "レポート1" }].
     file: "known/assignments/B19-null-assignment",
     plan: (w) => {
@@ -293,6 +304,24 @@ export const INPUTS = [
       emptyAnswers(w);
       w.bool(false); value(w, undefined);
       value(w, undefined); value(w, undefined);
+    },
+  },
+  {
+    // The popup asks for the books of the course 評定済 (one of the words
+    // the extension looks for, as the fuzzer found it), and the input ends:
+    // every answer is empty. The search is the first since the service
+    // worker started, which builds the Shift_JIS table.
+    file: "known/background-message/P6-first-search",
+    plan: (w) => {
+      w.int(0, 2, 2);
+      w.int(0, 3, 0);
+      w.bool(true); string(w, "評定済", { word: true });
+    },
+    expect: {
+      from: "popup",
+      message: { action: "fetchTextbooks", courseName: "評定済", lectureCode: undefined, siteId: undefined },
+      body: utf8(""),
+      replies: Array.from({ length: 5 }, () => ok("text/html", utf8(""))),
     },
   },
   {

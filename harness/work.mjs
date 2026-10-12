@@ -28,10 +28,13 @@
 // steps grow, a counted piece of syntax: sitesOf()) goes through each unit of
 // the input a bounded number of times, so linear code does no more than
 //   sites × (U + 1) × ⌈log₂(U + 2)⌉ + base
-// where U is the size of the input (its bytes, and the units of what is made
-// from them: fuzz/lib.mjs), the logarithm allows for sorting, the 1 for what a
-// site does once whatever the input, and base is the work of the input of no
-// bytes at all, counted when a target starts. Work past that bound is not
+// where the sites are those of the code the input can run, the scripts that
+// the browser of its target has loaded (harness/chrome.mjs), and not those of
+// another target's browser in the same process; U is the size of the input
+// (its bytes, and the units of what is made from them: fuzz/lib.mjs); the
+// logarithm allows for sorting, the 1 for what a site does once whatever the
+// input; and base is the work of the target's input of no bytes at all,
+// counted when the target starts (fuzz/lib.mjs). Work past that bound is not
 // linear, and a loop that does not end gets there too: the counting site then
 // throws WorkExceeded from inside the extension's code, and that the bound
 // was passed stays recorded even when the extension catches what is thrown.
@@ -48,11 +51,14 @@ import { JSDOM } from "jsdom";
 import { builtIns, chainLength, keyCount, ruleOf, stringUnits, units } from "./costs.mjs";
 import { ALIASES, webRuleOf } from "./web-costs.mjs";
 
+// What holds no code.
+const NO_CODE = { sites: 0 };
+
 export const work = {
   done: 0, // the work counted since the input began
   units: 0, // U, the size of the input
-  base: 0, // the work of the input of no bytes
-  sites: 0, // the counting sites of the code loaded so far
+  base: 0, // the work of the input of no bytes of the target whose input this is
+  code: NO_CODE, // what the input can run: the browser of its target, and the counting sites of the scripts it loaded
   cap: Infinity, // what the rungs below allow this rung of the input (fuzz/lib.mjs)
   bound: Infinity, // what linear code may do with this input, or the cap if less
   capped: false, // the cap is the bound
@@ -84,7 +90,7 @@ let epoch = 0;
 
 function rebound() {
   const u = work.units;
-  const linear = work.sites * (u + 1) * Math.ceil(Math.log2(u + 2)) + work.base;
+  const linear = work.code.sites * (u + 1) * Math.ceil(Math.log2(u + 2)) + work.base;
   work.bound = Math.min(linear, work.cap);
   work.capped = work.cap < linear;
 }
@@ -128,13 +134,17 @@ export function random() {
 
 // An input of `units` units begins, drawing from `seed`; with `judge`,
 // passing the bound, or the cap and the deadline that a rung of the input is
-// given (fuzz/lib.mjs), throws.
-export function beginInput(units, { judge = true, cap = Infinity, deadline = Infinity, seed = 0 } = {}) {
+// given (fuzz/lib.mjs), throws. The bound is of the code that `code` holds
+// (the browser of the input's target: its sites) and of `base` (the work of
+// the target's input of no bytes).
+export function beginInput(units, { judge = true, cap = Infinity, deadline = Infinity, seed = 0, code = NO_CODE, base = 0 } = {}) {
   epoch++;
   inputs.enterWith(epoch);
   seedRandom(seed);
   work.done = 0;
   work.units = units;
+  work.code = code;
+  work.base = base;
   work.cap = cap;
   work.deadline = deadline;
   work.over = false;
@@ -149,16 +159,10 @@ export function addUnits(n) {
   rebound();
 }
 
-// A script's code adds `n` counting sites.
-export function addSites(n) {
-  work.sites += n;
-  rebound();
-}
-
-// The work of the input of no bytes, counted when a target starts.
-export function setBase(base) {
-  work.base = base;
-  rebound();
+// `code` (a browser) loaded a script, whose counting sites it now holds as
+// well: if it holds the code of the input under way, the input may do more.
+export function codeGrew(code) {
+  if (code === work.code) rebound();
 }
 
 // The input has been judged: the work it took, and whether it passed the
@@ -191,7 +195,9 @@ export function step(n) {
 // Runs `f` without counting: the harness's or a target's own work on the
 // extension's objects (building the page an input describes, looking for
 // what a detector looks for), and the working out of a cost. `f` is
-// synchronous, and nothing of the extension runs inside it.
+// synchronous. The extension's own code runs inside it only where a target
+// builds what the extension builds once and keeps, so as to charge it to no
+// input (the Shift_JIS table of fuzz/targets/background-message.fuzz.mjs).
 export function uncounted(f) {
   const was = paused;
   paused = true;

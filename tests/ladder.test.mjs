@@ -19,11 +19,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fail, judge, ladder, provider, string } from "../fuzz/lib.mjs";
 import { encode, repeated, string as written } from "../fuzz/encode.mjs";
-import { addSites, step, work } from "../harness/work.mjs";
+import { step, work } from "../harness/work.mjs";
 
-// The bound of linear code (harness/work.mjs) as if a script of a thousand
-// counting sites were loaded, as a target loads the extension's.
-addSites(1000);
+// The code the inputs run, as a target's browser holds it (harness/work.mjs):
+// a script of a thousand counting sites, as a target loads the extension's.
+const code = { sites: 1000 };
 
 // An input whose bottom rung repeats "ab" `times` times, its top rung
 // `doublings` doublings up.
@@ -48,25 +48,25 @@ function target(work, rungs, wait = () => 0) {
 
 test("linear work climbs to the top rung", async () => {
   const rungs = [];
-  await ladder(input(6), target((n) => 10 * n + 100, rungs));
+  await ladder(input(6), target((n) => 10 * n + 100, rungs), code);
   assert.deepEqual(rungs, [8, 16, 32, 64, 128, 256, 512]);
 });
 
 test("work that grows as n log n climbs to the top rung", async () => {
   const rungs = [];
-  await ladder(input(6), target((n) => Math.ceil(n * Math.log2(n + 2)) + n, rungs));
+  await ladder(input(6), target((n) => Math.ceil(n * Math.log2(n + 2)) + n, rungs), code);
   assert.equal(rungs.length, 7);
 });
 
 test("work that does not grow with the input climbs to the top rung", async () => {
   const rungs = [];
-  await ladder(input(6), target(() => 50, rungs));
+  await ladder(input(6), target(() => 50, rungs), code);
   assert.equal(rungs.length, 7);
 });
 
 test("an input that repeats nothing is run once, however high its top rung", async () => {
   const rungs = [];
-  await ladder(encode((w) => written(w, "abababab"), { doublings: 6 }), target((n) => 10 * n, rungs));
+  await ladder(encode((w) => written(w, "abababab"), { doublings: 6 }), target((n) => 10 * n, rungs), code);
   assert.deepEqual(rungs, [8]);
 });
 
@@ -74,13 +74,13 @@ test("work that grows as the square stops on the second rung in a row where that
   // The input's 12 bytes are the rest of it, which the 8 units of the bottom
   // rung do not outweigh: growth is read from ×2 up, and fails on ×16.
   const rungs = [];
-  await assert.rejects(ladder(input(6), target((n) => n * n + 10 * n, rungs)), /on the rung of ×16 passed .*on two rungs in a row/);
+  await assert.rejects(ladder(input(6), target((n) => n * n + 10 * n, rungs), code), /on the rung of ×16 passed .*on two rungs in a row/);
   assert.deepEqual(rungs, [8, 16, 32, 64, 128]);
 });
 
 test("a step in the work, where the code first reads what the rungs add, climbs to the top rung", async () => {
   const rungs = [];
-  await ladder(input(6), target((n) => (n >= 64 ? 30 * n : 50), rungs));
+  await ladder(input(6), target((n) => (n >= 64 ? 30 * n : 50), rungs), code);
   assert.equal(rungs.length, 7);
 });
 
@@ -101,19 +101,19 @@ test("work that crosses strings of the rest of the input one rung after another 
     } catch { /* what the counting threw */ }
     judge();
   };
-  await ladder(encode((w) => { repeated(w, "ab", 4); written(w, "x".repeat(480)); }, { doublings: 8 }), run);
+  await ladder(encode((w) => { repeated(w, "ab", 4); written(w, "x".repeat(480)); }, { doublings: 8 }), run, code);
   assert.equal(rungs.length, 9);
 });
 
 test("work that grows by less than what the rungs add is not read for growth", async () => {
   const rungs = [];
-  await ladder(input(6), target((n) => 100 + Math.floor(n / 64) * Math.floor(n / 64), rungs));
+  await ladder(input(6), target((n) => 100 + Math.floor(n / 64) * Math.floor(n / 64), rungs), code);
   assert.equal(rungs.length, 7);
 });
 
 test("time that grows faster than the counted work fails as work the counting does not see", async () => {
   const rungs = [];
-  await assert.rejects(ladder(input(5), target((n) => 10 * n, rungs, (n) => (n * n) / 10)), /time grew faster than its counted work|time on the rung of ×32 passed/);
+  await assert.rejects(ladder(input(5), target((n) => 10 * n, rungs, (n) => (n * n) / 10), code), /time grew faster than its counted work|time on the rung of ×32 passed/);
   assert.equal(rungs.length, 6);
 });
 
@@ -128,7 +128,7 @@ test("a rung that reads the input otherwise than the bottom rung fails as such",
     fdp.consumeIntegralInRange(0, s.length);
     judge();
   };
-  await assert.rejects(ladder(encode((w) => { repeated(w, "ab", 64); w.int(0, 128, 0); }, { doublings: 3 }), run), /the rung of ×2 read the input otherwise than the bottom rung: its read \d+ was consumeIntegralInRange\(0, 256\)/);
+  await assert.rejects(ladder(encode((w) => { repeated(w, "ab", 64); w.int(0, 128, 0); }, { doublings: 3 }), run, code), /the rung of ×2 read the input otherwise than the bottom rung: its read \d+ was consumeIntegralInRange\(0, 256\)/);
   assert.deepEqual(rungs, [128, 256]);
 });
 
@@ -142,5 +142,5 @@ test("what goes wrong after the work passed what it may be is told as the work's
     } catch { /* what the counting threw */ }
     fail("no answer");
   };
-  await assert.rejects(ladder(input(0), run), /the extension's work passed .*the most that linear code does/);
+  await assert.rejects(ladder(input(0), run, code), /the extension's work passed .*the most that linear code does/);
 });

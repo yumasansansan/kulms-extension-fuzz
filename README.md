@@ -20,7 +20,7 @@ specification: the GNU General Public License, version 3 or any later version
 
 ## 使い方
 
-Node 26 以降と pnpm を使います．
+Node 26 以降と pnpm を使います．どちらも最新版を使い，pnpm の版は `package.json` で固定していません（CI も最新版を入れます）．Corepack で pnpm を使うときは，環境変数 `COREPACK_ENABLE_AUTO_PIN=0` にすると，Corepack が `package.json` に版を書き足しません．
 
 ```bash
 git submodule update --init

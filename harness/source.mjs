@@ -35,7 +35,7 @@ import Module from "node:module";
 import * as acorn from "acorn";
 import { CACHE, EXT, read } from "./paths.mjs";
 import { findingOf } from "./backtrack.mjs";
-import { addSites, counters, parse } from "./work.mjs";
+import { counters, parse } from "./work.mjs";
 
 // The function of a statement such as (function () { ... })(); or
 // (function () { ... }());, if it is one.
@@ -153,16 +153,19 @@ const loaded = new Map();
 // `code`, named `name` (a path under the cache), its internals exposed if
 // `expose`, and, if it is the extension's (`extension`), its work counted and
 // its regular expressions of a finding handed to __kulmsBacktracking(); written
-// to the cache and put through the loader. Returns the code to run and the file it was
-// written to, which stack traces and the fuzzer's coverage name.
+// to the cache and put through the loader. Returns the code to run, the file it was
+// written to, which stack traces and the fuzzer's coverage name, and its
+// counting sites (harness/work.mjs), which the browser that runs it holds
+// (harness/chrome.mjs).
 function prepare(name, code, { expose, extension }) {
   if (loaded.has(name)) return loaded.get(name);
   const { ast, tokens } = parse(code);
   const edits = expose ? exposing(ast, name) : [];
+  let sites = 0;
   if (extension) {
     const counting = counters(ast, tokens);
     edits.push(...counting.inserts, ...backtrackingRegExps(ast, name, code));
-    addSites(counting.sites);
+    sites = counting.sites;
   }
   const exposed = apply(code, edits);
   const file = path.join(prepareCache(), name);
@@ -174,7 +177,7 @@ function prepare(name, code, { expose, extension }) {
   m.paths = [];
   m._compile = (c) => { compiled = c; };
   Module._extensions[".js"](m, file);
-  const result = { code: compiled, file };
+  const result = { code: compiled, file, sites };
   loaded.set(name, result);
   return result;
 }

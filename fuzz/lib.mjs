@@ -56,7 +56,7 @@ import { constants } from "node:buffer";
 import { FuzzedDataProvider } from "@jazzer.js/core";
 import { BACKTRACKING } from "../harness/backtrack.mjs";
 import { avoidBacktracking } from "../harness/install.mjs";
-import { LINEAR, addUnits, beginInput, endInput, setBase, work } from "../harness/work.mjs";
+import { LINEAR, addUnits, beginInput, endInput, idle, work } from "../harness/work.mjs";
 import { open } from "./open-findings.mjs";
 
 export { FuzzedDataProvider, open };
@@ -171,6 +171,8 @@ let timeNote = "";
 let judged = null; // the work of the rung last judged (judge())
 let questions = []; // what the bottom rung asked the provider, in order (provider())
 let asking = 0; // how many of them the rung being run has asked
+let browser = null; // the browser of the target whose input is being run (ladder())
+const bases = new WeakMap(); // the work of each target's input of no bytes, by its browser (calibrate())
 
 // How much more a rung may add over the rung below than that one added over
 // the one below it: as much as work that grows as n log n at most adds.
@@ -230,9 +232,10 @@ function seedOf(data) {
 }
 
 // A provider for `data`, an input of the target's, on the rung being run: its
-// work is judged against the size of the input, which is counted from here on
-// (harness/work.mjs), and against what the rungs below allow it; and what it
-// is asked, against what the bottom rung asked.
+// work is judged against the size of the input, which is counted from here on,
+// and the code of the target's browser (harness/work.mjs), and against what
+// the rungs below allow it; and what it is asked, against what the bottom
+// rung asked.
 export function provider(data) {
   if (rung === 1) questions = [];
   asking = 0;
@@ -241,7 +244,10 @@ export function provider(data) {
   leftBottom = BOTTOM;
   leftTop = MAX_UNITS;
   repeated = 0;
-  beginInput(data.length, { judge: !calibrating, cap: rungCap, deadline: performance.now() + 1000 * rungTime, seed: seedOf(data) });
+  beginInput(data.length, {
+    judge: !calibrating, cap: rungCap, deadline: performance.now() + 1000 * rungTime, seed: seedOf(data),
+    code: browser, base: bases.get(browser) ?? 0,
+  });
   return fdp;
 }
 
@@ -294,9 +300,17 @@ export function judge() {
 
 // Runs `run`, the target's work for one input, on the rungs of `data` (the
 // head of this section), one after another until the top rung or a failure.
-export async function ladder(data, run) {
+// `code` is the target's browser (harness/chrome.mjs): the code its contexts
+// loaded is what the input can run.
+export async function ladder(data, run, code) {
+  browser = code;
   const rungs = [];
   for (;;) {
+    // What an earlier input, or the rung below, set going ends first: its work
+    // is not this rung's (harness/work.mjs), and neither is what goes wrong in
+    // it, which the browser keeps (an unhandled rejection) where a detector
+    // would lay it at this rung's door (harness/detectors.mjs).
+    await idle();
     climb(rungs);
     const start = performance.now();
     await run(data);
@@ -305,7 +319,8 @@ export async function ladder(data, run) {
 }
 
 // ladder() for a target whose work for an input is synchronous.
-export function ladderSync(data, run) {
+export function ladderSync(data, run, code) {
+  browser = code;
   const rungs = [];
   for (;;) {
     climb(rungs);
@@ -382,7 +397,9 @@ function landed(rungs, time) {
 }
 
 // Runs `fuzz` on the input of no bytes, unjudged, and takes the work it took
-// as what any input may take whatever its size (the base of the bound).
+// as what any input of the target may take whatever its size (the base of the
+// bound), kept by the browser its ladder() ran in: another target in the same
+// process has a base of its own.
 export async function calibrate(fuzz) {
   calibrating = true;
   try {
@@ -390,7 +407,7 @@ export async function calibrate(fuzz) {
   } finally {
     calibrating = false;
   }
-  setBase(work.done);
+  bases.set(browser, work.done);
 }
 
 // How many of something: as many as the input has bytes left for.

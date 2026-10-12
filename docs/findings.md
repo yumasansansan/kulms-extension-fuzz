@@ -50,7 +50,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [B14](#b14) | 低 | Shift_JIS にない文字を検索語から黙って落とす | 再現 | 未着手 | |
 | [B15](#b15) | 低 | `t()` がキーをプロトタイプ越しに引き，`t("hasOwnProperty")` が undefined になる（潜在） | ファズ | 対応中（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)） | |
 | [B16](#b16) | 低 | TA 採点支援が壊れた `%` の並びで URIError を投げ，装飾が止まる | ファズ | 対応中（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)） | |
-| [B17](#b17) | 中 | 保存されたメモに null が 1 つあると，課題パネルの描画が止まる | ファズ | 対応中（[fix/invalid-memo](https://github.com/yumasansansan/kulms-extension/tree/fix/invalid-memo)） | |
+| [B17](#b17) | 中 | 保存されたメモが配列でないか，null を 1 つでも含むと，課題パネルの描画が止まる | ファズ | 対応中（[fix/invalid-memo](https://github.com/yumasansansan/kulms-extension/tree/fix/invalid-memo)） | |
 | [B18](#b18) | 低 | TA 採点支援が，ページから届く提出の status の型を確かめず TypeError で止まる | ファズ | 対応中（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)） | |
 | [B19](#b19) | 低 | Sakai の応答に形の崩れた項目が 1 つあると，ほかの科目や課題も一覧から消える | ファズ | 対応中（[fix/sakai-answer-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/sakai-answer-shape)） | |
 | [B20](#b20) | 低 | サイト連絡先の取得で，pages.json の形の崩れたページが，後のページを隠す | ファズ | 対応中（[fix/site-contact-pages](https://github.com/yumasansansan/kulms-extension/tree/fix/site-contact-pages)） | |
@@ -362,14 +362,17 @@ specification: the GNU General Public License, version 3 or any later version
 - テスト: `fuzz/known/grading-status/B16-malformed-percent`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/grading-ta.test.mjs` の「B16」．
 
 ### B17
-**保存されたメモに null が 1 つあると，課題パネルの描画が止まる**（中・ファズ）
+**保存されたメモが配列でないか，null を 1 つでも含むと，課題パネルの描画が止まる**（中・ファズ）
 
-- 場所: [src/assignments.js:1064-1066](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L1064-L1066)，[:1468-1470](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L1468-L1470)，[:674-676](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L674-L676)，[popup.js:391-393](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L391-L393)
-- 何が起きるか: メモは `normalizeMemo()` を通してから `.deadline` や `.id` を読むが，`normalizeMemo()` は文字列しか直さず，null をそのまま返す．そのため，保存されたメモの一覧に null が 1 つでもあると TypeError になり，課題パネルの描画全体が止まる．popup の一覧と，期限の切れた非表示の掃除（読み込み時）も同じところで止まる．値は拡張自身のストレージから来るが，旧版や，計画中のスマホ版との同期，ストレージの破損などで 1 件でも壊れると，パネルを開けない状態が続く．
-- 根拠: ファズ対象 `assignments` が，Linux で約 2,500 回目（9 秒）に見つけた．
-- 直し方: 読み込んだ一覧から，オブジェクトでない要素を取り除く（`normalizeMemo()` で null や数値を捨てる）．
-- 対応: `normalizeMemo()` は，オブジェクトでも文字列でもないものに null を返し，呼び出し元（課題パネルの 4 か所と popup の 1 か所）はそれを飛ばす（[fix/invalid-memo](https://github.com/yumasansansan/kulms-extension/tree/fix/invalid-memo)）．
-- テスト: `fuzz/known/assignments/B17-null-memo`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B17」の 2 件（課題パネルと popup）．
+- 場所: [src/assignments.js:1064-1066](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L1064-L1066)，[:1468-1470](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L1468-L1470)，[:674-676](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L674-L676)，[:720](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L720)，[popup.js:390-393](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L390-L393)
+- 何が起きるか:
+  - メモは `normalizeMemo()` を通してから `.deadline` や `.id` を読むが，`normalizeMemo()` は文字列しか直さず，null をそのまま返す．そのため，保存されたメモの一覧に null が 1 つでもあると TypeError になり，課題パネルの描画全体が止まる．popup の一覧と，期限の切れた非表示の掃除（読み込み時）も同じところで止まる．
+  - メモの一覧は `loadMemos()` が `result[MEMO_KEY] || []` として読むので，保存された値が配列でなく，偽でもないとき（文字列やオブジェクトなど）は，それがそのまま一覧になる．描画が `memos.forEach` を呼ぶところで TypeError になり，課題パネルの描画全体が止まる．popup も，長さを持つ値（文字列など）では一覧が止まる．
+  - 値は拡張自身のストレージから来るが，旧版や，計画中のスマホ版との同期，ストレージの破損などで 1 件でも壊れると，パネルを開けない状態が続く．
+- 根拠: ファズ対象 `assignments` が，Linux で約 2,500 回目（9 秒）に null のメモを見つけた．配列でない一覧は，2026-10-09 の毎日のファジング（[run 37853268307](https://github.com/yumasansansan/kulms-extension-fuzz/actions/runs/37853268307)）が見つけた．
+- 直し方: 読み込んだ値が配列でなければ空の一覧とし，一覧から，オブジェクトでない要素を取り除く（`normalizeMemo()` で null や数値を捨てる）．
+- 対応: `normalizeMemo()` は，オブジェクトでも文字列でもないものに null を返し，呼び出し元（課題パネルの 4 か所と popup の 1 か所）はそれを飛ばす．`loadMemos()` は配列でない値を空の一覧とみなし，popup は配列でない値ではメモを描かない（[fix/invalid-memo](https://github.com/yumasansansan/kulms-extension/tree/fix/invalid-memo)）．
+- テスト: `fuzz/known/assignments/B17-null-memo` と `B17-memos-not-a-list`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B17」の 4 件（null と配列でない一覧，それぞれ課題パネルと popup）．
 
 ### B18
 **TA 採点支援が，ページから届く提出の status の型を確かめず TypeError で止まる**（低・ファズ）
@@ -478,6 +481,8 @@ specification: the GNU General Public License, version 3 or any later version
 **Service Worker の起動ごとに Shift_JIS 変換表を作り直す**（低・計測）
 
 - 場所: [background.js:112-145](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L112-L145)．約 2.2 万回のデコードで，Node では約 32ms かかった．
+- ファジング: 表は，Service Worker が起きてから最初の検索で作られ，ハーネスの数え方で約 15.6 万歩になる．検索語によらない一度きりの仕事だが，小さな入力の線形の上限（`background-message` の 11 単位の入力で 96,122 歩）を超える．`background-message` の対象は，最初の入力の前に表を作っておき，どの入力にも数えない（P6 を探すときは，入力ごとに表を消す．下の「ファジングで避けている既知の問題」）．`syllabus-search` の対象は，入力が空のとき（上限の基になる仕事量を数えるとき）にも検索するので，表の仕事はその基に入り，どの入力にも数えない．
+- テスト: `fuzz/known/background-message/P6-first-search`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
 ## 保守性
 
@@ -531,25 +536,26 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
 ## fuzz リポジトリの仕組み
 
 - **このリポジトリ（kulms-extension-fuzz）の役割**: kulms-extension を submodule として持ち，上流のコードは変えずに，ハーネス側でテストとファジングを行う．
-- **ハーネス**（[harness/](../harness/)）: 偽の chrome API と jsdom を用意し，submodule のスクリプトを manifest と同じ順で読み込む．偽の API は，複数タブで共有するストレージ，メッセージとその記録，拡張自身のファイル（web_accessible_resources の制限つき）を備える．IIFE の中の関数は，読み込み時に AST 変換で外へ公開する（行番号は変えない）．読み込むコードは Jazzer.js の計装を通すので，vm や jsdom で動くコードからもカバレッジがファザーに届く．
+- **ハーネス**（[harness/](../harness/)）: 偽の chrome API と jsdom を用意し，submodule のスクリプトを manifest と同じ順で読み込む．偽の API は，複数タブで共有するストレージ，メッセージとその記録，拡張自身のファイル（web_accessible_resources の制限つき）を備える．IIFE の中の関数は，読み込み時に AST 変換で外へ公開する（行番号は変えない）．読み込むコードは Jazzer.js の計装を通すので，vm や jsdom で動くコードからもカバレッジがファザーに届く．jsdom は，リンクの `href` や `host` を読むたびに URL を解析し直し（標準の「reinitialize url」のとおり），セレクタの照合も，上る要素ごとに `host` を読む．その解析器は JavaScript で，1 文字に 1〜3 マイクロ秒かかる（Node の URL の数百倍）．そのため，最上段の数百万字のリンクを持つ入力では，数えた仕事は線形のまま，1 つの入力が数十分かかることがあった．解析は文字列と文書のベース URL と文字コードで決まるので，ハーネスは直近の 8 つの結果を取っておき，その写しを渡す．数える仕事は標準の手順のままである．
 - **検出器**（[harness/detectors.mjs](../harness/detectors.mjs)）: 例外のほか，ページに入り込んだスクリプトを動かすマークアップ（DOM XSS），プロトタイプの汚染，誰も受けない Promise の拒否を失敗とする．
 - **仕事量**（[harness/work.mjs](../harness/work.mjs)）: 遅さは時計で判定せず，拡張がした仕事を数えて判定する（2026-10-07 に作り直した）．
   - 拡張のコードは，関数の呼び出し，ループの 1 周，値をたどる構文（コードに書かれていない文字列どうしの比較，実行時に作るキー，オブジェクトの展開，プロトタイプチェーンをたどる演算子）を数える．組み込み関数と Web API は，標準の手順の歩数で数える（[harness/costs.mjs](../harness/costs.mjs)，[harness/web-costs.mjs](../harness/web-costs.mjs)）．標準が上限だけを求めるものはその上限，エンジンに任せるものは Chrome のやり方で数える．DOM は標準の手順どおりに数えるので，Chrome が索引で速く済ませるもの（getElementById など）もツリーをたどる分を数え，数は Chrome にとっての上限になる．正規表現は，V8 と答えを突き合わせながら，バックトラックするエンジンの歩数で数える（[harness/backtrack.mjs](../harness/backtrack.mjs)）．
   - 規則の抜けは [tests/costs.test.mjs](../tests/costs.test.mjs) が防ぐ．ECMAScript の組み込み関数のすべて（1 つの realm に 645），拡張のコードが名前を挙げる Web API のメンバーのすべて，構文の形のすべて，拡張のコードが書く selector のすべてに規則があることを確かめる．拡張は eval も Function も使わない（使えば数えられないので，これも確かめる）．
   - 数えた仕事量で，テストは入力の大きさ n，2n，4n での伸びの次数を見る（[harness/work.mjs](../harness/work.mjs) の `degree()`．1.5 未満を線形とする）．ファジングは，入力を段に分けて同じ基準で見る（下）．
-  - 仕事量を数える手順そのもの（ハーネスの関数，jsdom の内部の呼び出し，前の入力の遅れて動くタイマー）は，入力の仕事に数えない．入力ごとに非同期の文脈（AsyncLocalStorage）を分け，その入力の文脈で動いた仕事だけを数える．拡張が前の入力のために覚えたり描いたりしたもの（課題パネルの科目の一覧と，描いた中身）は，対象が入力の初めに数えずに取り除く．
+  - 仕事量を数える手順そのもの（ハーネスの関数，jsdom の内部の呼び出し，前の入力の遅れて動くタイマー）は，入力の仕事に数えない．入力ごとに非同期の文脈（AsyncLocalStorage）を分け，その入力の文脈で動いた仕事だけを数える．拡張が前の入力のために覚えたり描いたりしたもの（課題パネルの科目の一覧と，描いた中身）は，対象が入力の初めに数えずに取り除く．前の入力が動かし始めたことは，次の段の前に終わらせ，そこで起きた未処理の拒否を次の段のものとしない．
+  - 線形のコードがするはずの上限は，対象ごとに決まる．数える場所は，その対象のブラウザが読み込んだスクリプトのもので，入力が空のときの仕事量も，その対象のものである．同じプロセスでほかの対象が読み込んだスクリプト（テストは対象をまとめて動かす）は数えない．
 - **テスト**（[tests/](../tests/)）: 各問題の再現（todo），ハーネス自体のテスト，ファズ対象のシードと回帰入力と既知の失敗入力の再生．
 - **ファジング**（[fuzz/](../fuzz/)）: 外から入力が来る面ごとの 7 つの対象と canary．対象の一覧と運用は [fuzz/README.md](../fuzz/README.md) にある．
   - 入力は手加減しない（2026-10-07 に見直した）．文字列は入力のビット列を 16 ビットずつ（すべての符号単位），8 ビットずつ（ASCII が出やすい），UTF-8 のいずれかで読む．数は任意の 64 ビットのパターンと境目の値，値は undefined，null，BigInt，任意の深さの入れ子などを含む．ネットワークは失敗，任意のステータスと Content-Type，途中で切れた本文も返す．
   - 大きさは段で作る．入力そのもの（libFuzzer に作らせるバイト列）と，その下の段で作る値は 4,096 単位まで．入力は最初に段数を選び，段を上がるたびに，入力が繰り返す片を 2 倍の回数繰り返す．最上段で作る値は，Chrome の runtime メッセージ 1 通が運べる量（JSON の UTF-8 で 64MiB．1 単位は 6 バイト以内なので 11,184,810 単位）まで．
-  - 段から段へ，仕事の増えが前の段の増えの 2^1.5 倍（n log n の仕事が増える量）を超えたら，速い伸びとみる．伸びを読むのは，コードが段の足した分をたどった（1 単位に 1 歩以上を使った）ときだけで，繰り返す部分が入力の残り以上の長さになった段から．それまでは，繰り返す部分と残りとの掛け合わせ（繰り返す文字列の中で残りの文字列を探すなど）が，段ごとに伸びの割合を変える．一度だけの速い伸びは，繰り返しが初めて行を閉じたときなどの段差なので，速い伸びがあった段の上の段にだけ，下の段の仕事量から外挿した上限を走らせる前に与え，超えたら止めて失敗とする．線形でない入力は，速い伸びが 2 段続いた所で止まり，何時間も走らない．ほかの段は，線形のコードがするはずの上限（数える場所の数 × (U+1) × ⌈log₂(U+2)⌉ ＋ 入力が空のときの仕事量）で判定する．
+  - 段から段へ，仕事の増えが前の段の増えの 2^1.5 倍（n log n の仕事が増える量）を超えたら，速い伸びとみる．伸びを読むのは，コードが段の足した分をたどった（1 単位に 1 歩以上を使った）ときだけで，繰り返す部分が入力の残り以上の長さになった段から．それまでは，繰り返す部分と残りとの掛け合わせ（繰り返す文字列の中で残りの文字列を探すなど）が，段ごとに伸びの割合を変える．一度だけの速い伸びは，繰り返しが初めて行を閉じたときなどの段差なので，速い伸びがあった段の上の段にだけ，下の段の仕事量から外挿した上限を走らせる前に与え，超えたら止めて失敗とする．線形でない入力は，速い伸びが 2 段続いた所で止まり，何時間も走らない．ほかの段は，線形のコードがするはずの上限（対象のブラウザが読み込んだコードの，数える場所の数 × (U+1) × ⌈log₂(U+2)⌉ ＋ その対象の，入力が空のときの仕事量）で判定する．
   - 時間は，数え方を確かめるために見る．2 段離れた段どうしで，時間の伸びの次数が仕事量の伸びの次数を 0.5 より多く上回ったら，数えていない仕事があるとして失敗とする（下の「時計の揺れ」）．CI では見ない．
   - 時計で止めるのは，何も数えない所で終わらないものだけ．CI はジョブの終わるべき時刻を `ci/fuzz.sh --until` に渡し，各対象は残りの時間を残りの対象で等しく分けたものを使う．
   - 拡張が自分で捕まえて警告だけ出すエラーのうち，プログラムの誤りを示すもの（TypeError などの文言）も失敗とする．B19 と B20 はこれで見つかった．
   - シードと既知の問題の入力は，`fuzz/inputs.mjs` が，対象の読む値の並びから書く（`fuzz/encode.mjs` が FuzzedDataProvider の逆をたどる）．入力の読み方を変えたときに，これらが黙って別の入力になるのを防ぐためで，テストは，既知の入力がその問題だけを起こすことも確かめる．
   - 修正ブランチは，`KULMS_EXTENSION_DIR` でその拡張を指し，`KULMS_FUZZ_LOOK_FOR` で直した問題を避けずに探して，ファジングで確かめる（下の「ファジングで避けている既知の問題」）．
 - **CI**（[yumasansansan/ADLplug-Next](https://github.com/yumasansansan/ADLplug-Next) にならう）:
-  - 素の git でチェックアウトし，submodule も含める．Node は最新版を，pnpm は `packageManager` の版を，`ci/setup.sh` が SHA-256 を確かめて入れる．外部の action は，commit で固定した `actions/upload-artifact` だけ．
+  - 素の git でチェックアウトし，submodule も含める．Node と pnpm は，どちらも最新版を（pnpm は npm のレジストリが `latest` とする版を），`ci/setup.sh` が SHA-256 を確かめて入れる．外部の action は，commit で固定した `actions/upload-artifact` だけ．
   - `ci.yml`（push ごと）: Ubuntu と Windows でのテスト，lint（このリポジトリには ESLint のすべての指摘で失敗し，submodule の拡張には DOM XSS と ReDoS のルールを掛けて報告だけする），REUSE，canary と各対象 1 分のファジング．落ちた入力は artifact に残す．
   - `fuzz.yml`（毎日）: 各対象 20 分のファジング．コーパスを artifact で引き継ぎ，前回落ちた入力を最初に再生する．
   - どちらのジョブも，始めに，ファジングが終わるべき時刻（GitHub がジョブを止める 6 時間から，残したものを保存する 30 分を引いた時刻．`fuzz.yml` はジョブ自身の上限 330 分の 5 分前）を記録して `ci/fuzz.sh --until` に渡す．
@@ -558,7 +564,7 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
 
 ファジングで時間を確かめる値（[fuzz/lib.mjs](../fuzz/lib.mjs) の `NOISE`，`TIME_FLOOR`，`TIME_SPAN`）は，時計の揺れを測って決めた．時間は機械と実装によるので，理屈からは決まらない．測るのは [fuzz/noise.mjs](../fuzz/noise.mjs) で，段を上がるシード 4 つを，最上段を高くして 3 回ずつ流し，2 段離れた段どうしで，時間の伸びの次数が仕事量の伸びの次数をどれだけ上回るかを見る．数えていない 2 乗の仕事なら，1 上回る．
 
-2026-10-07 に，13th Gen Intel Core i7-1360P，Windows 11，Node 26.10.0 で，電源につなぎ，高パフォーマンスの電源プランで測った．表の値は，上回った量の最大である．
+2026-10-07 に，13th Gen Intel Core i7-1360P，Windows 11，Node 26.10.0 で，電源につなぎ，高パフォーマンスの電源プランで測った．表の値は，上回った量の最大である．Linux（Ubuntu 26.04）では，まだ測っていない．
 
 | 流し方 | 2 段下からの時間の増えが 0.1 秒以上 | 0.3 秒以上 | 1 秒以上 |
 |---|---|---|---|
@@ -585,11 +591,12 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
 | B10 | `i18n` | `$` を含む置換値では，拡張の文の `t()` を呼ばない（値が置換の記法として読まれ，結果が崩れる．置き場所が 2 つある文では，結果と仕事が値の長さの 2 乗や 3 乗で伸びる） |
 | B15 | `i18n` | どのオブジェクトにもあるキー（`constructor`，`toString` など）を引かない |
 | B16 | `grading-status` | `%` の並びが壊れたリンクを読ませない |
-| B17 | `assignments` | 保存されたメモから null を除く |
+| B17 | `assignments` | 保存されたメモが配列でなければ無いものとし，一覧から null を除く（メモは拡張自身の読み込み関数で読む） |
 | B18 | `grading-status` | `toString` か `valueOf` を自分に持つオブジェクトを含む応答を読ませない．提出の項目の型を確かめない |
 | B19 | `assignments` | 科目の一覧と科目ごとの取得が捕まえたプログラムの誤りを数えない |
 | B20 | `site-contact`，`background-message` | `fetchSakaiSiteContact()` が捕まえたプログラムの誤りを数えない |
 | B21 | `i18n` | 値を 1 つだけ，空文字列で渡したときは，値が無いものとして確かめる |
+| P6 | `background-message` | Shift_JIS の表を最初の入力の前に作っておき，どの入力にも数えない（探すときは，入力ごとに表を消し，Service Worker が起きたばかりの状態から始める） |
 
 S2，S8，S9 の正規表現は，以前は入力を切って避けていた（サイト情報のページを 512 バイト，KULASIS のページを 16,384 バイトで）．今は入力を切らず，正規表現だけを線形のエンジンに移す．線形のエンジンは同じ一致を入力長に比例する時間で見つけるので，ほかの部分の遅さは，そのまま数えて判定できる．
 
@@ -606,14 +613,14 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 |---|---|---|---|
 | fix/i18n-lookup | `i18n` | B10，B15（のちに B21 も） | 前半の修正では，値の中の置き場所の名前が後から置き換わる（B10 の後半）のを見つけた．直した後は 120 秒で失敗なし |
 | fix/grading-ta-input | `grading-status` | B16，B18 | 60 秒で失敗なし |
-| fix/invalid-memo | `assignments` | B17 | 60 秒で失敗なし |
+| fix/invalid-memo | `assignments` | B17 | 60 秒で失敗なし．2026-10-12 の続く修正の後は，引き継いだコーパス 370 入力と，シードからの 3 分のファジングで失敗なし |
 | fix/message-shape | `background-message` | S7 | 60 秒で失敗なし |
 | fix/site-contact-regex | `site-contact` | S2 | 60 秒で失敗なし |
 | fix/syllabus-parse | `syllabus-detail` | S8 | 60 秒で失敗なし |
 | fix/sakai-answer-shape | `assignments` | B19 | 120 秒で失敗なし（その前に，jsdom の URL の解析の遅さで時間切れになる入力が出たので，サイドバーの href の長さに上限を設けた） |
 | fix/site-contact-pages | `site-contact`，`background-message` | B20 | 各 120 秒で失敗なし |
 | 13 本すべてを当てたもの | 7 対象すべて | S2，S7，S8，B10，B15〜B18，B21 | `assignments` が，科目の一覧でも B19 と同じ誤りが起きるのを見つけた（B19 に加えた）．避ける範囲を広げた後は，`assignments` を 120 秒，ほかの 6 対象を各 60 秒回して失敗なし．入力の件数などの上限を外した後も，7 対象を各 60 秒回して失敗なし |
-| 24 本すべてを当てたもの（2026-10-08） | 7 対象すべて | S2，S6，S7，S8，S9，B10，B15〜B21 | 各 60 秒，続けて各 300 秒で失敗なし．当てると，S1 の前半と S9 が `src/auth-totp.js` で衝突したので，S9 のブランチはそこに触れないようにした（そのデコードは S1 の前半が取り除く）．その後は，24 本の 2 本ずつのどの組も，24 本を続けて取り込む 40 通りの順も衝突せず，どの順でも同じ結果になる（`git merge-tree` で確かめた）．S1 の前半が background に移したデコードに S9 の正規表現が残っていたのと，B1 の修正が読む `isLoading` を B9 の修正が消していたのも，それぞれのブランチで直した．テストは失敗 0 で，todo 62 件のうち 58 件が通る（残りは，判断の要る B14，S1 の後半，コミットを `git archive` してビルドする B5 と B6） |
+| 24 本すべてを当てたもの（2026-10-08） | 7 対象すべて | S2，S6，S7，S8，S9，B10，B15〜B21 | 各 60 秒，続けて各 300 秒で失敗なし．当てると，S1 の前半と S9 が `src/auth-totp.js` で衝突したので，S9 のブランチはそこに触れないようにした（そのデコードは S1 の前半が取り除く）．その後は，24 本の 2 本ずつのどの組も，24 本を続けて取り込む 40 通りの順も衝突せず，どの順でも同じ結果になる（`git merge-tree` で確かめた）．S1 の前半が background に移したデコードに S9 の正規表現が残っていたのと，B1 の修正が読む `isLoading` を B9 の修正が消していたのも，それぞれのブランチで直した．テストは失敗 0 で，todo 62 件のうち 58 件が通る（残りは，判断の要る B14，S1 の後半，コミットを `git archive` してビルドする B5 と B6）．2026-10-12 に，B17 の続く修正も当てて流すと，失敗 0 で，todo 66 件のうち 61 件が通る（残りは同じ 4 件と，直していない P6） |
 
 段で判定するようにした後のファジング（2026-10-07）:
 
@@ -624,6 +631,12 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 - 直した後のファジングでは，この突き合わせが，`i18n` の対象の読み方のずれを見つけた（B15 を避ける判定を入力を読み終える前にしていたので，繰り返したキーの段では続きを読んでいた）．また `grading-status` が，拡張が要求の ID に使う乱数の長さが段ごとに違うことで止まった（同じ入力を 1 つのプロセスで 300 回流すと 1 回）．判定は入力を読み終えてからにし，拡張の `Math.random` は，入力のバイト列から作るシードで始まる乱数に替えて，同じ入力のどの段にも同じ並びを返すようにした．続いて `i18n` が，B10 の値が置換の記法として読まれることで，結果と仕事が値の長さの 3 乗まで伸びるのを見つけた（B10 に加え，避ける範囲を `t()` を呼ぶことまで広げた）．その後は，7 対象を各 60 秒回して失敗はなかった．
 - それを直した後の CI では，`syllabus-search` が，探す科目名を繰り返した入力で止まった．科目名の中で検索結果の行の名前を探す処理は，科目名が行の名前より短いうちは試す場所が無く，追い越すと 1 単位ごとに行の名前の長さだけ増える．長さの違う行が 2 つあったので，その追い越しが 2 段にまたがり，速い伸びが 2 段続いて見えた（×16 から先は線形）．伸びは，繰り返す部分が入力の残り以上の長さになった段から読むようにした．また `assignments` が，大きな段で時間の伸びが仕事量の伸びを 0.54 上回って止まった．手元では起きないので，CI では時間を確かめないことにした（「時計の揺れ」）．その後は，CI と同じ設定で 7 対象を各 300 秒回して失敗はなく，canary も 4 秒で見つかった．
 - 2026-10-08 の毎日のファジングは，この修正の前のコードで走り，`assignments` が CI の時間の確かめで止まった（ほかの 6 対象は各 20 分で失敗なし）．そのコーパスを今のコードで順に流すと，2 バイトの入力が，線形のコードの上限を超えた．前の入力が課題パネルに描いたカードのリンクを，科目を探す処理（`extractCoursesFromDOM()`）が読み，その仕事がこの入力に数えられていた．カードのリンクは，課題ツールの URL が引けないと科目のページを指すので，科目へのリンクとして読まれる．課題パネルの対象は，入力の初めにパネルの中身を数えずに取り除くようにした（[tests/fuzz-history.test.mjs](../tests/fuzz-history.test.mjs)）．その後は，引き継ぐコーパスと，止まった入力と遅かった入力がすべて通る．
+- 2026-10-09 から 12 日の毎日のファジングは，4 回とも `assignments` と `background-message` で止まった（ほかの 5 対象は各 20 分で失敗なし．2 回目からは，前の回に止まった 2 つの入力を流し直して止まった）．
+  - `assignments` は，保存されたメモの一覧が配列でないと課題パネルの描画が止まることを見つけた（B17 に加えた）．対象は，メモをストアに置いて拡張自身の読み込み関数（`loadMemos()`）で読むようにした．それまでは，読み込み関数のすること（`|| []`）を対象の側でまねて内部の変数に入れていたので，読み込み関数での修正をファジングで確かめられなかった．
+  - `background-message` は，8 バイトの入力が線形のコードの上限を超えた．Service Worker が起きてから最初の検索で作る Shift_JIS の表（P6，約 15.6 万歩）が，そのプロセスで最初に検索した入力に数えられていた．コーパスを小さい順に流すので，どの入力が止まるかは順序で決まっていた．対象は，最初の入力の前に表を作り，どの入力にも数えないようにした（「ファジングで避けている既知の問題」に P6 を加えた）．
+  - この入力の失敗をテストで確かめると，対象をまとめて動かすテストのプロセスでは止まらなかった．数える場所を，プロセスで読み込んだすべてのスクリプトから数えていたので，ほかの対象の分まで上限に入っていた．上限は，対象のブラウザが読み込んだコードと，その対象の空の入力の仕事量で決めるようにした．また，上限を超えた入力の後に残った拡張の処理が拒否で終わり，次の入力やテストの失敗として数えられうるので，段の前に，前の入力が動かし始めたことを終わらせ，テストは既知の入力を 1 つずつ別のプロセスで流すようにした．
+  - 修正ブランチ fix/invalid-memo を，B17 を避けずに手元で回すと，失敗はなかったが，11 バイトの入力で 33 秒と 58 秒かかるものが出た．その後は，拡張の定期更新が最上段の巨大なサイドバーを読み直し続け，30 分を過ぎても実行が終わらなかった．jsdom がリンクの URL を読むたびに解析し直すためで，ハーネスが直近の解析結果を使い回すようにすると，この 2 つの入力は 21〜37 秒から 6〜8 秒になった（i7-1360P，電源につないで，各 2 回）．
+  - その後は，次の毎日のファジングが引き継ぐコーパス（7 対象の 911 入力）を小さい順に流しても，止まった入力と遅かった入力を流しても，CI の設定ですべて通る．CI の設定で 7 対象を各 3 分回しても失敗はなく，canary は 1 秒で見つかった．
 
 ## 進める順序
 
@@ -634,5 +647,5 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 ## このリポジトリの方針
 
 - kulms-extension は fork（[yumasansansan/kulms-extension](https://github.com/yumasansansan/kulms-extension)）を submodule `kulms-extension/` として持つ．修正はこの fork のブランチで行い，上流（[Radian0523/kulms-extension](https://github.com/Radian0523/kulms-extension)）へ PR を出す．
-- このリポジトリのパッケージ管理は pnpm で，Node は最新版を使う（2026-10-06 の検証は Node 26.10.0 と pnpm 12.9.1）．上流は bun を使うが，このリポジトリでは不要．
+- このリポジトリのパッケージ管理は pnpm で，Node も pnpm も最新版を使う（2026-10-06 の検証は Windows 11 で Node 26.10.0 と pnpm 12.9.1，2026-10-12 の検証は Ubuntu 26.04 で Node 26.11.1 と pnpm 12.11.2）．pnpm の版は `package.json` で固定しない（`packageManager` を書かない）．上流は bun を使うが，このリポジトリでは不要．
 - このリポジトリのファイルは GPL-3.0-or-later とし，ADLplug-Next と同じ形の SPDX ヘッダを各ファイルの先頭に付ける．コメントを書けないファイルは `REUSE.toml` で指定し，REUSE 仕様に適合させる（CI で `reuse lint` を掛ける）．submodule の kulms-extension は上流の MIT のまま．

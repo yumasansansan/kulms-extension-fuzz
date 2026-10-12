@@ -40,9 +40,9 @@
 # carries its corpus over from one run to the next, is fuzz.yml's, once a day.
 #
 # Each job checks the commit out with plain git, the submodule at its commit,
-# and ci/setup.sh installs the newest Node and the pnpm of package.json. The
-# one action, actions/upload-artifact, keeps the failing inputs; it is pinned
-# to the commit of its release.
+# and ci/setup.sh installs the newest Node and the newest pnpm. The one
+# action, actions/upload-artifact, keeps the failing inputs; it is pinned to
+# the commit of its release.
 
 name: CI
 

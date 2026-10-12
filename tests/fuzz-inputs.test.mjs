@@ -24,13 +24,20 @@
 //   its todo test as if ID were fixed. This holds of the submodule's
 //   extension, whose findings the list is of, and is not checked of another
 //   (KULMS_EXTENSION_DIR).
+// - A known input runs in a process of its own (node fuzz/replay.mjs), as the
+//   fuzzer runs a target and ci/fuzz.sh replays an input that failed: an
+//   input that fails may leave work of the extension's under way, which
+//   rejects once its work has passed what it may be (harness/work.mjs) and
+//   would fail whatever ran next in the same process.
 // - The seeds, the known inputs and the regression inputs are what
 //   fuzz/inputs.mjs writes, and a target that has read() reads each of them
 //   as its plan says.
 // - The canary must fail on the bug planted in it, without the fuzzer as with.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { replay } from "../fuzz/replay.mjs";
@@ -45,14 +52,44 @@ const files = (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => !
 const quiet = { log() {} };
 const submodule = EXT === path.join(ROOT, "kulms-extension");
 
-// Runs `file` on `target` with `id` taken off the list of open findings.
-async function lookingFor(id, target, file) {
-  const wasOpen = OPEN.delete(id);
-  try {
-    return await replay(target, [file], quiet);
-  } finally {
-    if (wasOpen) OPEN.add(id);
+// Runs `start()` when fewer runs than the machine has processors are under
+// way, and when it has, once one ends.
+const slots = Math.max(1, os.availableParallelism());
+let busy = 0;
+const waiting = [];
+function inTurn(start) {
+  return new Promise((resolve, reject) => {
+    const go = () => {
+      busy++;
+      start().then(resolve, reject).finally(() => {
+        busy--;
+        if (waiting.length) waiting.shift()();
+      });
+    };
+    if (busy < slots) go();
+    else waiting.push(go);
+  });
+}
+
+// Runs `file` on `target` in a process of its own, with `id` also taken off
+// the list of open findings when it is given (KULMS_FUZZ_LOOK_FOR), and keeps
+// the run for every test that asks for it. What the run comes to: the first
+// line of each failure that fuzz/replay.mjs writes (none when it passed), and
+// all it wrote.
+const runs = new Map();
+function alone(target, file, id = "") {
+  const key = `${target} ${file} ${id}`;
+  if (!runs.has(key)) {
+    const lookFor = [process.env.KULMS_FUZZ_LOOK_FOR, id].filter(Boolean).join(",");
+    runs.set(key, inTurn(() => new Promise((resolve) => {
+      execFile(process.execPath, [path.join(FUZZ, "replay.mjs"), target, file], { env: { ...process.env, KULMS_FUZZ_LOOK_FOR: lookFor }, maxBuffer: 2 ** 26 }, (error, stdout, stderr) => {
+        const lines = stdout.split("\n");
+        const failures = lines.flatMap((line, i) => (line.startsWith("FAIL") ? [lines[i + 1]] : []));
+        resolve({ failures, output: stdout + stderr });
+      });
+    })));
   }
+  return runs.get(key);
 }
 
 for (const target of targets.filter((t) => t !== "canary")) {
@@ -69,16 +106,19 @@ for (const target of targets.filter((t) => t !== "canary")) {
   }
   for (const file of files(path.join(FUZZ, "known", target))) {
     const id = path.basename(file).split("-")[0];
-    test(`${target}: ${path.basename(file)} passes`, { todo: `${id} stands (docs/findings.md)` }, async () => {
-      const failures = await lookingFor(id, target, file);
-      assert.deepEqual(failures.map((f) => f.error && f.error.message), []);
-    });
     const skip = !OPEN.has(id) ? `${id} is off the list of open findings` : !submodule ? "the extension under test is not the submodule's" : false;
+    // Both runs begin now, and as many others at once as there are processors.
+    const found = alone(target, file, id);
+    const kept = skip ? null : alone(target, file);
+    test(`${target}: ${path.basename(file)} passes`, { todo: `${id} stands (docs/findings.md)` }, async () => {
+      const { failures, output } = await found;
+      assert.deepEqual(failures, [], output);
+    });
     test(`${target}: ${path.basename(file)} sets off ${id} and nothing else`, { skip }, async () => {
-      const kept = await replay(target, [file], quiet);
-      assert.deepEqual(kept.map((f) => f.error && f.error.message), [], `the target does not keep away from what ${file} sets off while ${id} is open`);
-      const found = await lookingFor(id, target, file);
-      assert.equal(found.length, 1, `${file} no longer sets off ${id}: write it anew (fuzz/inputs.mjs)`);
+      const open = await kept;
+      assert.deepEqual(open.failures, [], `the target does not keep away from what ${file} sets off while ${id} is open:\n${open.output}`);
+      const { failures, output } = await found;
+      assert.equal(failures.length, 1, `${file} no longer sets off ${id}: write it anew (fuzz/inputs.mjs)\n${output}`);
     });
   }
 }

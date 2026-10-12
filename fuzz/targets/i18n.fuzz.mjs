@@ -103,7 +103,7 @@ function check(data) {
 
 // The target's work for an input, on each of its rungs (fuzz/lib.mjs).
 export function fuzz(data) {
-  ladderSync(data, run);
+  ladderSync(data, run, browser);
 }
 
 await calibrate(fuzz);

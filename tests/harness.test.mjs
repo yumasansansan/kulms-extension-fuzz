@@ -80,7 +80,7 @@ test("an answer arrives even when copying it passes what the input's work may be
   });`, bg.global);
   // Enough work for the message to reach the listener, not for the answer's
   // copy into the tab's realm, which counts its thousand units.
-  beginInput(0, { cap: 200 });
+  beginInput(0, { cap: 200, code: browser });
   const answered = await Promise.race([browser.deliver(tab, [bg], { type: "x" }).then(() => true, () => true), settle(2000).then(() => false)]);
   const work = endInput();
   assert.ok(work.over, "the answer's copy passed the work it may be");

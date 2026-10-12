@@ -3,7 +3,6 @@
   "name": "kulms-extension-fuzz",
   "description": "Tests and fuzzing of the KULMS+ browser extension, which this repository holds as a submodule",
   "type": "module",
-  "packageManager": "pnpm@12.9.1",
   "engines": {
     "node": ">=26"
   },

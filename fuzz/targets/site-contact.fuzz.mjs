@@ -76,7 +76,7 @@ async function run(data) {
 
 // The target's work for an input, on each of its rungs (fuzz/lib.mjs).
 export async function fuzz(data) {
-  await ladder(data, run);
+  await ladder(data, run, browser);
 }
 
 await calibrate(fuzz);

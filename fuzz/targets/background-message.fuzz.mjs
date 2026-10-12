@@ -19,7 +19,9 @@
 // pages.json and the Site Info page, and the syllabus in one). A message that
 // makes more fails the input, as the count above would then be out of date.
 // The background keeps its state between inputs, the TOTP store in IndexedDB
-// among it, as a service worker does between messages.
+// among it, as a service worker does between messages; but for the Shift_JIS
+// table it builds on its first search (P6, below), which each input finds as
+// every other input does.
 //
 // It fails when a listener throws, when a promise of the background is
 // rejected with nothing to handle it, when the message gets no answer though
@@ -40,7 +42,8 @@
 // target fails too on a warning or an error that tells of a slip of the code
 // (warnings() of fuzz/lib.mjs), not on an HTTP error, a network that fails
 // or an answer that is not JSON, which the catching is there for.
-import { Browser, Net, idle, openBackground, openPopup, openTab, watch } from "../../harness/index.mjs";
+import vm from "node:vm";
+import { Browser, Net, idle, openBackground, openPopup, openTab, uncounted, watch } from "../../harness/index.mjs";
 import { answer, brief, bytes, calibrate, fail, json, judge, ladder, open, provider, string, value, warnings } from "../lib.mjs";
 
 const LMS = "https://lms.gakusei.kyoto-u.ac.jp";
@@ -100,6 +103,17 @@ export function read(fdp) {
 async function run(data) {
   browser.forget();
   net.forget();
+  // Known: P6 (docs/findings.md). background.js builds its Shift_JIS table on
+  // the first search after the service worker starts, about 156,000 steps
+  // whatever the keyword, more than linear code does with a small input. The
+  // background serves every input, so only the first input to search would
+  // pay for it, and an input's work would depend on the inputs before it.
+  // Looking for P6, each input begins without the table, as on a service
+  // worker just started; while P6 is open, the table is built before the
+  // first input and kept, as on one that has searched before, and building
+  // it is charged to no input.
+  if (open("P6")) uncounted(() => bg.global.encodeShiftJIS(""));
+  else vm.runInContext("sjisEncodeTable = null;", bg.global);
   const input = read(provider(data));
   const from = senders[input.from];
   const m = input.message;
@@ -135,7 +149,7 @@ async function run(data) {
 
 // The target's work for an input, on each of its rungs (fuzz/lib.mjs).
 export async function fuzz(data) {
-  await ladder(data, run);
+  await ladder(data, run, browser);
 }
 
 await calibrate(fuzz);

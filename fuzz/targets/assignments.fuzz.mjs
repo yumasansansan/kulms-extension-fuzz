@@ -22,9 +22,10 @@
 // Teachers write the titles, and the network is the network.
 //
 // One tab serves every input. The panel is opened once; each input then sets
-// the sidebar, the network's answers and the stored state (through the
-// script's internals, harness/source.mjs), forgets the courses an earlier
-// input's fetch found, and runs the fetch, the drawing and the colouring.
+// the sidebar, the network's answers and the stored state (the memos in the
+// store, for the script to read them; the rest through the script's
+// internals, harness/source.mjs), forgets the courses an earlier input's
+// fetch found, and runs the fetch, the drawing and the colouring.
 //
 // It fails when these throw, when a promise is rejected with nothing to handle
 // it, or when a detector of the harness sees something: the panel draws data
@@ -51,6 +52,8 @@ import { COURSE_PAGE, LMS, openCoursePage } from "../../tests/lms.mjs";
 import { answer, bytes, calibrate, fail, json, jsonText, judge, ladder, number, open, provider, string, value, warnings } from "../lib.mjs";
 
 const NOT_FOUND = { status: 404, headers: { "content-type": "text/html" }, body: "" };
+// Where the extension stores its memos (MEMO_KEY of src/assignments.js).
+const MEMOS = "kulms-memos";
 let answers = {};
 function api(url) {
   const path = new URL(url).pathname;
@@ -198,17 +201,28 @@ async function run(data) {
     if (!(e && (e.loggedOut || e.message === tab.window.t("noCourses")))) throw e;
     fetched = []; // what loadAssignments() shows as a message
   }
-  // The stored state as the extension has it once it has read the store: what
-  // is not there, or is falsy, is an empty list or record (the loaders say
-  // `|| []` and `|| {}`), anything else is as it was stored.
-  let memos = json(fdp.consumeBoolean() ? list(fdp, memo) : value(fdp)).value || [];
-  // Known: B17 (docs/findings.md). While it is open, no stored memo is null
-  // (what JSON makes of undefined in a list too): normalizeMemo() hands it
-  // back, and reading its deadline stops the drawing.
-  if (open("B17") && Array.isArray(memos)) memos = memos.filter((m) => m !== null);
-  a.memos = memos;
-  a.checkedState = json(value(fdp)).value || {};
-  a.dismissedState = json(value(fdp)).value || {};
+  // The stored state. The memos are put in the store, or none when the value
+  // is undefined, and the extension reads them with its own loader
+  // (loadMemos()), so that what it makes of what it reads is fuzzed with
+  // the rest. The checks and the hidden assignments are set as their loaders
+  // leave them: what is not there, or is falsy, is an empty record (`|| {}`),
+  // anything else is as it was stored.
+  let memos = json(fdp.consumeBoolean() ? list(fdp, memo) : value(fdp)).value;
+  const checked = json(value(fdp)).value;
+  const dismissed = json(value(fdp)).value;
+  // Known: B17 (docs/findings.md). While it is open, the stored memos are a
+  // list or nothing, and no memo of the list is null (what JSON makes of
+  // undefined in a list too): the loader keeps a value that is not a list,
+  // and the drawing calls its forEach; normalizeMemo() hands a null back,
+  // and the drawing reads its deadline.
+  if (open("B17")) memos = Array.isArray(memos) ? memos.filter((m) => m !== null) : undefined;
+  uncounted(() => {
+    browser.storage.local.unload([MEMOS]);
+    if (memos !== undefined) browser.storage.local.load({ [MEMOS]: memos });
+  });
+  await a.loadMemos();
+  a.checkedState = checked || {};
+  a.dismissedState = dismissed || {};
   a.renderAssignments(fetched);
   a.colorSidebarTabs(fetched);
   a.checkNotificationBadges(fetched);
@@ -228,7 +242,7 @@ async function run(data) {
 
 // The target's work for an input, on each of its rungs (fuzz/lib.mjs).
 export async function fuzz(data) {
-  await ladder(data, run);
+  await ladder(data, run, browser);
 }
 
 await calibrate(fuzz);
