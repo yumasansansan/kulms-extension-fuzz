@@ -10,10 +10,10 @@ specification: the GNU General Public License, version 3 or any later version
 
 # KULMS+ 拡張機能 レビューの記録
 
-- **対象**: [Radian0523/kulms-extension](https://github.com/Radian0523/kulms-extension) の [`087452e`](https://github.com/Radian0523/kulms-extension/commit/087452e33d14c117e6fa584fe3dd4b19f8f9a76c)（v1.21.0 と提出検知の修正）
+- **対象**: [Radian0523/kulms-extension](https://github.com/Radian0523/kulms-extension) の [`087452e`](https://github.com/Radian0523/kulms-extension/commit/087452e33d14c117e6fa584fe3dd4b19f8f9a76c)（v1.21.0 と提出検知の修正）．テストとファジングは，2026-10-13 から v1.21.1 の [`20d7da3`](https://github.com/Radian0523/kulms-extension/commit/20d7da3b9193960a2a1b38f1281e2e12c8155817) に対して行う（B1，B2，B5，B6 が直った版）
 - **日付**: 2026-10-06（B19〜B21 と S9 は 2026-10-07，B22 は 2026-10-13）
 - **方法**: 全ソースを通読した．そのうえで，実コードを Node 26.10.0 と jsdom 30.1.2 の上で動かして確かめた．その後，拡張を Node の上で動かすハーネス（[harness/](../harness/)）を作り，確かめたことをテスト（[tests/](../tests/)）にした．また，Jazzer.js でファジング（[fuzz/](../fuzz/)）を行い，B15〜B22 と，S7 の新しい例を見つけた．拡張のすべての正規表現を，受理するオートマトンで調べ，S9 を見つけた
-- 行番号は上記コミット時点のもの．リンクはそのコミットへの固定リンク
+- 行番号は `087452e` の時点のもの．リンクはそのコミットへの固定リンク
 
 ## 凡例
 
@@ -34,12 +34,12 @@ specification: the GNU General Public License, version 3 or any later version
 | [S7](#s7) | 低 | 形の崩れたメッセージで onMessage リスナーが例外を投げる | 再現 | 対応中（[fix/message-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/message-shape)） | |
 | [S8](#s8) | 低 | シラバス解析の正規表現が入力長の 2 乗で遅くなる | 再現・計測 | 対応中（[fix/syllabus-parse](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-parse)） | |
 | [S9](#s9) | 低 | 科目名，TOTP のシークレット，フォルダを読む正規表現が入力長の 2 乗で遅くなる | 解析・再現・計測 | 対応中（[fix/backtracking-regexes](https://github.com/yumasansansan/kulms-extension/tree/fix/backtracking-regexes)．ログインページの分は S1 の前半） | |
-| [B1](#b1) | **高** | 複数タブを開いていると，メモ・完了チェック・非表示が消える | 再現 | PR 中（[#75](https://github.com/Radian0523/kulms-extension/pull/75)） | |
-| [B2](#b2) | 中 | 非表示にした課題が 30 日後に一覧へ戻る | 再現 | PR 中（[#76](https://github.com/Radian0523/kulms-extension/pull/76)） | [#74](https://github.com/Radian0523/kulms-extension/issues/74) |
+| [B1](#b1) | **高** | 複数タブを開いていると，メモ・完了チェック・非表示が消える | 再現 | 修正済（[#75](https://github.com/Radian0523/kulms-extension/pull/75)，v1.21.1） | |
+| [B2](#b2) | 中 | 非表示にした課題が 30 日後に一覧へ戻る | 再現 | 修正済（[#76](https://github.com/Radian0523/kulms-extension/pull/76)，v1.21.1） | [#74](https://github.com/Radian0523/kulms-extension/issues/74) |
 | [B3](#b3) | 中 | サイドバーの色分けで，期限切れが最も弱く扱われる | 再現 | 対応中（[fix/sidebar-overdue-color](https://github.com/yumasansansan/kulms-extension/tree/fix/sidebar-overdue-color)） | |
 | [B4](#b4) | 中 | ツール表示管理が 200ms ごとの再処理を止めない | 再現 | 対応中（[fix/tool-visibility-loop](https://github.com/yumasansansan/kulms-extension/tree/fix/tool-visibility-loop)） | |
-| [B5](#b5) | 中 | Safari 版に `vendor/` が同梱されない | 再現（ビルド） | 対応中（[fix/build-contents](https://github.com/yumasansansan/kulms-extension/tree/fix/build-contents)） | |
-| [B6](#b6) | 中 | 配布用 zip に `node_modules/` などが入る | 再現（ビルド） | 対応中（[fix/build-contents](https://github.com/yumasansansan/kulms-extension/tree/fix/build-contents)） | |
+| [B5](#b5) | 中 | Safari 版に `vendor/` が同梱されない | 再現（ビルド） | 修正済（上流の [`97a8746`](https://github.com/Radian0523/kulms-extension/commit/97a87462f3ab2950867ef53c2171713a77a7b3a8)，v1.21.1） | |
+| [B6](#b6) | 中 | 配布用 zip に `node_modules/` などが入る | 再現（ビルド） | 修正済（上流の [`97a8746`](https://github.com/Radian0523/kulms-extension/commit/97a87462f3ab2950867ef53c2171713a77a7b3a8)，v1.21.1） | |
 | [B7](#b7) | 低 | キャッシュから描画すると，クイズのリンクが課題ツールを指す | 再現 | 対応中（[fix/cached-tool-links](https://github.com/yumasansansan/kulms-extension/tree/fix/cached-tool-links)） | |
 | [B8](#b8) | 低 | バナーが重複し，設定タブにも紛れ込む | 再現 | 対応中（[fix/assignment-banners](https://github.com/yumasansansan/kulms-extension/tree/fix/assignment-banners)） | |
 | [B9](#b9) | 低 | 読み込み中の更新要求が，成功扱いのまま捨てられる | 読解・再現 | 対応中（[fix/refresh-while-loading](https://github.com/yumasansansan/kulms-extension/tree/fix/refresh-while-loading)） | |
@@ -207,7 +207,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 根拠: タブ B でメモを追加し，続いてタブ A で追加すると，B のメモが消えた．完了チェックと非表示も同じ書き方をしている．
 - 影響: LMS をよく複数タブで開く利用者のデータが消える．
 - 直し方: 操作のたびに「最新を読む → 差分を当てる → 書く」にするか，`storage.onChanged` で他のタブと同期する．より良いのは，項目ごとのキーにするか，background が更新を一列に並べる方式．
-- 対応: `storage.onChanged` で，ほかのタブが保存した状態をメモリに取り込み，開いているパネルを描き直す．バックフォワードキャッシュから戻ったページは読み直す（[fix/sync-state-across-tabs](https://github.com/yumasansansan/kulms-extension/tree/fix/sync-state-across-tabs)，PR [#75](https://github.com/Radian0523/kulms-extension/pull/75)）．
+- 対応: `storage.onChanged` で，ほかのタブが保存した状態をメモリに取り込み，開いているパネルを描き直す．バックフォワードキャッシュから戻ったページは読み直す（[fix/sync-state-across-tabs](https://github.com/yumasansansan/kulms-extension/tree/fix/sync-state-across-tabs)，PR [#75](https://github.com/Radian0523/kulms-extension/pull/75)）．2026-10-13 に上流に取り込まれ（[`0a0683b`](https://github.com/Radian0523/kulms-extension/commit/0a0683b905fa924cc4931f58bd6e2e19d9302949)），v1.21.1 で出た．
 - テスト: `tests/assignments.test.mjs` の「B1」の 4 件（メモ，完了チェック，削除，開いているパネルの表示）．
 
 ### B2
@@ -217,7 +217,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: 画面は「30日後に自動的に完全削除されます」と表示する．しかし 30 日後に消えるのは，課題を隠している**非表示の記録**の方である．そのため，サーバーの一覧にまだある課題は「遅延提出」や「その他」に戻ってくる．
 - 根拠: 31 日前に非表示にした課題 2 件が，どちらも一覧に戻った．
 - 直し方: 「隠し続ける」と「削除済みに 30 日表示する」を分ける．非表示の記録は，その課題が取得結果から消えたとき（あるいは締切から一定期間が過ぎたとき）に消す．
-- 対応: 30 日たった課題・クイズの記録は，削除日時だけの記録にして隠し続ける．メモは今までどおり，メモごと削除する（[fix/keep-dismissed-hidden](https://github.com/yumasansansan/kulms-extension/tree/fix/keep-dismissed-hidden)，PR [#76](https://github.com/Radian0523/kulms-extension/pull/76)）．
+- 対応: 30 日たった課題・クイズの記録は，削除日時だけの記録にして隠し続ける．メモは今までどおり，メモごと削除する（[fix/keep-dismissed-hidden](https://github.com/yumasansansan/kulms-extension/tree/fix/keep-dismissed-hidden)，PR [#76](https://github.com/Radian0523/kulms-extension/pull/76)）．2026-10-13 に上流に取り込まれ（[`f569e9d`](https://github.com/Radian0523/kulms-extension/commit/f569e9de9d23b1aefcef152b845c400fe74cff54)），v1.21.1 で出た．上流は #74 を閉じた．
 - テスト: `tests/assignments.test.mjs` の「B2」（削除済みセクションから外れることも確かめる）と，31 日前に削除したメモがメモごと消えることを確かめるテスト．
 
 ### B3
@@ -252,7 +252,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: v1.18.0 以降，manifest は `vendor/jsqr.min.js` と `vendor/qrcode-gen.js` を参照している．しかし Safari への同期と Xcode のリソースには `vendor/` が無い．そのため Safari では，auth.iimc の登録補助（jsQR と同じ組）と QR 表示が動かないはずである（Safari 実機では未確認）．
 - 根拠: コピーで `build.sh safari` を実行すると，manifest が参照する 2 ファイルが Resources に無かった．
 - 直し方: 同期の対象に `vendor` を加える．あわせて，各ビルド出力に manifest の参照するファイルが揃っているかを CI で検査する．
-- 対応: 拡張機能が動くのに要るものを build.sh の 1 か所に並べ，Safari への同期と zip の両方でそれを使う（[fix/build-contents](https://github.com/yumasansansan/kulms-extension/tree/fix/build-contents)，B6 と同じ）．
+- 対応: 拡張機能が動くのに要るものを build.sh の 1 か所に並べ，Safari への同期と zip の両方でそれを使う（[fix/build-contents](https://github.com/yumasansansan/kulms-extension/tree/fix/build-contents)，B6 と同じ）．上流は 2026-10-13 に，この指摘をもとに同じ形の修正を自ら入れ（[`97a8746`](https://github.com/Radian0523/kulms-extension/commit/97a87462f3ab2950867ef53c2171713a77a7b3a8)），v1.21.1 で出た．あわせて Safari の Resources を src に揃えた（M4）．
 - テスト: `tests/build.test.mjs` の「B5」．
 
 ### B6
@@ -262,7 +262,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: 除外リストに `node_modules/`，`package.json`，`bun.lock`，`eslint.config.js` が無い．bun に移行してからは開発者の手元に `node_modules/` があるので，ストアに出す zip に開発用の依存が入る．
 - 根拠: `node_modules` があるコピーで `build.sh chrome` を実行すると，4 つとも zip に入った．
 - 直し方: 除外リスト方式をやめ，入れるものを列挙する（manifest.json，background.js，popup.*，styles.css，src，vendor，icons，_locales）．
-- 対応: そのとおりに列挙し，zip には今までどおり LICENSE も入れる（[fix/build-contents](https://github.com/yumasansansan/kulms-extension/tree/fix/build-contents)，B5 と同じ）．Chrome と Firefox の zip に開発用のファイルが入らず，Safari の Resources に manifest の参照するファイルがすべて揃うことを確かめた．
+- 対応: そのとおりに列挙し，zip には今までどおり LICENSE も入れる（[fix/build-contents](https://github.com/yumasansansan/kulms-extension/tree/fix/build-contents)，B5 と同じ）．Chrome と Firefox の zip に開発用のファイルが入らず，Safari の Resources に manifest の参照するファイルがすべて揃うことを確かめた．上流の修正は B5 と同じ（[`97a8746`](https://github.com/Radian0523/kulms-extension/commit/97a87462f3ab2950867ef53c2171713a77a7b3a8)，v1.21.1）．
 - テスト: `tests/build.test.mjs` の「B6」．
 
 ### B7
@@ -500,7 +500,7 @@ specification: the GNU General Public License, version 3 or any later version
 - **M1**: TOTP の base32 デコードと HMAC の計算が，popup.js，assignments.js，auth-totp.js，auth-totp-register.js の 4 か所に重複している．background の 1 か所にまとめる（S1 の修正と同時に行う）．
 - **M2**: 緊急度・表示形式・提出判定が popup.js と assignments.js に，コース一覧の取得が textbooks.js と assignments.js に重複している．
 - **M3**: テストが無く，CI は PR 時の ESLint だけ．関数が IIFE に閉じていて，chrome API と DOM に依存するので，単体ではテストしにくい．
-- **M4**: `safari/KULMS+ Extension/Resources/` がコミットされた複製で，本体から遅れる．`087452e` では `src/assignments.js` と `src/submit-detect.js` が古いままだった．
+- **M4**: `safari/KULMS+ Extension/Resources/` がコミットされた複製で，本体から遅れる．`087452e` では `src/assignments.js` と `src/submit-detect.js` が古いままだった．v1.21.1 では，上流が src に揃え（[`97a8746`](https://github.com/Radian0523/kulms-extension/commit/97a87462f3ab2950867ef53c2171713a77a7b3a8)），CONTRIBUTING.md に，`./build.sh safari` で生成される複製なので直接編集しない，と書いた．複製をコミットする形は変わらない．
 - **M5**: 動かないコードがある．[src/textbooks.js:7](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L7) は，設定を読み込む前に設定を確かめている．[popup.js:901-917](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L901-L917) の SVG 走査は，作った画像を使っていない．
 
 ## ドキュメント
@@ -518,10 +518,10 @@ specification: the GNU General Public License, version 3 or any later version
 
 | 上流 Issue | 対応 |
 |---|---|
-| [#74](https://github.com/Radian0523/kulms-extension/issues/74) 30日後の削除効いてなくね？ | B2 |
+| [#74](https://github.com/Radian0523/kulms-extension/issues/74) 30日後の削除効いてなくね？ | B2（[#76](https://github.com/Radian0523/kulms-extension/pull/76) を取り込んだ後，上流が閉じた） |
 | [#32](https://github.com/Radian0523/kulms-extension/issues/32) lms への負荷軽減，[#27](https://github.com/Radian0523/kulms-extension/issues/27) sakai api 7分くらいかかってる | P1 |
 | [#62](https://github.com/Radian0523/kulms-extension/issues/62) 授業資料のページのロード長い | P2 |
-| [#58](https://github.com/Radian0523/kulms-extension/issues/58) 課題提出が反映されなくなった | `087452e`（提出ボタンを listen する修正）が対処しているとみられる（実機では未検証） |
+| [#58](https://github.com/Radian0523/kulms-extension/issues/58) 課題提出が反映されなくなった | `087452e`（提出ボタンを listen する修正）が対処しているとみられる（v1.21.1 の CHANGELOG はこれを #58 の修正とする．Issue は開いたまま．実機では未検証） |
 | [#56](https://github.com/Radian0523/kulms-extension/issues/56) 非ログイン時に更新すると課題が空になる | ログアウトを検知してキャッシュを守る処理（`LoggedOutError`）がある（実機では未検証） |
 | [#54](https://github.com/Radian0523/kulms-extension/issues/54) クイズが完了にならない | API に完了状態が無い仕様（範囲外） |
 
@@ -632,7 +632,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 | fix/sakai-answer-shape | `assignments` | B19 | 120 秒で失敗なし（その前に，jsdom の URL の解析の遅さで時間切れになる入力が出たので，サイドバーの href の長さに上限を設けた） |
 | fix/site-contact-pages | `site-contact`，`background-message` | B20 | 各 120 秒で失敗なし |
 | 13 本すべてを当てたもの | 7 対象すべて | S2，S7，S8，B10，B15〜B18，B21 | `assignments` が，科目の一覧でも B19 と同じ誤りが起きるのを見つけた（B19 に加えた）．避ける範囲を広げた後は，`assignments` を 120 秒，ほかの 6 対象を各 60 秒回して失敗なし．入力の件数などの上限を外した後も，7 対象を各 60 秒回して失敗なし |
-| 24 本すべてを当てたもの（2026-10-08） | 7 対象すべて | S2，S6，S7，S8，S9，B10，B15〜B21 | 各 60 秒，続けて各 300 秒で失敗なし．当てると，S1 の前半と S9 が `src/auth-totp.js` で衝突したので，S9 のブランチはそこに触れないようにした（そのデコードは S1 の前半が取り除く）．その後は，24 本の 2 本ずつのどの組も，24 本を続けて取り込む 40 通りの順も衝突せず，どの順でも同じ結果になる（`git merge-tree` で確かめた）．S1 の前半が background に移したデコードに S9 の正規表現が残っていたのと，B1 の修正が読む `isLoading` を B9 の修正が消していたのも，それぞれのブランチで直した．テストは失敗 0 で，todo 62 件のうち 58 件が通る（残りは，判断の要る B14，S1 の後半，コミットを `git archive` してビルドする B5 と B6）．2026-10-12 に，B17 の続く修正も当てて流すと，失敗 0 で，todo 66 件のうち 61 件が通る（残りは同じ 4 件と，直していない P6）．2026-10-13 に B22 の修正（25 本目）も当てると，失敗 0 で，todo 68 件のうち 63 件が通る |
+| 24 本すべてを当てたもの（2026-10-08） | 7 対象すべて | S2，S6，S7，S8，S9，B10，B15〜B21 | 各 60 秒，続けて各 300 秒で失敗なし．当てると，S1 の前半と S9 が `src/auth-totp.js` で衝突したので，S9 のブランチはそこに触れないようにした（そのデコードは S1 の前半が取り除く）．その後は，24 本の 2 本ずつのどの組も，24 本を続けて取り込む 40 通りの順も衝突せず，どの順でも同じ結果になる（`git merge-tree` で確かめた）．S1 の前半が background に移したデコードに S9 の正規表現が残っていたのと，B1 の修正が読む `isLoading` を B9 の修正が消していたのも，それぞれのブランチで直した．テストは失敗 0 で，todo 62 件のうち 58 件が通る（残りは，判断の要る B14，S1 の後半，コミットを `git archive` してビルドする B5 と B6）．2026-10-12 に，B17 の続く修正も当てて流すと，失敗 0 で，todo 66 件のうち 61 件が通る（残りは同じ 4 件と，直していない P6）．2026-10-13 に B22 の修正（25 本目）も当てると，失敗 0 で，todo 68 件のうち 63 件が通る．同じ日に，上流の v1.21.1 に残る 22 本（取り込まれた 2 本と，上流が同じ修正を入れた fix/build-contents を除く）を当てると，40 通りの順のどれでも衝突せずに同じツリーになり，失敗 0 で，todo 61 件のうち 58 件が通る（残りは B14，S1 の後半，P6） |
 
 段で判定するようにした後のファジング（2026-10-07）:
 
@@ -654,11 +654,14 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
   - `background-message` は，6 単位の `kulms-totp-load` が線形のコードの上限を超えた．background は入力をまたいで TOTP の保存を持ち越していたので，前の入力が保存した長いシークレットの復号が，この入力に数えられていた．入力の初めに保存を空にし，入力が言うシークレット（または無し）を，拡張自身の `saveTotpSecret()` で，どの入力にも数えずに置くようにした（[tests/fuzz-history.test.mjs](../tests/fuzz-history.test.mjs)）．そのテストで，長いシークレットを保存できない B22 を見つけた．
   - `site-contact` は，段 ×2 が入力を下の段と違う順に読んで止まった．`jsonText()` は，JSON にできない数を書くたびに書き方を入力から読んでいた．値のキーが段で繰り返す文字列だと，段によってキーが重なり（"9" を繰り返すと ×2 で "99" になり，もう 1 つのキー "99" と重なる），そうした数の個数が段で変わっていた．書き方は，入力から読まずに，入力のバイト列から作る乱数で選ぶようにした（[tests/fuzz-reads.test.mjs](../tests/fuzz-reads.test.mjs)）．
   - その後は，次の毎日のファジングが引き継ぐコーパス（7 対象の 1,085 入力）を小さい順に流しても，止まった入力と遅かった入力（15 件）を流しても，CI の設定ですべて通る．CI の設定で 7 対象を各 3 分回しても失敗はなく，canary も見つかった．
+- 同じ日に，上流が v1.21.1（[`20d7da3`](https://github.com/Radian0523/kulms-extension/commit/20d7da3b9193960a2a1b38f1281e2e12c8155817)）を出した．B1 と B2 の PR を取り込み，B5 と B6 を同じ形で自ら直し，教科書パネルを今の学期の科目に絞った（[`f2cdec2`](https://github.com/Radian0523/kulms-extension/commit/f2cdec20f04a3ebdcc636a14d26aa8637101edd6)．教科書のキャッシュに学期を記録し，学期を持たないキャッシュや学期の違うキャッシュは取り直す）．submodule をこの版に進めた．
+  - B1，B2，B5，B6 のテストは todo を外した．名前をキーにした教科書のキャッシュを描くテストは，学期を持たないキャッシュが使われなくなって失敗したので，今の学期を記録したキャッシュで確かめるようにした．
+  - 同じ日に手動で各対象 20 分回したファジングのコーパス（7 対象の 737 入力）と，遅かった入力（8 件）は，v1.21.1 でも CI の設定ですべて通る．CI の設定で 7 対象を各 3 分回しても失敗はなく，canary も見つかった．拡張の DOM XSS と ReDoS の報告は，`087452e` と同じ規則と件数のままである．
 
 ## 進める順序
 
 1. **fuzz リポジトリの土台**（済み）: submodule（kulms-extension の fork），ハーネス，テスト，ファズ対象，`ci.yml`，`fuzz.yml`．
-2. **修正と上流への PR**: データ消失（B1，B2）→ セキュリティ（S1〜S8）→ 不具合 → 負荷（P1〜P6）の順に直す．修正には，このリポジトリの回帰テストを付ける．
+2. **修正と上流への PR**: データ消失（B1，B2．v1.21.1 で取り込まれた）→ セキュリティ（S1〜S8）→ 不具合 → 負荷（P1〜P6）の順に直す．修正には，このリポジトリの回帰テストを付ける．
 3. **挙動が変わるもの**（S1 の表示場所，P1 の取得間隔とリクエスト数，B2 の仕様，P2 の API）は，先に上流で Issue を立てる．
 
 ## このリポジトリの方針

@@ -37,13 +37,13 @@ function build(target) {
 }
 test.after(() => { if (copy) fs.rmSync(copy, { recursive: true, force: true }); });
 
-test("B6: the Chrome package holds only what the extension runs", { skip, todo: skip ? undefined : "B6: node_modules, package.json, bun.lock and eslint.config.js go in" }, () => {
+test("B6: the Chrome package holds only what the extension runs", { skip }, () => {
   const dir = build("chrome");
   const names = execFileSync("unzip", ["-Z1", "kulms-extension-chrome.zip"], { cwd: dir, encoding: "utf8" }).split(/\r?\n/);
   assert.deepEqual(names.filter((n) => /^(?:node_modules\/|package\.json$|bun\.lock$|eslint\.config\.js$)/.test(n)), []);
 });
 
-test("B5: the Safari resources hold every file manifest.json names", { skip, todo: skip ? undefined : "B5: vendor/ is not synced" }, () => {
+test("B5: the Safari resources hold every file manifest.json names", { skip }, () => {
   const resources = path.join(build("safari"), "safari/KULMS+ Extension/Resources");
   const manifest = JSON.parse(fs.readFileSync(path.join(resources, "manifest.json"), "utf8"));
   const named = [

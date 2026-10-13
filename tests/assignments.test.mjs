@@ -38,9 +38,7 @@ function addMemo(panel, text) {
   panel.querySelector(".kulms-memo-save").click();
 }
 
-const B1 = "B1: each tab saves the state it loaded, over the other tab's";
-
-test("B1: a memo added in one tab survives a memo added in another", { todo: B1 }, async (t) => {
+test("B1: a memo added in one tab survives a memo added in another", async (t) => {
   const { stored, panelA, panelB } = await twoTabs(t, [assignment("A1", "レポート1", Date.now() + 30 * H)]);
   addMemo(panelB, "Bで書いたメモ");
   await settle(20);
@@ -49,7 +47,7 @@ test("B1: a memo added in one tab survives a memo added in another", { todo: B1 
   assert.deepEqual((stored("kulms-memos") || []).map((m) => m.text).sort(), ["Aで書いたメモ", "Bで書いたメモ"]);
 });
 
-test("B1: a completion check made in one tab survives one made in another", { todo: B1 }, async (t) => {
+test("B1: a completion check made in one tab survives one made in another", async (t) => {
   const { stored, panelA, panelB } = await twoTabs(t, [assignment("A1", "レポート1", Date.now() + 30 * H), assignment("A2", "レポート2", Date.now() + 50 * H)]);
   card(panelB, "レポート1").querySelector(".kulms-checkbox").click();
   await settle(20);
@@ -58,7 +56,7 @@ test("B1: a completion check made in one tab survives one made in another", { to
   assert.deepEqual(Object.keys(stored("kulms-checked-assignments") || {}).sort(), ["A1", "A2"]);
 });
 
-test("B1: an assignment hidden in one tab stays hidden when another tab hides one", { todo: B1 }, async (t) => {
+test("B1: an assignment hidden in one tab stays hidden when another tab hides one", async (t) => {
   const { stored, panelA, panelB } = await twoTabs(t, [assignment("A1", "レポート1", Date.now() + 30 * H), assignment("A2", "レポート2", Date.now() + 50 * H)]);
   for (const [panel, name] of [[panelB, "レポート1"], [panelA, "レポート2"]]) {
     const button = card(panel, name).querySelector(".kulms-card-delete");
@@ -69,7 +67,7 @@ test("B1: an assignment hidden in one tab stays hidden when another tab hides on
   assert.deepEqual(Object.keys(stored("kulms-dismissed-assignments") || {}).sort(), ["A1", "A2"]);
 });
 
-test("B1: a panel open in one tab shows a memo added in another", { todo: B1 }, async (t) => {
+test("B1: a panel open in one tab shows a memo added in another", async (t) => {
   const { panelA, panelB } = await twoTabs(t, [assignment("A1", "レポート1", Date.now() + 30 * H)]);
   addMemo(panelB, "Bで書いたメモ");
   await settle(20);
@@ -80,7 +78,7 @@ test("B1: a panel open in one tab shows a memo added in another", { todo: B1 }, 
 const hidden = (id, name, days, extra = {}) => ({ dismissedAt: Date.now() - days * D, name, courseName: "線形代数", courseId: "C1", type: "assignment", entityId: id, ...extra });
 const names = (panel, selector) => [...panel.querySelectorAll(`${selector} .kulms-assign-card-name`)].map((n) => n.textContent);
 
-test("B2: an assignment hidden 31 days ago stays hidden, out of the deleted section", { todo: "B2 (upstream #74): the purge drops the record that hides it, and it comes back" }, async (t) => {
+test("B2: an assignment hidden 31 days ago stays hidden, out of the deleted section", async (t) => {
   const browser = browserWith({
     ...cached([assignment("OLD", "未提出のまま期限切れ", Date.now() - 40 * D), assignment("FUT", "先の課題", Date.now() + 20 * D), assignment("NEW", "昨日隠した課題", Date.now() + 5 * D)]),
     "kulms-dismissed-assignments": { OLD: hidden("OLD", "未提出のまま期限切れ", 31), FUT: hidden("FUT", "先の課題", 31), NEW: hidden("NEW", "昨日隠した課題", 1) },
@@ -250,10 +248,20 @@ test("B9: a refresh asked for while the list loads is carried out after it, and 
   assert.equal(fetches() - before, 2);
 });
 
+// The term the extension files its textbook cache under (src/textbooks.js):
+// Kyoto University's year begins in April, and its first term (前期) runs from
+// April to September, its second (後期) from October to March. A cache of
+// another term, or of none, is fetched anew.
+function term(now = new Date()) {
+  const month = now.getMonth() + 1;
+  return `${month >= 4 ? now.getFullYear() : now.getFullYear() - 1}${month >= 4 && month <= 9 ? "前期" : "後期"}`;
+}
+
 test("a textbook list cached by the course's name, as the extension has kept it, is drawn with its names", async (t) => {
-  const browser = browserWith({ "kulms-textbooks-v3": { timestamp: Date.now(), data: {
-    "[2026前期火２]英語リーディング": { books: [], syllabusUrl: "", status: "not_found" },
-    "[2026前期月１]線形代数": { books: [{ title: "線形代数入門", author: "", publisher: "", isbn: "", type: "textbook" }], syllabusUrl: "", status: "found" },
+  const now = term();
+  const browser = browserWith({ "kulms-textbooks-v3": { timestamp: Date.now(), term: now, data: {
+    [`[${now}火２]英語リーディング`]: { books: [], syllabusUrl: "", status: "not_found" },
+    [`[${now}月１]線形代数`]: { books: [{ title: "線形代数入門", author: "", publisher: "", isbn: "", type: "textbook" }], syllabusUrl: "", status: "found" },
   } } });
   t.after(() => browser.close());
   const tab = openCoursePage(browser);
@@ -262,7 +270,7 @@ test("a textbook list cached by the course's name, as the extension has kept it,
   tab.document.body.append(list);
   tab.window.__kulmsTextbookAPI.loadInto(list, false);
   await until(() => list.querySelector(".kulms-textbook-course"), { timeout: 5000 });
-  assert.deepEqual([...list.querySelectorAll(".kulms-textbook-course-name")].map((n) => n.textContent), ["[2026前期月１]線形代数", "[2026前期火２]英語リーディング"]);
+  assert.deepEqual([...list.querySelectorAll(".kulms-textbook-course-name")].map((n) => n.textContent), [`[${now}月１]線形代数`, `[${now}火２]英語リーディング`]);
 });
 
 test("B11: two courses of the same name each have their own entry in the textbook list", { todo: "B11: the list is keyed by the course's name, so one course's entry replaces the other's" }, async (t) => {
