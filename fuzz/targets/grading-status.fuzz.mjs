@@ -33,7 +33,7 @@
 // (warnings() of fuzz/lib.mjs), not on an HTTP error, a network that fails
 // or an answer that is not JSON, which the catching is there for.
 import { Browser, idle, openTab, watch } from "../../harness/index.mjs";
-import { brief, calibrate, clone, fail, jsonText, judge, ladder, open, provider, string, value, warnings } from "../lib.mjs";
+import { brief, calibrate, clone, fail, jsonText, judge, ladder, open, provider, seen, string, value, warnings } from "../lib.mjs";
 
 const browser = new Browser();
 const tab = openTab(browser, { url: "https://lms.gakusei.kyoto-u.ac.jp/portal/site/S/tool/T", scripts: ["src/settings.js", "src/grading-ta.js"] });
@@ -146,7 +146,7 @@ async function check(data) {
     }
   }
   for (const line of log.slips()) fail(`a slip of the code: ${line}`);
-  const problems = watcher.check();
+  const problems = seen(watcher);
   if (problems.length) fail(problems.join("\n"));
 }
 

@@ -49,7 +49,7 @@
 // JSON).
 import { Browser, Net, idle, uncounted, watch } from "../../harness/index.mjs";
 import { COURSE_PAGE, LMS, openCoursePage } from "../../tests/lms.mjs";
-import { answer, bytes, calibrate, fail, json, jsonText, judge, ladder, number, open, provider, string, value, warnings } from "../lib.mjs";
+import { answer, bytes, calibrate, fail, json, jsonText, judge, ladder, number, open, provider, seen, string, value, warnings } from "../lib.mjs";
 
 const NOT_FOUND = { status: 404, headers: { "content-type": "text/html" }, body: "" };
 // Where the extension stores its memos (MEMO_KEY of src/assignments.js).
@@ -134,8 +134,21 @@ function memo(fdp) {
 }
 
 // The answer to one kind of request: JSON text of make()'s value, or of any
-// value, through answer().
-const reply = (fdp, make) => answer(fdp, jsonText(either(fdp, make)), "application/json");
+// value, through answer(). `collection` names the list of an answer whose
+// items have a title.
+const reply = (fdp, make, collection) => answer(fdp, jsonText(withoutB19Titles(either(fdp, make), collection)), "application/json");
+
+// Known: B19 (docs/findings.md). While it is open, a title of an assignment,
+// a quiz or a site that is an object of its own toString (JSON gives an
+// object one only by that key) is left out of Sakai's answers: the fetch
+// keeps the title as it is, and the panel's drawing makes a string of it
+// (getCheckedKey()), which throws, and the panel is not drawn, as the
+// finding says.
+function withoutB19Titles(v, collection) {
+  if (!open("B19") || !collection || v === null || typeof v !== "object" || !Array.isArray(v[collection])) return v;
+  const unconvertible = (t) => t !== null && typeof t === "object" && Object.hasOwn(t, "toString");
+  return { ...v, [collection]: v[collection].map((x) => (x !== null && typeof x === "object" && unconvertible(x.title) ? { ...x, title: undefined } : x)) };
+}
 
 // The sidebar's courses: none, or as many links to /portal/site/<ID> as the
 // input has bytes for, the IDs and the names any strings (a page holds only
@@ -185,11 +198,11 @@ async function run(data) {
   const fdp = provider(data);
   setSidebar(fdp);
   answers = {
-    assignments: reply(fdp, () => ({ assignment_collection: list(fdp, assignment) })),
+    assignments: reply(fdp, () => ({ assignment_collection: list(fdp, assignment) }), "assignment_collection"),
     item: reply(fdp, () => ({ submissions: list(fdp, submission), allowResubmission: value(fdp) })),
-    quizzes: reply(fdp, () => ({ sam_pub_collection: list(fdp, quiz) })),
+    quizzes: reply(fdp, () => ({ sam_pub_collection: list(fdp, quiz) }), "sam_pub_collection"),
     pages: reply(fdp, () => [{ tools: list(fdp, (f) => ({ toolId: f.consumeBoolean() ? "sakai.assignment.grades" : value(f), id: text(f), placementId: text(f) })) }]),
-    sites: reply(fdp, () => ({ site_collection: list(fdp, site) })),
+    sites: reply(fdp, () => ({ site_collection: list(fdp, site) }), "site_collection"),
     portal: answer(fdp, bytes(fdp), "text/html"),
   };
   const w = watch(tab);
@@ -235,7 +248,10 @@ async function run(data) {
     if (open("B19") && /^\[KULMS\] (?:Sakai API failed:|assignment fetch failed for)/.test(line)) continue;
     fail(`a slip of the code: ${line}`);
   }
-  const problems = w.check();
+  // Known: B19, as above: the same slips, as the catch clauses of the fetches
+  // hand them on (harness/detectors.mjs), and those of the quizzes, which the
+  // fetch takes out without a warning.
+  const problems = seen(w).filter((p) => !(open("B19") && /^a slip the extension caught at src\/assignments\.js:\d+ in (?:getCourses|fetchAssignmentsForCourse|fetchQuizzesForCourse) /.test(p)));
   if (problems.length) fail(problems.join("\n"));
   judge();
 }

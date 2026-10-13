@@ -24,6 +24,7 @@ import { Browser, EXT, LINEAR, degree, instrument, manifest, measure, openTab, r
 import { SYNTAX, builtIns, formOf, ruleOf } from "../harness/costs.mjs";
 import { ALIASES, parseSelectors, webRuleOf } from "../harness/web-costs.mjs";
 import { parse } from "../harness/work.mjs";
+import { completePlatform } from "../harness/contexts.mjs";
 
 // The scripts Chrome runs for the extension (as tests/regexp.test.mjs finds
 // them).
@@ -48,7 +49,11 @@ function walk(node, visit, parent = null) {
 }
 
 const parsed = scripts().map((file) => ({ file, ...parse(read(file)) }));
-const window = () => new JSDOM("", { url: "https://lms.gakusei.kyoto-u.ac.jp/portal", runScripts: "outside-only" }).window;
+const window = () => {
+  const w = new JSDOM("", { url: "https://lms.gakusei.kyoto-u.ac.jp/portal", runScripts: "outside-only" }).window;
+  completePlatform(w); // what the harness's windows have besides jsdom's (harness/contexts.mjs)
+  return w;
+};
 
 test("every built-in of ECMAScript in the background's realm and a window's has a rule", () => {
   const missing = [];

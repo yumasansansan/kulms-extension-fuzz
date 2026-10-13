@@ -31,7 +31,7 @@
 // (warnings() of fuzz/lib.mjs), not on an HTTP error, a network that fails
 // or an answer that is not JSON, which the catching is there for.
 import { Browser, Net, openBackground, watch } from "../../harness/index.mjs";
-import { answer, brief, bytes, calibrate, fail, jsonText, judge, ladder, open, provider, string, value, warnings } from "../lib.mjs";
+import { answer, brief, bytes, calibrate, fail, jsonText, judge, ladder, open, provider, seen, string, value, warnings } from "../lib.mjs";
 
 const LMS = "https://lms.gakusei.kyoto-u.ac.jp";
 let pages = {};
@@ -69,7 +69,9 @@ async function run(data) {
   if (name !== null && (typeof name !== "string" || name === "" || name !== name.trim() || /[<>]/.test(name))) {
     fail(`not a name: ${brief(name)}`);
   }
-  const problems = w.check();
+  // Known: B20, as above: the same slip, as the function's catch clause hands
+  // it on (harness/detectors.mjs).
+  const problems = seen(w).filter((p) => !(open("B20") && /^a slip the extension caught at background\.js:\d+ in fetchSakaiSiteContact /.test(p)));
   if (problems.length) fail(problems.join("\n"));
   judge();
 }

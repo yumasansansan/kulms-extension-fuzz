@@ -32,7 +32,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { read } from "../harness/index.mjs";
-import { answer, bytes, encode, repeated, repeatedBytes, string, value } from "./encode.mjs";
+import { answer, bytes, encode, number, repeated, repeatedBytes, string, value } from "./encode.mjs";
 
 const FUZZ = path.dirname(fileURLToPath(import.meta.url));
 const utf8 = (s) => new TextEncoder().encode(s);
@@ -69,7 +69,92 @@ const BOOK = '<span class="lesson_plan_subheading">(教科書)</span>京大 太�
 const TWO_CONTACTS = "<tr><th>サイト連絡先･メール</th><td>京大 花子<br>, 京大 太郎</td></tr>";
 
 const ok = (type, body) => ({ status: 200, headers: { "content-type": type }, body });
+
+// An input of fuzz/targets/submission.fuzz.mjs, as its read() reads it: both
+// settings on, the page to submit an assignment with its post button,
+// sessionStorage's submitted IDs and the free units written by `ids` and
+// `free`, nothing marked as submitted, and a click on the post button.
+function submissionPage(w, { ids, free }) {
+  w.bool(true); w.bool(true); w.bool(true); w.bool(true);
+  string(w, "S");
+  w.bool(true);
+  w.int(0, 2, 1); string(w, "S"); string(w, "A1");
+  w.int(0, 2, 0);
+  w.int(0, w.remaining, 0);
+  w.bool(false); w.bool(false);
+  ids(); w.int(0, 2, 0);
+  free();
+  // The click's place is 1, not 0, so that the action takes bytes of the
+  // input and its count can be read as 1.
+  w.int(0, w.remaining, 1); w.int(0, 9, 0); w.int(0, 65535, 1);
+}
+
+// An input of fuzz/targets/sidebar.fuzz.mjs, as its read() reads it: every
+// setting as loaded (its nine that the scripts read as they go), no tool
+// config, the page's own data leaving `free` units of its localStorage
+// (Infinity: none of its data), Wednesday 10:00, the courses and the actions
+// written by the functions given (an action's kind is one of fifteen).
+function sidebarPage(w, { free, pinned, sites, actions }) {
+  for (let i = 0; i < 9; i++) w.bool(false);
+  w.int(0, 2, 0);
+  if (free === Infinity) w.int(0, 2, 0);
+  else if (free === 0) w.int(0, 2, 2);
+  else { w.int(0, 2, 1); w.int(0, 65535, free); }
+  w.int(0, 6, 3); w.int(0, 24 * 60 - 1, 600);
+  for (const list of [pinned, sites, actions]) {
+    w.int(0, w.remaining, list.length);
+    for (const write of list) write();
+  }
+}
 const SITE_INFO_TOOLS = [{ tools: [{ toolId: "sakai.siteinfo", placementId: "p" }] }];
+
+// An input of fuzz/targets/grading-bridge.fuzz.mjs, as its read() reads it:
+// the graders that `graders` write, and a request of the content script for
+// each of `ids`. A grader is a <sakai-grader> with the ID Sakai gives it
+// (sakai-grader-<id>), whose originalSubmissions `prop` writes (an index of
+// read()'s choices and what follows it).
+function bridgePage(w, graders, ids) {
+  w.int(0, w.remaining, graders.length);
+  for (const { id, prop } of graders) {
+    w.int(0, 2, 0); // <sakai-grader>
+    w.int(0, 2, 1); string(w, id);
+    prop();
+  }
+  w.int(0, w.remaining, ids.length);
+  for (const id of ids) { w.int(0, 3, 0); string(w, id); }
+}
+// An assignment of the cache that fuzz/targets/popup.fuzz.mjs puts in the
+// store, every field as the extension writes it: `inMs` from when the popup
+// opens to its deadline, `status` one of the target's STATUSES.
+const DAY = 24 * 60 * 60e3;
+const POPUP_STATUSES = ["", "提出済", "評定済", "未提出", "取組中", "Submitted", "Graded"];
+function popupAssignment(w, { course, site, name, id, inMs, status }) {
+  w.bool(true); string(w, course);
+  w.bool(true); string(w, site);
+  w.bool(true); string(w, name);
+  w.bool(true); w.bool(true); string(w, site); string(w, "t1");
+  for (let i = 0; i < 2; i++) { w.bool(true); w.bool(true); w.int(-60 * DAY, 60 * DAY, inMs); } // the deadline and the close time
+  w.bool(true); w.bool(true); w.pick(POPUP_STATUSES, status);
+  w.bool(true); string(w, "");
+  w.bool(true); string(w, id);
+  w.bool(true); w.int(0, 2, 0); // an assignment, not a quiz
+  w.bool(true); w.bool(false);
+}
+
+const BRIDGE_FIELDS = ["id", "submissionId", "reference", "firstSubmitterName", "status", "submissionStatus", "submittedTime",
+  "submitted", "draft", "hasHistory", "grade", "graded", "returned", "length"];
+
+// A submission of the bridge's input whose fields are `fields`, each a field
+// Sakai gives and its value: a string as a string field, any other value as
+// a value.
+function bridgeSubmission(w, fields) {
+  w.int(0, 4, 1);
+  w.int(0, w.remaining, Object.keys(fields).length);
+  for (const [k, v] of Object.entries(fields)) {
+    w.bool(true); w.pick(BRIDGE_FIELDS, k);
+    if (typeof v === "string") { w.int(0, 7, 1); string(w, v); } else { w.int(0, 7, 0); value(w, v); }
+  }
+}
 
 // The empty answers of the assignment panel's network (fuzz/targets/
 // assignments.fuzz.mjs), after its sidebar and the answer to the courses'
@@ -309,6 +394,136 @@ export const INPUTS = [
     },
   },
   {
+    // One course, whose one assignment has no ID and a title that is an
+    // object of its own toString, as JSON can give one.
+    file: "known/assignments/B19-title-object",
+    plan: (w) => {
+      w.int(0, w.remaining, 1); string(w, "C1"); string(w, "線形代数");
+      w.int(0, 7, 0); value(w, { assignment_collection: [{ title: { toString: 0 } }] }); answer(w);
+      emptyAnswers(w);
+      w.bool(false); value(w, undefined);
+      value(w, undefined); value(w, undefined);
+    },
+  },
+  {
+    // One pinned course whose one tool, 概要, tool-visibility.js shows: the
+    // page's clock then runs on, and the reprocessing never ends.
+    file: "known/sidebar/B4-every-tool-shown",
+    plan: (w) => {
+      sidebarPage(w, {
+        free: Infinity,
+        pinned: [() => {
+          string(w, "C1"); string(w, "[2026前期月１]線形代数"); w.bool(false);
+          w.int(0, w.remaining, 0);
+          for (const part of [true, true, true, true, true, false]) w.bool(part);
+          w.int(0, 2, 0); w.bool(true);
+          w.int(0, w.remaining, 1); string(w, "t1"); string(w, "概要"); w.bool(false);
+        }],
+        sites: [],
+        actions: [],
+      });
+    },
+  },
+  {
+    // A page of Resources with its form and two rows, a folder that Sakai's
+    // link expands and a file; every folder feature on. The server answers
+    // the post with the folder's rows; the user opens the folder, moves down a
+    // row and lets a second go by.
+    file: "seeds/resources/folders",
+    plan: (w) => {
+      for (const on of [true, true, true, false]) { w.bool(true); w.bool(on); }
+      w.bool(true); w.int(0, 2, 1);
+      w.int(0, w.remaining, 1); string(w, "sakai_csrf_token"); string(w, "t");
+      w.bool(true);
+      const row = (name, mark, id) => () => {
+        w.bool(true); w.bool(true); w.int(0, 4, mark); string(w, name); w.bool(true); string(w, `/access/content${id}`);
+        w.bool(false); w.bool(false); string(w, id);
+      };
+      const rows = (list) => { w.int(0, w.remaining, list.length); for (const r of list) r(); };
+      rows([row("第1回", 0, "/group/S/1/"), row("シラバス.pdf", 4, "/group/S/syllabus.pdf")]);
+      w.int(0, w.remaining, 1);
+      w.bool(true); rows([row("第1回", 1, "/group/S/1/"), row("資料.pdf", 4, "/group/S/1/a.pdf")]); answer(w);
+      w.int(0, w.remaining, 3);
+      w.int(0, 4, 1); w.int(0, 65535, 0);
+      w.int(0, 4, 3); w.int(0, 65535, 0); w.bool(true); w.int(0, 4, 0);
+      w.int(0, 4, 4); w.int(0, 65535, 0); w.int(0, 600000, 1000);
+    },
+  },
+  {
+    // The page to submit レポート1, its form with the assignment's reference,
+    // the post button, the panel of attachments and its file input; the user
+    // drops a PDF on the zone and posts.
+    file: "seeds/submission/report",
+    plan: (w) => {
+      w.bool(true); w.bool(true); w.bool(true); w.bool(true);
+      string(w, "2026-110-1001-000");
+      w.bool(true);
+      w.int(0, 2, 1); string(w, "2026-110-1001-000"); string(w, "a1b2c3d4-0000-4000-8000-000000000001");
+      w.int(0, 2, 0);
+      w.int(0, w.remaining, 1); w.bool(true); string(w, "レポート1");
+      w.bool(true); w.bool(true);
+      w.int(0, 2, 0); w.int(0, 2, 0);
+      w.int(0, 2, 0);
+      w.int(0, w.remaining, 2);
+      w.int(0, 9, 5); w.int(0, 65535, 0); w.int(0, w.remaining, 1); string(w, "report.pdf"); string(w, "application/pdf"); bytes(w, [37, 80, 68, 70]);
+      w.int(0, 9, 0); w.int(0, 65535, 0);
+    },
+  },
+  {
+    // The page has left in its sessionStorage submitted IDs that are a string,
+    // not a list, and the user posts the assignment.
+    file: "known/submission/B12-ids-not-a-list",
+    plan: (w) => {
+      submissionPage(w, { ids: () => { w.int(0, 2, 2); string(w, '"abc"'); }, free: () => w.int(0, 2, 0) });
+    },
+  },
+  {
+    // The page has filled its sessionStorage, and the user posts the
+    // assignment: submit-detect.js writes there.
+    file: "known/submission/B23-session-full",
+    plan: (w) => {
+      submissionPage(w, { ids: () => w.int(0, 2, 0), free: () => w.int(0, 2, 2) });
+    },
+  },
+  {
+    // The page has filled its localStorage, and the user drags the sidebar's
+    // handle to 200 px: sidebar-resize.js writes the width there.
+    file: "known/sidebar/B23-storage-full",
+    plan: (w) => {
+      sidebarPage(w, { free: 0, pinned: [], sites: [], actions: [() => { w.int(0, 14, 8); w.int(0, 65535, 0); number(w, 200); }] });
+    },
+  },
+  {
+    // A sidebar of two pinned courses and one more, each with tools, its
+    // names as KULMS writes them, and what a user does: open the bar's
+    // dropdown, move a tool under the toggle, drag the sidebar, let a minute
+    // go by.
+    file: "seeds/sidebar/courses",
+    plan: (w) => {
+      const c = (id, name, tools) => () => {
+        string(w, id); string(w, name); w.bool(false);
+        w.int(0, w.remaining, 1); w.bool(true); w.int(0, 4, 0);
+        for (const part of [true, true, true, true, true, false]) w.bool(part);
+        w.int(0, 2, 0); w.bool(true);
+        w.int(0, w.remaining, tools.length);
+        for (const [tid, tname] of tools) { string(w, tid); string(w, tname); w.bool(false); }
+      };
+      const tools = [["t1", "概要"], ["t2", "授業資料（リソース）"], ["t3", "課題"], ["t4", "お知らせ"]];
+      sidebarPage(w, {
+        free: Infinity,
+        pinned: [c("2026-110-1001-000", "[2026前期月１]線形代数", tools), c("2026-110-1002-000", "[2026前期火２]英語リーディング", tools)],
+        sites: [c("2026-110-1003-000", "[2026後期水３]情報学", tools)],
+        actions: [
+          () => { w.int(0, 14, 3); w.int(0, 65535, 0); },
+          () => { w.int(0, 14, 4); w.int(0, 65535, 0); },
+          () => { w.int(0, 14, 1); w.int(0, 65535, 3); },
+          () => { w.int(0, 14, 8); w.int(0, 65535, 0); number(w, 250); },
+          () => { w.int(0, 14, 10); w.int(0, 65535, 0); w.int(0, 600000, 60000); },
+        ],
+      });
+    },
+  },
+  {
     // The popup asks for the books of the course 評定済 (one of the words
     // the extension looks for, as the fuzzer found it), and the input ends:
     // every answer is empty. The search is the first since the service
@@ -356,6 +571,231 @@ export const INPUTS = [
       bytes(w, utf8(CONTACT), { rest: true }); answer(w);
     },
     expect: { siteId: "S1", pages: ok("application/json", JSON.stringify([null, ...SITE_INFO_TOOLS])), page: ok("text/html", utf8(CONTACT)) },
+  },
+  {
+    // The grader of an assignment of two submissions, as Sakai keeps them,
+    // and the content script's request.
+    file: "seeds/grading-bridge/submissions",
+    plan: (w) => {
+      bridgePage(w, [{
+        id: "1",
+        prop: () => {
+          w.int(0, 2, 2); w.int(0, 6, 1);
+          w.int(0, w.remaining, 2);
+          bridgeSubmission(w, { id: "s1", firstSubmitterName: "京大 太郎", status: "未採点 - 提出済み", submittedTime: "2026/10/13 10:00", submitted: true, graded: false, returned: false, grade: "" });
+          bridgeSubmission(w, { reference: "/assignment/s/S/A/s2", firstSubmitterName: "京大 花子", status: "", submitted: true, graded: true, returned: true, grade: "85" });
+          w.bool(false);
+        },
+      }], ["kulms-ta-1791900000000-abc"]);
+    },
+  },
+  {
+    // The page's grader has a getter of its submissions that throws: the
+    // bridge lets it out, and answers nothing.
+    file: "known/grading-bridge/B24-getter-throws",
+    plan: (w) => {
+      bridgePage(w, [{ id: "1", prop: () => { w.int(0, 2, 1); w.bool(true); string(w, "x"); } }], ["r"]);
+    },
+  },
+  {
+    // A submission whose ID is a number: the bridge hands it on as it is.
+    file: "known/grading-bridge/B24-id-not-a-string",
+    plan: (w) => {
+      bridgePage(w, [{
+        id: "1",
+        prop: () => {
+          w.int(0, 2, 2); w.int(0, 6, 1);
+          w.int(0, w.remaining, 1);
+          bridgeSubmission(w, { id: 5 });
+          w.bool(false);
+        },
+      }], ["r"]);
+    },
+  },
+  {
+    // The grader's submissions are an array-like of no elements that says it
+    // has 2^32 - 2: the bridge's Array.from() loops to that.
+    file: "known/grading-bridge/P7-array-like-length",
+    plan: (w) => {
+      bridgePage(w, [{
+        id: "1",
+        prop: () => {
+          w.int(0, 2, 2); w.int(0, 6, 3);
+          w.bool(true); number(w, 2 ** 32 - 2);
+          w.int(0, w.remaining, 0);
+          w.bool(false);
+        },
+      }], ["r"]);
+    },
+  },
+  {
+    // Every folder opens as the page loads (autoExpandAll), and the server
+    // answers the post to open the one folder with a listing that shows it
+    // still closed: tree-view.js asks for it again, and again.
+    file: "known/resources/P2-folder-stays-closed",
+    plan: (w) => {
+      for (const on of [false, true, false, false]) { w.bool(true); w.bool(on); }
+      w.bool(true); w.int(0, 2, 1); w.int(0, w.remaining, 0); w.bool(true);
+      const folder = () => {
+        w.bool(true); w.bool(false); w.int(0, 4, 0); string(w, "資料"); w.bool(false);
+        w.bool(false); w.bool(false); string(w, "/group/S/f1/");
+      };
+      w.int(0, w.remaining, 1); folder();
+      w.int(0, w.remaining, 1); w.bool(true); w.int(0, w.remaining, 1); folder(); answer(w);
+      w.int(0, w.remaining, 0);
+    },
+  },
+  {
+    // pages.json comes by a redirect from an origin the extension has no host
+    // permission for, whose server lets it read the answer (CORS: the
+    // request's origin, which the redirect hid, "null", with credentials):
+    // the background reads it as the LMS's.
+    file: "known/site-contact/S12-redirect-elsewhere",
+    plan: (w) => {
+      string(w, "S1");
+      w.bool(false); w.bool(true); w.bool(true); string(w, "p");
+      answer(w, { redirect: { to: 1, path: "pages.json", allowed: 2, credentials: true } });
+      bytes(w, utf8(CONTACT), { rest: true }); answer(w);
+    },
+  },
+  {
+    // The popup opens on a cache written five minutes before: an assignment
+    // due in six hours, one in three days, one submitted two days ago; a memo
+    // due tomorrow; a TOTP secret kept. The user opens the TOTP section,
+    // shows the code, and waits two seconds.
+    file: "seeds/popup/assignments",
+    plan: (w) => {
+      w.int(0, 2, 0);
+      w.int(0, 2, 1); w.bool(true); w.bool(true); w.int(-60 * DAY, 60 * DAY, -5 * 60e3);
+      w.bool(true); w.int(0, w.remaining, 3);
+      popupAssignment(w, { course: "[2026前期月１]線形代数", site: "2026-110-1001-000", name: "第3回レポート", id: "a1", inMs: 6 * 60 * 60e3, status: "" });
+      popupAssignment(w, { course: "[2026前期火２]英語リーディング", site: "2026-110-1002-000", name: "Reading Response #4", id: "a2", inMs: 3 * DAY, status: "" });
+      popupAssignment(w, { course: "[2026前期月１]線形代数", site: "2026-110-1001-000", name: "第2回レポート", id: "a3", inMs: -2 * DAY, status: "提出済" });
+      w.int(0, 2, 0); w.int(0, 2, 0);
+      w.int(0, 2, 1); w.int(0, w.remaining, 1);
+      w.bool(false);
+      w.bool(true); w.int(0, 2 ** 48 - 1, 1);
+      w.bool(true); string(w, "教科書を買う");
+      w.bool(true); string(w, "[2026前期月１]線形代数");
+      w.bool(true); string(w, "2026-110-1001-000");
+      w.bool(true); w.bool(true); w.int(-60 * DAY, 60 * DAY, DAY);
+      w.bool(true); w.bool(true);
+      w.bool(true); w.bool(true); w.int(-60 * DAY, 60 * DAY, -DAY);
+      w.bool(true); string(w, "JBSWY3DPEHPK3PXP");
+      w.int(0, 3, 0);
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 3);
+      w.int(0, 12, 4); w.int(0, 65535, 1);
+      w.int(0, 12, 7); w.int(0, 65535, 1);
+      w.int(0, 12, 11); w.int(0, 65535, 1); w.int(0, 10 * 60e3, 2000);
+    },
+  },
+  {
+    // The popup opens on a cache whose list of assignments is a string.
+    file: "known/popup/B25-assignments-not-a-list",
+    plan: (w) => {
+      w.int(0, 2, 0);
+      w.int(0, 2, 1); w.bool(true); w.bool(true); w.int(-60 * DAY, 60 * DAY, 0);
+      w.bool(false); value(w, "課題");
+      w.int(0, 2, 0); w.int(0, 2, 0); w.int(0, 2, 0);
+      w.bool(false);
+      w.int(0, 3, 0);
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 0);
+    },
+  },
+  {
+    // The popup opens with nothing stored and no secret kept, in a window of
+    // two tabs: a course page of the LMS, whose content script answers a
+    // request to refresh with {ok: true}, and the authentication server's
+    // page that registers a TOTP secret, which is active. The user refreshes,
+    // opens the TOTP section, scans the page, which gives a secret, and saves
+    // it.
+    file: "seeds/popup/tabs",
+    plan: (w) => {
+      for (let i = 0; i < 5; i++) w.int(0, 2, 0);
+      w.bool(false);
+      w.int(0, 3, 3); string(w, "JBSWY3DPEHPK3PXP");
+      w.int(0, w.remaining, 2);
+      w.int(0, 3, 0); string(w, "2026-110-1001-000"); string(w, "a1b2c3"); w.int(0, 5, 3);
+      w.int(0, 3, 2); w.int(0, 5, 0);
+      w.bool(true); w.int(0, 1, 1);
+      w.int(0, w.remaining, 4);
+      w.int(0, 12, 2); w.int(0, 65535, 0);
+      w.int(0, 12, 4); w.int(0, 65535, 0);
+      w.int(0, 12, 10); w.int(0, 65535, 0);
+      w.int(0, 12, 6); w.int(0, 65535, 0);
+    },
+  },
+  {
+    // The page that registers a TOTP secret: jsQR finds nothing in its QR
+    // code, and the link that shows the secret as text shows it; the helper
+    // reads it there and fills in the code.
+    file: "seeds/totp-register/registration",
+    plan: (w) => {
+      w.bool(true);
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 1); w.bool(true); w.bool(true); w.bool(true); w.int(0, 2, 1); string(w, "JBSWY3DPEHPK3PXP");
+      w.int(0, w.remaining, 1); w.int(1, 4096, 4); bytes(w, new Array(64).fill(255)); w.int(0, 2, 0);
+      w.bool(true);
+      w.bool(false);
+      w.int(0, 2, 0);
+    },
+  },
+  {
+    // The page that says the registration is done, the secret kept in the
+    // page's sessionStorage: the helper has the background save it.
+    file: "seeds/totp-register/done",
+    plan: (w) => {
+      w.bool(false); string(w, "user/index.php"); string(w, "");
+      w.int(0, w.remaining, 1); w.int(0, 2, 0);
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 0);
+      w.bool(false);
+      w.bool(true); string(w, "JBSWY3DPEHPK3PXP");
+      w.int(0, 2, 0);
+    },
+  },
+  {
+    // The registration page says its secret is "A": the helper takes it, and
+    // making a key of it fails.
+    file: "known/totp-register/S6-short-secret",
+    plan: (w) => {
+      w.bool(true);
+      w.int(0, w.remaining, 1); w.int(0, 2, 1); string(w, "A");
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 0);
+      w.bool(true);
+      w.bool(false);
+      w.int(0, 2, 0);
+    },
+  },
+  {
+    // The page has filled its sessionStorage, and the helper keeps the secret
+    // it read there.
+    file: "known/totp-register/B23-session-full",
+    plan: (w) => {
+      w.bool(true);
+      w.int(0, w.remaining, 1); w.int(0, 2, 1); string(w, "JBSWY3DPEHPK3PXP");
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 0);
+      w.bool(true);
+      w.bool(false);
+      w.int(0, 2, 2);
+    },
+  },
+  {
+    // The background keeps a secret of 150 characters U+FFFF, which no
+    // base32 has, and the user shows its QR code: popup.js percent-encodes
+    // it into nine bytes a character, and qrcode-gen makes a large code.
+    file: "known/popup/S6-qr-of-non-base32",
+    plan: (w) => {
+      for (let i = 0; i < 5; i++) w.int(0, 2, 0);
+      w.bool(true); string(w, "\uffff".repeat(150));
+      w.int(0, 3, 0);
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 1); w.int(0, 12, 9); w.int(0, 65535, 1);
+    },
   },
 ];
 

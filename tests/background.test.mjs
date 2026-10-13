@@ -20,7 +20,7 @@
 // automaton.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Browser, LINEAR, Net, degree, measure, openBackground, openTab, settle } from "../harness/index.mjs";
+import { Browser, LINEAR, Net, degree, idle, measure, openBackground, openTab } from "../harness/index.mjs";
 
 const LMS = "https://lms.gakusei.kyoto-u.ac.jp";
 const SYLLABUS = "https://www.k.kyoto-u.ac.jp/external/open_syllabus";
@@ -113,7 +113,7 @@ test("S7: the message listeners survive messages of any shape", { todo: "S7: nul
   for (const message of [null, 1, "x", [], { type: 1 }, { type: {} }, { action: "fetchTextbooks", courseName: 1 }, { action: "fetchTextbooks", siteId: { toString: 0 } }]) {
     browser.deliver(tab, [bg], message).catch(() => {});
   }
-  await settle(50);
+  await idle();
   assert.deepEqual(browser.errors.map((e) => String(e.error)), []);
 });
 

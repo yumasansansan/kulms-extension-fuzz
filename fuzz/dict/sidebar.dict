@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: 2026 Yuma Kakei <yumasansansan@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of kulms-extension-fuzz. The SPDX lines name its copyright
+# holder and its license, in the machine-readable form of the REUSE
+# specification: the GNU General Public License, version 3 or any later version
+# (LICENSES/GPL-3.0-or-later.txt).
+#
+# Words for fuzz/targets/sidebar.fuzz.mjs: what the sidebar's scripts look for
+# in course names and tools, the keys of the page's localStorage they read and
+# write, and what an attacker who writes that storage, or the page, would try
+# (keys of the prototype, markup, script URLs, the end of a CSS rule, a broken
+# %-sequence in a site ID).
+"["
+"]"
+"2026"
+# 前期
+"\xe5\x89\x8d\xe6\x9c\x9f"
+# 後期
+"\xe5\xbe\x8c\xe6\x9c\x9f"
+# 月
+"\xe6\x9c\x88"
+# 水
+"\xe6\xb0\xb4"
+# １
+"\xef\xbc\x91"
+"2"
+# 概要
+"\xe6\xa6\x82\xe8\xa6\x81"
+# 授業資料（リソース）
+"\xe6\x8e\x88\xe6\xa5\xad\xe8\xb3\x87\xe6\x96\x99\xef\xbc\x88\xe3\x83\xaa\xe3\x82\xbd\xe3\x83\xbc\xe3\x82\xb9\xef\xbc\x89"
+# 課題
+"\xe8\xaa\xb2\xe9\xa1\x8c"
+"kulms-tool-config"
+"kulms-sidebar-width"
+"kulms-sidebar-v3"
+"__proto__"
+"constructor"
+"prototype"
+"hasOwnProperty"
+"toString"
+"valueOf"
+"{\""
+"\":"
+"\":true"
+"\":false"
+"<img src=x onerror=alert(1)>"
+"javascript:alert(1)"
+"}*{"
+"</style>"
+"%E0%A4%A"
+"%"
+"/tool/"
+"~"

@@ -10,14 +10,14 @@
 // messages it fetches from the extension as it does in Chrome.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Browser, LINEAR, degree, measure, openPopup, openTab, settle, until } from "../harness/index.mjs";
+import { Browser, LINEAR, degree, idle, measure, openPopup, openTab, until } from "../harness/index.mjs";
 import { LMS } from "./lms.mjs";
 
 async function settings(t) {
   const browser = new Browser();
   t.after(() => browser.close());
   const tab = openTab(browser, { url: `${LMS}/portal`, scripts: ["src/settings.js"] });
-  await settle(100);
+  await idle();
   return tab.window;
 }
 

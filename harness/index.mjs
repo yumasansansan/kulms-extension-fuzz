@@ -8,10 +8,11 @@
 //
 // The harness: the extension's scripts run in a browser made for tests and
 // fuzzing. See each module for what it does.
-export { Browser, matchesPattern } from "./chrome.mjs";
+export { Browser, EXTENSION_ID, matchesPattern } from "./chrome.mjs";
 export { Net } from "./net.mjs";
-export { openBackground, openTab, openPopup, contentScriptsFor, settle, until } from "./contexts.mjs";
+export { Clock } from "./clock.mjs";
+export { openBackground, openBareTab, openTab, openPopup, contentScriptsFor, until } from "./contexts.mjs";
 export { watch, assertClean } from "./detectors.mjs";
 export { exposeInternals, instrument, loadedFile, loadedSource } from "./source.mjs";
-export { LINEAR, aside, degree, idle, measure, uncounted, work } from "./work.mjs";
+export { LINEAR, aside, allow, degree, idle, measure, uncounted, work } from "./work.mjs";
 export { EXT, ROOT, manifest, read } from "./paths.mjs";

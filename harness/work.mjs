@@ -58,6 +58,7 @@ export const work = {
   done: 0, // the work counted since the input began
   units: 0, // U, the size of the input
   base: 0, // the work of the input of no bytes of the target whose input this is
+  fixed: 0, // the fixed costs of what the input does, whatever its size, as its target measured them (allow())
   code: NO_CODE, // what the input can run: the browser of its target, and the counting sites of the scripts it loaded
   cap: Infinity, // what the rungs below allow this rung of the input (fuzz/lib.mjs)
   bound: Infinity, // what linear code may do with this input, or the cap if less
@@ -90,7 +91,7 @@ let epoch = 0;
 
 function rebound() {
   const u = work.units;
-  const linear = work.code.sites * (u + 1) * Math.ceil(Math.log2(u + 2)) + work.base;
+  const linear = work.code.sites * (u + 1) * Math.ceil(Math.log2(u + 2)) + work.base + work.fixed;
   work.bound = Math.min(linear, work.cap);
   work.capped = work.cap < linear;
 }
@@ -145,11 +146,21 @@ export function beginInput(units, { judge = true, cap = Infinity, deadline = Inf
   work.units = units;
   work.code = code;
   work.base = base;
+  work.fixed = 0;
   work.cap = cap;
   work.deadline = deadline;
   work.over = false;
   work.overTime = false;
   work.judging = judge;
+  rebound();
+}
+
+// Something the input does costs `n` whatever the input's size, as its
+// target measured it, as the base of the target is measured: what linear
+// code may do with the input grows by it. What the rungs below allow a rung
+// (the cap) does not, as the rung below paid the same.
+export function allow(n) {
+  work.fixed += n;
   rebound();
 }
 
@@ -190,6 +201,15 @@ export function step(n) {
     work.overTime = true;
     throw new TimeExceeded();
   }
+}
+
+// Whether `n` steps more would pass the bound of the input being judged. A
+// call of the platform that is sure to take `n` steps if it returns asks it
+// before it runs (harness/install.mjs): one that the code had loop to a
+// length it was given, of billions, is then stopped as passing the bound,
+// rather than run for hours first and counted after.
+export function beyond(n) {
+  return !paused && !(epoch > 0 && inputs.getStore() !== epoch) && work.judging && work.done + n > work.bound;
 }
 
 // Runs `f` without counting: the harness's or a target's own work on the

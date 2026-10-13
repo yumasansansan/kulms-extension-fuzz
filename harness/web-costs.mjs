@@ -433,6 +433,8 @@ export const WEB = {
   "Node.prototype.cloneNode": (self, [deep], r) => (deep ? subtreeSize(r) : 1),
   "Node.prototype.contains": (self, [other]) => depthOf(other),
   "Node.prototype.textContent (get)": textOf,
+  "HTMLElement.prototype.innerText (get)": textOf, // the descendant text content, for a user agent without CSS (harness/contexts.mjs)
+  "HTMLElement.prototype.innerText (set)": { before: (self) => subtreeSize(self), after: (self, [value]) => units(value) + mutated(self) },
   "Node.prototype.textContent (set)": { before: (self) => subtreeSize(self), after: (self, [value]) => units(value) + mutated(self) },
   "Node.prototype.nodeValue (set)": { before: (self) => units(self.nodeValue), after: (self, [value]) => units(value) + mutated(self) },
   "CharacterData.prototype.data (set)": { before: (self) => units(self.data), after: (self, [value]) => units(value) + mutated(self) },

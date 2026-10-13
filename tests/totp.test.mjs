@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import vm from "node:vm";
 import fc from "fast-check";
-import { Browser, contentScriptsFor, openBackground, openPopup, openTab, settle, until } from "../harness/index.mjs";
+import { Browser, contentScriptsFor, idle, openBackground, openPopup, openTab, until } from "../harness/index.mjs";
 import { cached, openCoursePage, openPanel } from "./lms.mjs";
 
 const OTP_PAGE = '<!doctype html><html><head></head><body><form id="login"><input id="password_input"></form></body></html>';
@@ -53,7 +53,7 @@ async function extension() {
   const browser = new Browser();
   const bg = openBackground(browser);
   const popup = openPopup(browser);
-  await settle(50);
+  await idle();
   return { browser, bg, popup };
 }
 
@@ -131,7 +131,7 @@ test("S1: the settings panel on the LMS shows the code and the QR without being 
   [...panel.querySelectorAll(".kulms-panel-tab")].at(-1).click();
   await until(() => panel.querySelector(".kulms-totp-actions"));
   for (const button of panel.querySelectorAll(".kulms-totp-actions .kulms-totp-btn:not(.kulms-totp-btn-danger)")) button.click();
-  await settle(50);
+  await idle();
   assert.deepEqual(leaks(ext.browser), []);
 });
 
@@ -146,7 +146,7 @@ async function enterInPopup({ browser, popup }, entries) {
     input.value = entry;
     input.dispatchEvent(new popup.window.Event("input"));
     popup.document.getElementById("totp-save-btn").click();
-    await settle(30);
+    await idle();
   }
   return saved(browser);
 }
@@ -163,7 +163,7 @@ async function enterInSettingsPanel({ browser }, entries) {
     input.value = entry;
     input.dispatchEvent(new input.ownerDocument.defaultView.Event("input"));
     panel.querySelector(".kulms-totp-btn-primary").click();
-    await settle(30);
+    await idle();
   }
   return saved(browser);
 }
@@ -207,4 +207,56 @@ test("B22: the background saves a secret of 200,000 characters, and loads it", {
   assert.ok(saved.ok === true, `the save answered ${JSON.stringify(saved)}`);
   const loaded = await ext.browser.deliver(ext.popup, [ext.bg], { type: "kulms-totp-load" });
   assert.ok(loaded.secret === secret, "the secret loaded is not the one saved");
+});
+
+// What an older version of the extension left: the secret in plain text in
+// chrome.storage.local, which the background moves into its encrypted store
+// when the extension is updated (runtime.onInstalled).
+test("an update moves a secret kept in plain text into the encrypted store, and leaves no plain text", async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  browser.storage.local.load({ "kulms-totp-secret": "JBSWY3DPEHPK3PXP", "kulms-textbooks": { C1: [] }, "kulms-syllabus-catalog": { year: 2026 } });
+  const bg = openBackground(browser);
+  await idle();
+  for (const f of bg.events.onInstalled.listeners) f({ reason: "update", previousVersion: "1.20.0" });
+  await idle();
+  const stored = browser.storage.local.dump();
+  assert.deepEqual(["kulms-totp-secret", "kulms-textbooks", "kulms-syllabus-catalog"].filter((k) => k in stored), []);
+  assert.equal(await bg.global.loadTotpSecret(), "JBSWY3DPEHPK3PXP");
+});
+
+// The store of the secret is to be kept when the browser runs short of space
+// (navigator.storage.persist() of the Storage Standard); the background asks
+// for it again as the browser starts (runtime.onStartup).
+test("a start of the browser asks again that the store of the secret be kept", async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const bg = openBackground(browser);
+  await idle();
+  let asked = 0;
+  bg.global.navigator.storage.persisted = async () => false;
+  bg.global.navigator.storage.persist = async () => {
+    asked++;
+    return true;
+  };
+  for (const f of bg.events.onStartup.listeners) f();
+  await idle();
+  assert.equal(asked, 1);
+});
+
+// The migration on update moves what the plain text holds, whatever it is: a
+// secret no code can be made from, or a value that is not a string, which
+// becomes its string ("[object Object]", "12345").
+test("S6: an update does not move a secret no code can be made from into the encrypted store", { todo: "S6: the migration on update saves whatever the plain text holds, as a string" }, async (t) => {
+  for (const legacy of ["A", "AB=CD2345", "========", { secret: "JBSWY3DPEHPK3PXP" }, 12345]) {
+    const browser = new Browser();
+    t.after(() => browser.close());
+    browser.storage.local.load({ "kulms-totp-secret": legacy });
+    const bg = openBackground(browser);
+    await idle();
+    for (const f of bg.events.onInstalled.listeners) f({ reason: "update", previousVersion: "1.20.0" });
+    await idle();
+    assert.equal(await bg.global.loadTotpSecret(), null, JSON.stringify(legacy));
+    assert.equal("kulms-totp-secret" in browser.storage.local.dump(), false, `${JSON.stringify(legacy)}: the plain text was left`);
+  }
 });

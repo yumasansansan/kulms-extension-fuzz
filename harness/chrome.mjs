@@ -21,7 +21,7 @@ import { record } from "./log.mjs";
 import { codeGrew, finished, started, step } from "./work.mjs";
 import { manifest, read } from "./paths.mjs";
 
-const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
+export const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
 const later = (f) => {
   started();
   setTimeout(() => {
@@ -148,12 +148,19 @@ export class Browser {
     this.storage = { local: new StorageArea(this, "local"), session: new StorageArea(this, "session") };
     this.contexts = [];
     this.errors = [];
+    this.caught = []; // what the extension caught and went on from (harness/detectors.mjs)
+    this.untrusted = []; // what it passed a sink of Trusted Types that was no trusted value (harness/contexts.mjs)
+    this.foreign = []; // the bodies it read of responses TLS does not vouch for as its servers' (harness/net.mjs)
     this.traffic = []; // runtime messages, as deliver() keeps them
     this.created = []; // tabs the extension asked to open
     this.injected = []; // what chrome.scripting.executeScript was asked to run
     this.scripts = new Set(); // the extension's scripts its contexts have run
     this.sites = 0; // their counting sites (harness/work.mjs)
     this.nextTabId = 1;
+    this.scripted = null; // what chrome.scripting.executeScript gives (apiFor())
+    this.activeTabId = null; // the tab in front in the window (tabOf())
+    this.granted = new Set(); // the tabs that activeTab gives the extension (openPopup() of contexts.mjs)
+    this.forgotten = 0; // how many times the logs were forgotten (forget())
     this.onRejection = (reason) => this.errors.push({ where: "unhandled rejection", error: reason });
     process.on("unhandledRejection", this.onRejection);
   }
@@ -164,11 +171,36 @@ export class Browser {
     context.lastError = undefined;
     context.events = { onMessage: new ChromeEvent(), onInstalled: new ChromeEvent(), onStartup: new ChromeEvent(), onChanged: new ChromeEvent() };
     this.contexts.push(context);
+    // A tab the user opens comes to the front of the window.
+    if (context.kind === "tab" && context.frameId === 0) this.activeTabId = context.tabId;
     return context;
   }
 
   unregister(context) {
     this.contexts = this.contexts.filter((c) => c !== context);
+    // What activeTab gave ends when the tab closes.
+    if (context.kind === "tab" && context.frameId === 0) {
+      this.granted.delete(context.tabId);
+      if (this.activeTabId === context.tabId) this.activeTabId = null;
+    }
+  }
+
+  // The tabs.Tab that the extension is given of the tab of `context`
+  // (https://developer.chrome.com/docs/extensions/reference/api/tabs#type-Tab):
+  // its place among the tabs of its window, the one window there is, and
+  // whether it is in front; its URL only where the extension may see the
+  // page, as it has no "tabs" permission.
+  tabOf(context) {
+    const tops = this.contexts.filter((c) => c.kind === "tab" && c.frameId === 0);
+    const tab = { id: context.tabId, index: tops.findIndex((c) => c.tabId === context.tabId), windowId: 1, active: context.tabId === this.activeTabId };
+    if (this.sees(context.tabId, context.topUrl)) tab.url = context.topUrl;
+    return tab;
+  }
+
+  // Whether the extension may see the page at `url` of tab `tabId`: one its
+  // host permissions name, or the page of a tab that activeTab gave it.
+  sees(tabId, url) {
+    return this.granted.has(tabId) || (this.manifest.host_permissions || []).some((p) => matchesPattern(p, url));
   }
 
   // A context of this browser runs the extension's script `rel`, of `sites`
@@ -182,10 +214,19 @@ export class Browser {
   }
 
   // Forgets what the logs hold: the messages, the tabs opened, the scripts
-  // run, and what each context wrote to its console (harness/log.mjs).
+  // run, what each context wrote to its console (harness/log.mjs), and what
+  // the detectors look through: the errors, what the extension caught, what
+  // it passed the sinks of Trusted Types, the responses it read from where
+  // TLS does not vouch for them. An error holds the realm it was made
+  // in, and with it the window and its document, and a string passed to a
+  // sink can be as large as the input's top rung makes it: kept from input to
+  // input, they would fill the memory of a target that opens a page for each
+  // input. A watcher made before (harness/detectors.mjs) looks through the
+  // whole of each log from then on.
   forget() {
-    for (const log of [this.traffic, this.created, this.injected]) log.length = 0;
+    for (const log of [this.traffic, this.created, this.injected, this.errors, this.caught, this.untrusted, this.foreign]) log.length = 0;
     for (const c of this.contexts) if (c.logs) c.logs.length = 0;
+    this.forgotten++;
   }
 
   close() {
@@ -195,6 +236,12 @@ export class Browser {
 
   report(context, error, where = "listener") {
     this.errors.push({ where: `${where} in ${context.kind} ${context.url || ""}`.trim(), error });
+  }
+
+  // The extension's code in `context` caught `error` at `site` ("<file>:<line>
+  // in <function>", harness/source.mjs) and went on.
+  caughtBy(context, error, site) {
+    this.caught.push({ where: `${site} in ${context.kind} ${context.url || ""}`.trim(), error });
   }
 
   // Calls back on a later turn, or makes a promise if there is no callback.
@@ -228,7 +275,7 @@ export class Browser {
         url: context.url,
         origin: new URL(context.url).origin,
         frameId: context.frameId,
-        tab: { id: context.tabId, url: context.topUrl, active: true, windowId: 1, index: context.tabId - 1 },
+        tab: this.tabOf(context),
       };
     }
     return { id: this.id, url: context.url, origin: `chrome-extension://${this.id}` };
@@ -310,12 +357,21 @@ export class Browser {
       },
     };
     const tabs = {
+      // The tabs that match each property `info` gives: active, the window
+      // (the current one, the last focused one, or its id: the browser has
+      // one window, of id 1, windows.WINDOW_ID_CURRENT being -2), and the URL
+      // patterns, which only a page the extension may see can match.
       query(info, cb) {
-        const patterns = info && info.url ? [].concat(info.url) : null;
+        const q = info || {};
+        const patterns = q.url ? [].concat(q.url) : null;
+        const inWindow = (v) => v === undefined || Boolean(v);
         const found = browser.contexts
           .filter((c) => c.kind === "tab" && c.frameId === 0)
-          .filter((c) => !patterns || patterns.some((p) => matchesPattern(p, c.url)))
-          .map((c) => browser.senderOf(c).tab);
+          .map((c) => browser.tabOf(c))
+          .filter((tab) => (q.active === undefined || tab.active === Boolean(q.active)) &&
+            inWindow(q.currentWindow) && inWindow(q.lastFocusedWindow) &&
+            (q.windowId === undefined || q.windowId === 1 || q.windowId === -2) &&
+            (!patterns || (tab.url !== undefined && patterns.some((p) => matchesPattern(p, tab.url)))));
         return browser.answer(context, cb, copyInto(context.realm, found));
       },
       create(props, cb) {
@@ -333,7 +389,11 @@ export class Browser {
     const scripting = {
       executeScript(injection, cb) {
         record(browser.injected, injection);
-        return browser.answer(context, cb, copyInto(context.realm, []), "Cannot access contents of the page.");
+        // What the injection gives: what a test or a fuzz target says
+        // (browser.scripted(injection) → { results } or { error }), or the
+        // error Chrome gives on a page it cannot reach.
+        const said = browser.scripted ? browser.scripted(injection) : { error: "Cannot access contents of the page." };
+        return browser.answer(context, cb, copyInto(context.realm, said.results ?? []), said.error);
       },
     };
     const i18n = {

@@ -26,20 +26,23 @@ import { compile, run } from "./backtrack.mjs";
 import { BACKTRACKING_EXEC, COLLATOR_COMPARE, STOPS, builtIns, ruleOf, units } from "./costs.mjs";
 import { onLinearEngine } from "./regexp.mjs";
 import { ALIASES, WEB_CONSTRUCTORS, liveView, ownerOf, viewOf, webRuleOf } from "./web-costs.mjs";
-import { isPaused, step, uncounted } from "./work.mjs";
+import { beyond, isPaused, step, uncounted } from "./work.mjs";
 
 const integer = (x) => (typeof x === "number" && x > 0 ? Math.floor(x) : 0);
 
 // Whether the code that called `f` (the first frame below it that is in a
 // named script) is the platform's: jsdom's and its packages', or Node's own.
 const PLATFORM = /[\\/]node_modules[\\/]|^node:/;
-const holder = {};
 const callSites = (e, sites) => sites;
 function fromPlatform(f) {
   const limit = Error.stackTraceLimit;
   const prepare = Error.prepareStackTrace;
   Error.stackTraceLimit = 8;
   Error.prepareStackTrace = callSites;
+  // A holder of its own each time: the frames hold what they were called on,
+  // a page's elements among them, which a holder kept from call to call would
+  // keep after the page closed.
+  const holder = {};
   Error.captureStackTrace(holder, f);
   const sites = holder.stack;
   Error.prepareStackTrace = prepare;
@@ -64,9 +67,28 @@ function beforeOf(rule, self, args) {
   return rule && typeof rule === "object" && rule.before ? uncounted(() => rule.before(self, args)) : undefined;
 }
 
+// The steps a call is sure to take if it returns, which `rule` tells from what
+// the call is given (its `least`), before the call runs; none when it does not.
+function leastOf(rule, self, args) {
+  return rule && typeof rule === "object" && rule.least ? uncounted(() => rule.least(self, args)) : 0;
+}
+
 // What a result needs before the code gets it: a live collection a counting
-// view of itself; an Intl.Collator's compare a counted one.
-let wrapResult = (r) => r;
+// view of itself, an element's data map a counting one (an Intl.Collator's
+// compare gets a counted one where its getter is put in a realm). One function
+// for every realm, which holds none: a realm goes when its window closes, and
+// a fuzz target that opens a page for each input makes thousands of them.
+function wrapResult(r) {
+  if (r === null || (typeof r !== "object" && typeof r !== "function")) return r;
+  if (viewOf.has(r)) return countingView(r);
+  if (ownerOf.has(r) && Object.prototype.toString.call(r) === "[object DOMStringMap]") return countingData(r);
+  return r;
+}
+
+// Array.prototype's forEach, values, keys, entries and @@iterator, of every
+// realm the costs are in (installCosts()): a counting view hands them to the
+// code unbound, so that they run on the view and their reads are counted.
+const generic = new WeakSet();
 
 // `original`, a method at `path`, counting `rule`; `web` for a member of the
 // web APIs, which the platform calls too.
@@ -77,6 +99,10 @@ function costedMethod(original, rule, path, web = false) {
   const counted = {
     [name](...args) {
       if (isPaused() || (web && fromPlatform(counted))) return Reflect.apply(original, this, args);
+      // A call that would pass the bound if it returned passes it now, and is
+      // not run: what it is sure to take, counted, throws (harness/work.mjs).
+      const least = leastOf(rule, this, args);
+      if (least > 0 && beyond(least)) step(least);
       const before = beforeOf(rule, this, args);
       const call = {};
       let callArgs = args;
@@ -196,7 +222,7 @@ const views = new WeakMap();
 // A live collection as the code sees it: an index read goes through its view
 // as length does; its own methods run on it, Array.prototype's (forEach,
 // values) on the view, so that their reads are counted.
-function countingView(collection, generic) {
+function countingView(collection) {
   if (views.has(collection)) return views.get(collection);
   const view = new Proxy(collection, {
     get: function read(target, key) {
@@ -247,17 +273,8 @@ function countingCompare(compare) {
 // given `web` (a jsdom window, or the background's global with the web
 // interfaces it has), the members of its web interfaces.
 export function installCosts(g, { web = null } = {}) {
-  const generic = new Set();
   const A = g.Array && g.Array.prototype;
-  if (A) for (const k of ["forEach", "values", "keys", "entries", Symbol.iterator]) generic.add(A[k]);
-  const realmWrap = (r) => {
-    if (r === null || (typeof r !== "object" && typeof r !== "function")) return r;
-    if (viewOf.has(r)) return countingView(r, generic);
-    if (ownerOf.has(r) && Object.prototype.toString.call(r) === "[object DOMStringMap]") return countingData(r);
-    return r;
-  };
-  const previousWrap = wrapResult;
-  wrapResult = (r) => realmWrap(previousWrap(r));
+  if (A) for (const k of ["forEach", "values", "keys", "entries", Symbol.iterator]) if (typeof A[k] === "function") generic.add(A[k]);
 
   // ECMAScript's built-ins.
   for (const b of builtIns(g)) {

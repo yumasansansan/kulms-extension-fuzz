@@ -12,7 +12,7 @@ specification: the GNU General Public License, version 3 or any later version
 
 - **対象**: [Radian0523/kulms-extension](https://github.com/Radian0523/kulms-extension) の [`087452e`](https://github.com/Radian0523/kulms-extension/commit/087452e33d14c117e6fa584fe3dd4b19f8f9a76c)（v1.21.0 と提出検知の修正）．テストとファジングは，2026-10-13 から v1.21.1 の [`20d7da3`](https://github.com/Radian0523/kulms-extension/commit/20d7da3b9193960a2a1b38f1281e2e12c8155817) に対して行う（B1，B2，B5，B6 が直った版）
 - **日付**: 2026-10-06（B19〜B21 と S9 は 2026-10-07，B22 は 2026-10-13）
-- **方法**: 全ソースを通読した．そのうえで，実コードを Node 26.10.0 と jsdom 30.1.2 の上で動かして確かめた．その後，拡張を Node の上で動かすハーネス（[harness/](../harness/)）を作り，確かめたことをテスト（[tests/](../tests/)）にした．また，Jazzer.js でファジング（[fuzz/](../fuzz/)）を行い，B15〜B22 と，S7 の新しい例を見つけた．拡張のすべての正規表現を，受理するオートマトンで調べ，S9 を見つけた
+- **方法**: 全ソースを通読した．そのうえで，実コードを Node 26.10.0 と jsdom 30.1.2 の上で動かして確かめた．その後，拡張を Node の上で動かすハーネス（[harness/](../harness/)）を作り，確かめたことをテスト（[tests/](../tests/)）にした．また，Jazzer.js [[Jazzer.js]](#参考文献) でファジング（[fuzz/](../fuzz/)）を行い，B15〜B22 と，S7 の新しい例を見つけた．拡張のすべての正規表現を，受理するオートマトンで調べ，S9 を見つけた
 - 行番号は `087452e` の時点のもの．リンクはそのコミットへの固定リンク
 
 ## 凡例
@@ -30,22 +30,25 @@ specification: the GNU General Public License, version 3 or any later version
 | [S3](#s3) | 低 | TOTP 登録補助がシークレットをページの sessionStorage に置く | 読解 | 未着手 | |
 | [S4](#s4) | 低 | シラバスの実体参照を二重にデコードし，数値参照は捨てる | 再現 | 対応中（[fix/syllabus-parse](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-parse)） | |
 | [S5](#s5) | 低 | 使っていないホスト権限 `radian0523.github.io` | 読解 | 対応中（[fix/drop-unused-host-permission](https://github.com/yumasansansan/kulms-extension/tree/fix/drop-unused-host-permission)） | |
-| [S6](#s6) | 低 | 不正な TOTP シークレットを保存できる | 再現 | 対応中（[fix/validate-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/validate-totp-secret)） | |
+| [S6](#s6) | 低 | 不正な TOTP シークレットを保存できる | 再現・ファズ | 対応中（[fix/validate-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/validate-totp-secret)） | |
 | [S7](#s7) | 低 | 形の崩れたメッセージで onMessage リスナーが例外を投げる | 再現 | 対応中（[fix/message-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/message-shape)） | |
 | [S8](#s8) | 低 | シラバス解析の正規表現が入力長の 2 乗で遅くなる | 再現・計測 | 対応中（[fix/syllabus-parse](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-parse)） | |
 | [S9](#s9) | 低 | 科目名，TOTP のシークレット，フォルダを読む正規表現が入力長の 2 乗で遅くなる | 解析・再現・計測 | 対応中（[fix/backtracking-regexes](https://github.com/yumasansansan/kulms-extension/tree/fix/backtracking-regexes)．ログインページの分は S1 の前半） | |
+| [S10](#s10) | 低 | ページに `<script>` と `<style>` を入れる | 読解・再現 | 未着手 | |
+| [S11](#s11) | 低 | Trusted Types を求めるページで，innerHTML などに文字列を渡す | 読解・再現 | 未着手 | |
+| [S12](#s12) | 低 | 取得したデータを，リダイレクトの行き先を確かめずに使用する | 読解・ファズ | 対応中（[fix/redirect-origin](https://github.com/yumasansansan/kulms-extension/tree/fix/redirect-origin)） | |
 | [B1](#b1) | **高** | 複数タブを開いていると，メモ・完了チェック・非表示が消える | 再現 | 修正済（[#75](https://github.com/Radian0523/kulms-extension/pull/75)，v1.21.1） | |
 | [B2](#b2) | 中 | 非表示にした課題が 30 日後に一覧へ戻る | 再現 | 修正済（[#76](https://github.com/Radian0523/kulms-extension/pull/76)，v1.21.1） | [#74](https://github.com/Radian0523/kulms-extension/issues/74) |
 | [B3](#b3) | 中 | サイドバーの色分けで，期限切れが最も弱く扱われる | 再現 | 対応中（[fix/sidebar-overdue-color](https://github.com/yumasansansan/kulms-extension/tree/fix/sidebar-overdue-color)） | |
-| [B4](#b4) | 中 | ツール表示管理が 200ms ごとの再処理を止めない | 再現 | 対応中（[fix/tool-visibility-loop](https://github.com/yumasansansan/kulms-extension/tree/fix/tool-visibility-loop)） | |
+| [B4](#b4) | 中 | ツール表示管理が 200ms ごとの再処理を止めない | 再現・ファズ | 対応中（[fix/tool-visibility-loop](https://github.com/yumasansansan/kulms-extension/tree/fix/tool-visibility-loop)） | |
 | [B5](#b5) | 中 | Safari 版に `vendor/` が同梱されない | 再現（ビルド） | 修正済（上流の [`97a8746`](https://github.com/Radian0523/kulms-extension/commit/97a87462f3ab2950867ef53c2171713a77a7b3a8)，v1.21.1） | |
 | [B6](#b6) | 中 | 配布用 zip に `node_modules/` などが入る | 再現（ビルド） | 修正済（上流の [`97a8746`](https://github.com/Radian0523/kulms-extension/commit/97a87462f3ab2950867ef53c2171713a77a7b3a8)，v1.21.1） | |
 | [B7](#b7) | 低 | キャッシュから描画すると，クイズのリンクが課題ツールを指す | 再現 | 対応中（[fix/cached-tool-links](https://github.com/yumasansansan/kulms-extension/tree/fix/cached-tool-links)） | |
 | [B8](#b8) | 低 | バナーが重複し，設定タブにも紛れ込む | 再現 | 対応中（[fix/assignment-banners](https://github.com/yumasansansan/kulms-extension/tree/fix/assignment-banners)） | |
 | [B9](#b9) | 低 | 読み込み中の更新要求が，成功扱いのまま捨てられる | 読解・再現 | 対応中（[fix/refresh-while-loading](https://github.com/yumasansansan/kulms-extension/tree/fix/refresh-while-loading)） | |
 | [B10](#b10) | 低 | i18n の置換で，値の中の `$&` や置き場所の名前が展開され，結果が値の長さの 3 乗まで伸びる（潜在） | 再現・ファズ | 対応中（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)） | |
-| [B11](#b11) | 低 | 教科書一覧が科目名をキーにしていて，同名の科目が衝突する | 読解・再現 | 対応中（[fix/textbooks-by-site](https://github.com/yumasansansan/kulms-extension/tree/fix/textbooks-by-site)） | |
-| [B12](#b12) | 低 | ページから書き換えられる Web Storage の値で例外になる | 読解 | 対応中（[fix/web-storage-values](https://github.com/yumasansansan/kulms-extension/tree/fix/web-storage-values)） | |
+| [B11](#b11) | 低 | 教科書一覧が科目名をキーとしており，同名の科目が衝突する | 読解・再現 | 対応中（[fix/textbooks-by-site](https://github.com/yumasansansan/kulms-extension/tree/fix/textbooks-by-site)） | |
+| [B12](#b12) | 低 | ページから書き換えられる Web Storage の値で例外になる | 読解・再現 | 対応中（[fix/web-storage-values](https://github.com/yumasansansan/kulms-extension/tree/fix/web-storage-values)） | |
 | [B13](#b13) | 低 | シラバス検索の最後のフォールバックが無関係な科目を選びうる | 読解 | 未着手 | |
 | [B14](#b14) | 低 | Shift_JIS にない文字を検索語から黙って落とす | 再現 | 未着手 | |
 | [B15](#b15) | 低 | `t()` がキーをプロトタイプ越しに引き，`t("hasOwnProperty")` が undefined になる（潜在） | ファズ | 対応中（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)） | |
@@ -55,25 +58,30 @@ specification: the GNU General Public License, version 3 or any later version
 | [B19](#b19) | 低 | Sakai の応答に形の崩れた項目が 1 つあると，ほかの科目や課題も一覧から消える | ファズ | 対応中（[fix/sakai-answer-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/sakai-answer-shape)） | |
 | [B20](#b20) | 低 | サイト連絡先の取得で，pages.json の形の崩れたページが，後のページを隠す | ファズ | 対応中（[fix/site-contact-pages](https://github.com/yumasansansan/kulms-extension/tree/fix/site-contact-pages)） | |
 | [B21](#b21) | 低 | `t()` に値を 1 つだけ空文字列で渡すと，`$HOURS$` などが残る（潜在） | ファズ | 対応中（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)） | |
+| [B23](#b23) | 低 | ページの Web Storage が埋まっていると，ツールの表示の切り替え，サイドバーの幅の保存，提出の検知，TOTP の登録補助，課題パネルの読み込みが例外で止まる | ファズ・再現 | 対応中（[fix/storage-full](https://github.com/yumasansansan/kulms-extension/tree/fix/storage-full)） | |
 | [B22](#b22) | 低 | 長い TOTP シークレットを background が保存できない（潜在） | ファズ | 対応中（[fix/long-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/long-totp-secret)） | |
+| [B24](#b24) | 低 | TA 採点支援のページ側の橋渡しが，ページのオブジェクトが投げる例外で止まり，文字列でない ID や名前をそのまま渡す | ファズ | 対応中（[fix/grading-bridge-values](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-bridge-values)） | |
+| [B25](#b25) | 低 | 保存された課題のキャッシュが拡張の書く形でないと，課題パネルと popup の描画が止まる | ファズ | 対応中（[fix/cache-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/cache-shape)） | |
 | [P1](#p1) | **高** | 課題取得の N+1 と，タブごとの短い間隔での再取得（LMS への負荷） | 読解 | 未着手 | [#32](https://github.com/Radian0523/kulms-extension/issues/32), [#27](https://github.com/Radian0523/kulms-extension/issues/27) |
-| [P2](#p2) | 中 | フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行う | 読解 | 未着手 | [#62](https://github.com/Radian0523/kulms-extension/issues/62) |
+| [P2](#p2) | 中 | フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行い，開かないフォルダを何度も要求し直す | 読解・ファズ | 対応中（一部：[fix/expand-folders-once](https://github.com/yumasansansan/kulms-extension/tree/fix/expand-folders-once)） | [#62](https://github.com/Radian0523/kulms-extension/issues/62) |
 | [P3](#p3) | 中 | `document.body` 全体を監視する MutationObserver が多く，重い | 読解 | 未着手 | |
 | [P4](#p4) | 低 | jsQR（256KB）と qrcode-gen（56KB）を広すぎる範囲に注入する | 読解 | 対応中（jsQR：[fix/jsqr-where-read](https://github.com/yumasansansan/kulms-extension/tree/fix/jsqr-where-read)） | |
 | [P5](#p5) | 低 | 教科書の取得が科目ごとの直列処理 | 読解 | 未着手 | |
 | [P6](#p6) | 低 | Service Worker の起動ごとに Shift_JIS 変換表を作り直す | 計測 | 未着手 | |
+| [P7](#p7) | 低 | TA 採点支援のページ側の橋渡しが，配列もどきの `length` が示す回数だけ反復する | ファズ | 対応中（[fix/grading-bridge-values](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-bridge-values)） | |
+| [P8](#p8) | 低 | 表示中の TOTP コードを毎秒作り直すたびに，シークレットをデコードし，HMAC の鍵を作り直す | 再現・ファズ | 対応中（[fix/totp-key-once](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-key-once)） | |
 | [M1](#保守性) | — | TOTP の実装が 4 か所に重複している | 読解 | 未着手 | |
 | [M2](#保守性) | — | popup.js と assignments.js，textbooks.js と assignments.js の重複 | 読解 | 未着手 | |
-| [M3](#保守性) | — | テストが無く，CI は PR 時の ESLint だけ．IIFE 構造でテストしにくい | 読解 | 未着手 | |
+| [M3](#保守性) | — | テストが無く，CI は PR 時の ESLint のみ．IIFE 構造でテストしにくい | 読解 | 未着手 | |
 | [M4](#保守性) | — | Safari の Resources がコミットされた複製で，本体から遅れる | 読解 | 未着手 | |
-| [M5](#保守性) | — | 動かないコード（textbooks.js の設定確認，popup.js の SVG 走査） | 読解 | 未着手 | |
+| [M5](#保守性) | — | 動かないコード（textbooks.js の設定確認，popup.js の SVG 走査，assignments.js の状態のバッジ） | 読解 | 未着手 | |
 | [D1](#d1) | 低 | プライバシーポリシーの TOTP の記述が実装と合わない | 読解 | 対応中（[fix/privacy-storage](https://github.com/yumasansansan/kulms-extension/tree/fix/privacy-storage)） | |
 
 ## 問題ではないもの：TOTP の HMAC-SHA-1
 
-- TOTP（RFC 6238）の既定のアルゴリズムが HMAC-SHA-1 で，Google Authenticator なども実質これを使う．アルゴリズムを決めるのは京大の認証サーバーなので，拡張側で変えるとコードが合わなくなる．
-- SHA-1 の弱点は衝突攻撃で，HMAC としての安全性には影響しない．
-- 実装も正しい．RFC 6238 のテストベクタ 6 本がすべて一致した．また，ランダムな 3,000 件（tests/ では 100 件）を node:crypto と突き合わせても不一致は無かった（[tests/totp.test.mjs](../tests/totp.test.mjs)）．
+- TOTP [[RFC6238]](#参考文献) の既定のアルゴリズムは HMAC-SHA-1 [[RFC4226]](#参考文献) であり，Google Authenticator なども実質的にこれを使う．アルゴリズムを決めるのは京大の認証サーバーであるため，拡張の側で変更するとコードが一致しなくなる．
+- SHA-1 の弱点は衝突攻撃であり，SHA-1 への攻撃が HMAC-SHA-1 に及ぶ兆候はない [[RFC6194]](#参考文献)．
+- 実装も正しい．RFC 6238 の付録 B のテストベクタ 6 本がすべて一致した．また，ランダムな 3,000 件（tests/ では 100 件）を node:crypto と突き合わせても不一致は無かった（[tests/totp.test.mjs](../tests/totp.test.mjs)）．
 - TOTP で問題なのは，シークレットの扱い（S1，S3，S6）と，実装の重複（M1）である．
 
 ## セキュリティ
@@ -84,14 +92,14 @@ specification: the GNU General Public License, version 3 or any later version
 - 場所: [background.js:732-771](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L732-L771)（送信元を確かめない），[src/auth-totp.js:86](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/auth-totp.js#L86)，[src/assignments.js:2361-2401](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2361-L2401)
 - 何が起きるか:
   - `kulms-totp-load` は，LMS の全フレームと auth.iimc の content script のどれに対しても平文のシークレットを返す．
-  - 自動入力（auth-totp.js）は 6 桁のコードがあれば足りるのに，平文を受け取って自分でコードを計算している．
+  - 自動入力（auth-totp.js）は 6 桁のコードがあれば足りるにもかかわらず，平文を受け取って自らコードを計算している．
   - LMS の設定パネルで「QR」を押すと，`otpauth://…secret=…` を符号化した QR の SVG が **LMS ページの DOM** に描画される．「コード表示」を押すと現在の OTP も描画される．どちらも表示中は，LMS 側のスクリプト（XSS，外部スクリプト）から読める．
 - 影響: 長期間有効な 2 段階認証のシードが漏れると，そのアカウントの 2 段階認証が恒久的に無意味になる．
 - 直し方:
-  1. OTP は background で計算し，content script には 6 桁だけを返す（例: `kulms-totp-code`）．
-  2. `load`・`save`・`delete` は拡張ページ（`sender.tab` が無く，`sender.url` が `chrome.runtime.getURL("")` で始まる）からだけ受け付ける．登録は auth.iimc の送信元に限った専用メッセージにする．
-  3. QR とシークレットの表示は popup かオプションページだけで行い，LMS の設定パネルからはそこへ誘導する（挙動の変更になるので，先に上流で Issue を立てる）．
-- 対応: 前半として，自動入力が background で計算したコードだけを受け取るようにし（`kulms-totp-code`），認証ページの content script には `kulms-totp-load` でシークレットを返さないようにした（[fix/totp-code-from-background](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-code-from-background)）．時刻は background が決めるので，content script は先の時刻のコードを求められない．LMS の設定パネルでのコードと QR の表示（直し方の 3）は，表示の場所が変わるので，上流で Issue を立ててから行う．
+  1. OTP は background で計算し，content script には 6 桁のみを返す（例: `kulms-totp-code`）．
+  2. `load`・`save`・`delete` は拡張ページ（`sender.tab` が無く，`sender.url` が `chrome.runtime.getURL("")` で始まる）からのみ受け付ける．登録は auth.iimc の送信元に限った専用メッセージにする．
+  3. QR とシークレットの表示は popup かオプションページのみで行い，LMS の設定パネルからはそこへ誘導する（挙動の変更になるので，先に上流で Issue を立てる）．
+- 対応: 前半として，自動入力が background で計算したコードのみを受け取るようにし（`kulms-totp-code`），認証ページの content script には `kulms-totp-load` でシークレットを返さないようにした（[fix/totp-code-from-background](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-code-from-background)）．時刻は background が決めるので，content script は先の時刻のコードを求められない．LMS の設定パネルでのコードと QR の表示（直し方の 3）は，表示の場所が変わるので，上流で Issue を立ててから行う．
 - 前半のブランチが background に置いた base32 のデコードは，末尾の = を `/=+$/` で取っていた（S9 の正規表現の写し）．すべての修正ブランチを当てたときに見つけ，同じブランチで S9 と同じ書き方に直した．`src/auth-totp.js` のデコードはこのブランチが取り除くので，S9 のブランチはそこに触れない（2 つのブランチが衝突しないように）．
 - テスト: `tests/totp.test.mjs` の「S1」の 3 件．前半で，ログインページと認証ページの 2 件が通る．設定パネルの 1 件は，後半まで失敗する．
 
@@ -100,9 +108,9 @@ specification: the GNU General Public License, version 3 or any later version
 
 - 場所: [background.js:96-98](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L96-L98)．Sakai のサイト情報ページの HTML（教科書の教員名による絞り込み）に対して使う．
 - 根拠: `<td>` の後に `,` も `<` も無い空白が続くと，`\s*([^,<\n]+?)\s*` の 3 つの量指定子が互いに文字を取り合う．空白 1,000 字で 0.3 秒，2,000 字で 2.4 秒，4,000 字で **20 秒**かかり，入力長の 3 乗で伸びる．
-- 影響: その間 Service Worker のイベントループが止まり，TOTP 自動入力を含む拡張の全メッセージが応答しない．引き金はサイト連絡先の欄に異常な内容が入ることなので，起きる可能性は低い．
+- 影響: その間 Service Worker のイベントループが止まり，TOTP 自動入力を含む拡張の全メッセージが応答しない．引き金はサイト連絡先の欄に異常な内容が入ることであるため，発生する可能性は低い．
 - 直し方: 見出しを `indexOf` で探し，次の `<td…>` から `</td>` までを切り出してから，`,` と `<` で区切る．あるいは量指定子の上限を決める．
-- 対応: 見出し，`<td`，`>` の位置を順に探して，セルを切り出す（[fix/site-contact-regex](https://github.com/yumasansansan/kulms-extension/tree/fix/site-contact-regex)）．ランダムな 20 万件のページで古い正規表現と答えを突き合わせると，最初の `<td>` が空のときを除いて一致した．そのとき古い正規表現は，次の `<td>`（多くは別の行）の中身を教員名として返していた．
+- 対応: 見出し，`<td`，`>` の位置を順に探して，セルを切り出す（[fix/site-contact-regex](https://github.com/yumasansansan/kulms-extension/tree/fix/site-contact-regex)）．ランダムな 20 万件のページで古い正規表現と答えを突き合わせると，最初の `<td>` が空のときを除いて一致した．そのとき古い正規表現は，次の `<td>`（多くは別の行）の内容を教員名として返していた．
 - テスト: [tests/background.test.mjs](../tests/background.test.mjs) の「S2」（空白の連なりの長さ n，2n，4n で数えた仕事量の伸びの次数．main では 3），[tests/regexp.test.mjs](../tests/regexp.test.mjs)（正規表現のオートマトン）．
 
 ### S3
@@ -113,8 +121,8 @@ specification: the GNU General Public License, version 3 or any later version
   - 登録が終わるまで，シークレットを auth.iimc の sessionStorage に平文で置く．このストレージはページの JS から読め，登録を途中でやめるとそのタブに残り続ける．
   - 登録完了の判定は「sessionStorage のキー」と「ページ本文の『設定が完了しました』」だけで行っている．そのため，ページ側がこの 2 つを用意すると，保存済みのシークレットを任意の値で上書きさせられる．
 - 前提: auth.iimc でスクリプトを動かせる攻撃者がいること．
-- 直し方: 保留中のシークレットは background の `chrome.storage.session` にタブ ID ごとに置く．完了の判定には URL やフォームの状態も使う．
-- 見立て: 登録の途中では，シークレットは QR とテキストとしてページに表示されている．そのため，ページのスクリプトは sessionStorage が無くても読める．偽の QR を表示すれば，好きなシークレットを保存させることもできる．保留中のシークレットを background に移して得られるのは，登録をやめたときにタブに残らないことくらいなので，後回しにする．
+- 直し方: 保留中のシークレットは background の `chrome.storage.session` [[ChromeStorage]](#参考文献) にタブ ID ごとに置く．完了の判定には URL やフォームの状態も使う．
+- 見立て: 登録の途中では，シークレットは QR とテキストとしてページに表示されている．そのため，ページのスクリプトは sessionStorage が無くても読める．偽の QR を表示すれば，好きなシークレットを保存させることもできる．保留中のシークレットを background に移して得られる利点は，登録を中止したときにタブに残らない程度であるため，優先度は低い．
 - テスト: 未作成（ハーネスで作る）．
 
 ### S4
@@ -124,7 +132,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 根拠:
   - `&amp;` を `&lt;` より先にデコードするので，`&amp;lt;img…&amp;gt;` が `<img…>` になる（書名が `<img src=x onerror=alert(1)>入門` になった）．
   - `&#\d+;` は空文字に置き換えるので，数値参照で書かれた文字が消える．
-- 影響: 描画は textContent なので，今は XSS にならない．ただしデータが壊れ，将来 innerHTML で描画すれば XSS になる．
+- 影響: 描画は textContent で行うため，現状では XSS にはならない．ただしデータが壊れ，将来 innerHTML で描画すれば XSS になる．
 - 直し方: 実体参照を表で引く 1 回きりのデコーダにする．数値参照もデコードする．
 - そのほか: 16 進の数値文字参照（`&#x…;`）と `&quot;` は，デコードされずに残る．
 - 対応: すべての参照を 1 回の置き換えでデコードし，数値文字参照は 10 進も 16 進も文字に戻す．0，サロゲート，範囲外の数値は，これまでどおり捨てる（[fix/syllabus-parse](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-parse)，S8 と同じブランチ）．
@@ -139,16 +147,19 @@ specification: the GNU General Public License, version 3 or any later version
 - 対応: [fix/drop-unused-host-permission](https://github.com/yumasansansan/kulms-extension/tree/fix/drop-unused-host-permission)．
 
 ### S6
-**不正な TOTP シークレットを保存できる**（低・再現）
+**不正な TOTP シークレットを保存できる**（低・再現・ファズ）
 
-- 場所: [popup.js:624](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L624)，[:713-714](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L713-L714)，[src/assignments.js:2252](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2252)，[:2443-2444](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2443-L2444)
+- 場所: [popup.js:624](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L624)，[:713-714](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L713-L714)，[src/assignments.js:2252](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2252)，[:2443-2444](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2443-L2444)，[src/auth-totp-register.js:114-117](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/auth-totp-register.js#L114-L117)，[:134-137](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/auth-totp-register.js#L134-L137)，[background.js:13-16](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L13-L16)
 - 根拠:
   - `^[A-Z2-7=\s-]+$` は `=` を途中に許し，長さも見ない．
   - `A` は保存され，コード表示中は毎秒 `DataError: Zero-length key` の未処理 Promise 拒否が出る（[popup.js:744](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L744)，[src/assignments.js:2366](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2366)）．
   - `AB=CD2345` と `========` は保存されるが，デコード結果が null になり，自動入力は何も言わずに動かない．
+  - popup の「QR」は，保存されたシークレットを `encodeURIComponent()` で URI に入れて QR を作る．base32 でない文字を含むシークレットは 1 文字が最大 9 バイトに広がり，同梱の qrcode-gen が大きな QR を作る仕事が，入力の大きさに対して線形のコードの上限を超える（2026-10-14．ファズ対象 `popup` で確かめた）．QR の生成は，シークレットによらず，1 回に約 78 万歩（最短のシークレット `A` で版 4 の QR）の固定の仕事をする．対象はこの固定の仕事を入力の上限に加える（「fuzz リポジトリの仕組み」）が，9 バイトに広がる分は加えないので，その場合はなお上限を超える．
+  - TOTP の登録補助（auth-totp-register.js）は，ページの文から `[A-Za-z2-7=]+` に当たる文字列を確かめずにシークレットとして読み，sessionStorage に置いて，登録の完了後に保存させる．`A` のような短い文字列では，コードの計算で `DataError: Zero-length key is not supported` の未処理の拒否が起きる（2026-10-14．ファズ対象 `totp-register` で確かめた）．
+  - background は，拡張の更新時（`runtime.onInstalled`）に，旧版が chrome.storage.local に平文で残したシークレット（`kulms-totp-secret`）を，形を確かめずに暗号化して保存する．`A` や `========` もそのまま保存され，文字列でない値は文字列にされる（`[object Object]`，`12345`）（2026-10-14．カバレッジで届いていなかった移行のテストを書く際に確かめた）．
 - 直し方: 実際にデコードして確かめる．末尾以外の `=` を拒み，最低長を決める（80 ビット = 16 文字）．拒んだときはエラーを表示する．
-- 対応: popup と LMS の設定パネルの両方で，空白とハイフンを除いて大文字にしたシークレットを `^[A-Z2-7]{16,}=*$` で確かめる（[fix/validate-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/validate-totp-secret)）．
-- テスト: `tests/totp.test.mjs` の「S6」の 2 件（popup と設定パネル）．空白，ハイフン，小文字，末尾の `=` を含む正しいシークレットが，今までどおり保存されることも確かめる．
+- 対応: popup と LMS の設定パネルの両方で，空白とハイフンを除いて大文字にしたシークレットを `^[A-Z2-7]{16,}=*$` で確かめる（[fix/validate-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/validate-totp-secret)）．登録補助は，同じブランチの続く修正で，QR と本文からの読み取りと完了後の保存の前に同じ形を確かめるようにした．更新時の移行も，同じ続く修正で，同じ形に合うものだけを移し，合わないものは移さずに平文だけを消すようにした（いずれも 2026-10-14）．
+- テスト: `tests/totp.test.mjs` の「S6」の 3 件（popup，設定パネル，更新時の移行）と，`fuzz/known/totp-register/S6-short-secret` と `fuzz/known/popup/S6-qr-of-non-base32`（`tests/fuzz-inputs.test.mjs` が todo として流す）．空白，ハイフン，小文字，末尾の `=` を含む正しいシークレットが，今までどおり保存されることも確かめる．
 
 ### S7
 **形の崩れたメッセージで onMessage リスナーが例外を投げる**（低・再現）
@@ -159,7 +170,7 @@ specification: the GNU General Public License, version 3 or any later version
   - `{type: 1}`（`startsWith` が無い）
   - `{action: "fetchTextbooks", courseName: 1}`（`replace` が無い）
   - `{action: "fetchTextbooks", siteId: {toString: 0}}`（`String()` が変換できない．ファズ対象 `background-message` が見つけた）
-- 影響: 送れるのは拡張の文脈だけなので，堅牢化の範囲の問題．
+- 影響: 送信できるのは拡張の文脈に限られるため，堅牢化の範囲の問題である．
 - 直し方: メッセージの形を確かめる．オブジェクトであること，`type` と文字列の項目が文字列であること．`String()` で受けるだけでは足りない（`toString` が関数でないオブジェクトでは，`String()` も例外を投げる）．
 - 対応: メッセージが無いときと，`type` が文字列でないときは，関係のないメッセージとして扱う．`fetchTextbooks` の項目は，文字列でなければ空として扱う（[fix/message-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/message-shape)）．
 - テスト: `tests/background.test.mjs` の「S7」．
@@ -170,11 +181,11 @@ specification: the GNU General Public License, version 3 or any later version
 - 場所: background.js の，シラバスと検索結果を読む正規表現．
   - シラバス: [:366-367](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L366-L367)（`<style>` と `<script>` を除く `<style[^>]*>[\s\S]*?<\/style>` など），[:370](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L370)（タグを除く `<[^>]+>`），[:433](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L433)（書名を読む `^(.*?)『(.+?)』`），[:441](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L441)（出版社を読む `[（(]([^）)]+)[）)]`），[:452](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L452)（書名の末尾の区切りを除く `[\s,、;；]+$`），[:455-457](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L455-L457)（出版社のフォールバック `[,、]\s*([^,、]+?(?:社|…))`）．
   - 検索結果: [:228](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L228)（行の `<tr[^>]*>([\s\S]*?)<\/tr>`），[:244](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L244)（列の `<td[^>]*>([\s\S]*?)<\/td>`），[:248](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L248)（列の中のタグを除く `<[^>]+>`）．
-- 根拠: どれも，一致しなかった位置から一字ずつずらして探し直す．閉じない `<`，対にならない `『`，閉じない括弧，途中に長く続く区切り，`</tr>` の無い `<tr>`，`</td>` の無い `<td>`，閉じない `<style>`，区切りの後に長く続く空白で，入力長の 2 乗の時間がかかる．V8 で，閉じない `<` 2 万字に約 0.2 秒，対にならない `『` 2 万字に約 0.1 秒，閉じない括弧 8 万字に約 3.6 秒，`</tr>` の無い `<tr>` 4 万個に約 1 秒，閉じない `<style>` 4 万個に約 1.8 秒，区切りの後の空白 16 万字に約 6.3 秒かかった（Node 26.10.0，Core i7-1360P，3 回の中央値）．
+- 根拠: いずれも，一致しなかった位置から一字ずつずらして探し直す．閉じない `<`，対にならない `『`，閉じない括弧，途中に長く続く区切り，`</tr>` の無い `<tr>`，`</td>` の無い `<td>`，閉じない `<style>`，区切りの後に長く続く空白で，入力長の 2 乗の時間がかかる．V8 で，閉じない `<` 2 万字に約 0.2 秒，対にならない `『` 2 万字に約 0.1 秒，閉じない括弧 8 万字に約 3.6 秒，`</tr>` の無い `<tr>` 4 万個に約 1 秒，閉じない `<style>` 4 万個に約 1.8 秒，区切りの後の空白 16 万字に約 6.3 秒かかった（Node 26.10.0，Core i7-1360P，3 回の中央値）．
 - 補足: 教員が書いた文字は，KULASIS がエスケープして HTML に出す（`<` は `&lt;` になる）．そのため，タグを除く `<[^>]+>` が遅くなる入力は，教員の入力からは作りにくい．
 - 対応: [fix/syllabus-parse](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-parse) で，答えを変えずに線形の時間にした．
   - 最初の修正（S4 と同じコミット）: 370 行と出版社の括弧は，最後の `>` や閉じ括弧より後ろを正規表現に渡さないようにした．433 行は `『` と `』` の位置で探し，書名の末尾は末尾から 1 字ずつ見て取り除いた．ランダムな 10 万件のページで古い実装と答えを突き合わせると，行の途中に U+2028 などの改行扱いの文字があるときを除いて一致した．そのとき古い実装は，『』を書名として読まなかった．
-  - 続く修正: 正規表現そのものが線形になるよう，残りを書き換えた．閉じないものからは，残りを丸ごと一致させて探すのをやめる（その先に閉じるものは無いので，後ろのものも閉じない）．出版社のフォールバックは，出版社名を空白でない文字から始めて，区切りの後の空白と取り合わないようにした．区切りの後の空白のすぐ後に出版社の語があるときだけは，これまでどおり最後の空白 1 字を含める．370 行と出版社の括弧も，渡す範囲を切る代わりに同じ書き方にした．新しい正規表現はどれもオートマトンで線形と判定され，関わる文字だけでできたランダムな文字列（各 3 万件）で，元の正規表現と答えが一致した．
+  - 続く修正: 正規表現そのものが線形になるよう，残りを書き換えた．閉じないものからは，残りを丸ごと一致させて探すのをやめる（その先に閉じるものは無いので，後ろのものも閉じない）．出版社のフォールバックは，出版社名を空白でない文字から始めて，区切りの後の空白と取り合わないようにした．区切りの後の空白の直後に出版社の語があるときに限り，これまでどおり最後の空白 1 字を含める．370 行と出版社の括弧も，渡す範囲を切る代わりに同じ書き方にした．新しい正規表現はいずれもオートマトンで線形と判定され，関わる文字だけでできたランダムな文字列（各 3 万件）で，元の正規表現と答えが一致した．
 - テスト: [tests/background.test.mjs](../tests/background.test.mjs) の「S8」（連なりの長さ n，2n，4n で数えた仕事量の伸びの次数．main では 2），[tests/large.test.mjs](../tests/large.test.mjs)（ランダムなバイト列 8MB の検索結果．閉じない `<tr>` が約 400 万字に 1 度出る），[tests/regexp.test.mjs](../tests/regexp.test.mjs)（正規表現のオートマトン）．
 
 ### S9
@@ -185,17 +196,48 @@ specification: the GNU General Public License, version 3 or any later version
   - [popup.js:628](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L628)，[src/assignments.js:2284](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2284)，[src/auth-totp-register.js:26](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/auth-totp-register.js#L26)，[src/auth-totp.js:10](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/auth-totp.js#L10)：base32 のデコードで，末尾の `=` を取る `=+$`．
   - [src/course-name.js:15](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/course-name.js#L15)，[src/textbooks.js:134](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L134)：曜日と時限を読む `\[(?:\d{4}[^\]]*?)?([月火水木金土日])\s*([０-９0-9]+)\s*\]`．
   - [src/tree-view.js:26](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/tree-view.js#L26)：フォルダの深さを読む `collectionId.*?=\s*'([^']*)'`．
-- 根拠: 拡張のすべての正規表現を，受理するオートマトンで調べて見つけた（recheck．[tests/regexp.test.mjs](../tests/regexp.test.mjs)）．どれも，一致しなかった位置から一字ずつずらして探し直す．`(` の続かない空白や閉じない `(`，末尾でない `=`，年の 4 桁が続く `[`（`]` が来ない），1 行に続く `collectionId`（`='…'` が無い）が長く続くと，入力長の 2 乗の時間がかかる．V8 で，空白 4 万字の科目名に約 0.9 秒，末尾でない `=` 4 万字に約 0.7 秒，日本語を含む 8 万字の科目名に約 0.3 秒，`collectionId` が続く 20 万字の onclick に約 0.8 秒（40 万字で約 3.3 秒）かかった（Node 26.10.0，Core i7-1360P，3 回の中央値）．
-  - 曜日と時限の正規表現は，文字列が U+00FF までの文字だけのときは，V8 がすぐ失敗させる（曜日の文字がその範囲に無いため）．日本語を含む科目名では遅くなる．
-- 影響: 科目名とフォルダはページから，シークレットは保存された値から来る．引き金は異常に長い値なので，起きる可能性は低い．content script の処理が止まると，そのページが固まる．
+- 根拠: 拡張のすべての正規表現を，受理するオートマトンで調べて見つけた（recheck [[recheck]](#参考文献)．[tests/regexp.test.mjs](../tests/regexp.test.mjs)）．いずれも，一致しなかった位置から一字ずつずらして探し直す．`(` の続かない空白や閉じない `(`，末尾でない `=`，年の 4 桁が続く `[`（`]` が来ない），1 行に続く `collectionId`（`='…'` が無い）が長く続くと，入力長の 2 乗の時間がかかる．V8 で，空白 4 万字の科目名に約 0.9 秒，末尾でない `=` 4 万字に約 0.7 秒，日本語を含む 8 万字の科目名に約 0.3 秒，`collectionId` が続く 20 万字の onclick に約 0.8 秒（40 万字で約 3.3 秒）かかった（Node 26.10.0，Core i7-1360P，3 回の中央値）．
+  - 曜日と時限の正規表現は，文字列が U+00FF までの文字だけのときは，V8 が直ちに失敗させる（曜日の文字がその範囲に無いため）．日本語を含む科目名では遅くなる．
+- 影響: 科目名とフォルダはページから，シークレットは保存された値から来る．引き金は異常に長い値であるため，発生する可能性は低い．content script の処理が止まると，そのページが固まる．
 - 対応: 正規表現そのものを，一度失敗した範囲を探し直さない書き方に改めた（[fix/backtracking-regexes](https://github.com/yumasansansan/kulms-extension/tree/fix/backtracking-regexes)）．
   - `cleanCourseName()` は，`(` の続かない空白の連なりと，行末まで閉じない `(` からの残りを，丸ごと一致させてそのまま返し，末尾の (…) だけを取り除く．
   - 末尾の `=` は，その前の 1 字（または文字列の先頭）と一緒に一致させる（`(^|[^=])=+$` を `$1` に置き換える）．
   - 曜日と時限は，先に「曜日 時限 ]」を探し，同じ括弧の中（前の `]` から曜日まで）に，年の 4 桁が続く `[` か，曜日の直前の `[` があるかを確かめる．どの括弧の中も一度しか見ない．最初の書き換えでは，`[` を探す `indexOf` が括弧の外まで走っていたため，「月1]」が長く続くと 2 乗になった（数えた仕事量の次数 1.98）．下のテストの「月1]」の連なりは，これを確かめる．
   - フォルダの深さは，`collectionId` の後に `='…'` が無い行の残りを丸ごと一致させて，次の行へ進む．
-  - 新しい正規表現はどれもオートマトンで線形と判定された．関わる文字だけでできたランダムな文字列で，元の正規表現と答えが一致した（曜日と時限は 20 万件，ほかは各 3 万件．`cleanCourseName()` は前後の空白を除いた結果が一致し，関数はその結果を返す）．
+  - 新しい正規表現はいずれもオートマトンで線形と判定された．関わる文字だけでできたランダムな文字列で，元の正規表現と答えが一致した（曜日と時限は 20 万件，ほかは各 3 万件．`cleanCourseName()` は前後の空白を除いた結果が一致し，関数はその結果を返す）．
 - ログインページの `src/auth-totp.js` のデコードは，このブランチでは直さない．S1 の前半のブランチ（[fix/totp-code-from-background](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-code-from-background)）が，そのデコードを background へ移して取り除くからで，ここで直すと同じ行を変えて衝突する．S1 の前半が background に置いたデコードの `/=+$/` は，そのブランチで同じように直した．そのため，S9 はこの 2 つのブランチがそろって直る．
 - テスト: [tests/regexp.test.mjs](../tests/regexp.test.mjs) の「S9」（オートマトン），[tests/runs.test.mjs](../tests/runs.test.mjs)（それぞれの連なりの長さ n，2n，4n で数えた仕事量の伸びの次数．main では 2.00，修正後は 1）．ログインページのデコードの件と，オートマトンの件は，S1 の前半とそろって通る．
+
+### S10
+**ページに `<script>` と `<style>` を入れる**（低・読解・再現）
+
+- 場所: [src/grading-ta.js:224-244](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta.js#L224-L244)（TA 採点支援のブリッジ `src/grading-ta-page.js` を `<script src>` で入れる），[src/sidebar-resize.js:32-34](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/sidebar-resize.js#L32-L34)（サイドバーの幅），[src/assignments.js:2717-2728](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2717-L2728)（緊急度の色），[:2734-2770](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2734-L2770)（サイドバーの上書き）
+- 何が起きるか:
+  - LMS のページの DOM に，`<script src>` と `<style>` を要素として入れる．ページから見れば，これらは攻撃で入ったものと区別がつかない．nonce やハッシュで許可したものだけを実行する CSP [[CSP3]](#参考文献) をページが持つと，ブラウザはこれらを止める．すると，TA 採点支援の提出一覧の取得，サイドバーの幅，緊急度の色，サイドバーの上書きが効かなくなる．nonce を付けても解決にはならない．nonce はページが自分のものを通すためのもので，拡張がページの nonce を写して付ければ，ページの守りをすり抜けることになる．
+  - 緊急度の色の `<style>` は，保存された設定の値（`colorDanger` など）を，そのまま CSS の文に連結する．値に `;` や `}` があれば，任意の規則が入る．
+- 根拠: コードを読んだ．広げた検出器（「fuzz リポジトリの仕組み」）は，拡張が入力の間にこれらの要素を入れたら失敗とする．
+- 直し方: ページに要素を入れない．ページの世界で動かすスクリプトは，manifest の content_scripts に `"world": "MAIN"` で書くか [[ChromeContentScripts]](#参考文献)，background から `chrome.scripting.executeScript()` に `world: "MAIN"` を指定して入れる [[ChromeScripting]](#参考文献)（`scripting` の権限はすでにある）．スタイルは content_scripts の css（styles.css）にまとめ，値の変わる色や幅は，CSSOM（`style.setProperty()` で CSS 変数を与える）で渡す．色の値は，CSS の色として読めるものだけを使う．
+- テスト: `tests/assignments.test.mjs` の「S10」（科目のページに，拡張が `<style>` を入れない）．
+
+### S11
+**Trusted Types を求めるページで，innerHTML などに文字列を渡す**（低・読解・再現）
+
+- 場所: [src/assignments.js:120](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L120)，[:958-987](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L958-L987)，[:1959](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L1959)，[:2001](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2001)，[:2069](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2069)，[:2326](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2326)，[:2382-2404](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2382-L2404)，[:2693](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2693)，[src/textbooks.js:166-189](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L166-L189)，[src/tree-view.js:231-238](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/tree-view.js#L231-L238)，[src/tool-visibility.js:115](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/tool-visibility.js#L115)，[src/grading-ta.js:234](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta.js#L234)，[:467](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta.js#L467)，[popup.js:316](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L316)，[:766-794](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L766-L794)
+- 何が起きるか: 拡張は，UI を `innerHTML` で組み立てたり消したりし（`innerHTML = ""` も），取得したページを `DOMParser` で読み，ブリッジの `src` に文字列を入れる．いずれも Trusted Types [[TT]](#参考文献) の受け口であり，CSP に `require-trusted-types-for 'script'` があるページ（と，それを求める拡張のページ）は，TrustedHTML などでない文字列を拒み，例外を投げる．そのページでは，課題パネル，教科書パネル，フォルダの展開，ツール表示管理，TA 採点支援，popup の該当する部分が動かなくなる．
+- 根拠: コードを読んだ．ハーネスの窓は Chrome と同じ Trusted Types の API を持ち，受け口に渡された文字列を検出器が失敗とする（「fuzz リポジトリの仕組み」）．
+- 直し方: 受け口を使わない．要素は `createElement` と `textContent` で作り，消すのは `replaceChildren()` にする．取得したページから値を読む箇所では，サニタイズする API（HTML Sanitizer API [[Sanitizer]](#参考文献) の `Element.setHTML()` など）で無害にした文書から読む．ブリッジは，S10 の直し方のとおり，DOM に差し込まずに入れる．文字列を TrustedHTML に変えるだけで内容を確かめない方針や，すべての文字列を通す default の方針を作ることは，型を形骸化させるため，修正にはならない（検出器は，作られた方針を試し，そうした方針も失敗とする）．
+- テスト: `tests/assignments.test.mjs` の「S11」（課題パネルを，Trusted Types の受け口に文字列を渡さずに描く）．
+
+### S12
+**取得したデータを，リダイレクトの行き先を確かめずに使用する**（低・読解・ファズ）
+
+- 場所: [background.js:68-93](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L68-L93)（サイト連絡先），[:186-190](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L186-L190)（KULASIS の検索とシラバス），[src/assignments.js:54-71](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L54-L71)（Sakai の API），[:117](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L117)，[src/textbooks.js:25-29](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L25-L29)，[src/grading-ta.js:464-466](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta.js#L464-L466)，[src/tree-view.js:223-231](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/tree-view.js#L223-L231)
+- 何が起きるか: 拡張は KULMS と KULASIS の応答を，リダイレクトを追った結果のまま使用し，最終的な取得元（`res.url`）を確かめない．`sakaiGet()` は，ログインページへのリダイレクトをパスのみで判定する．サーバーが外部のオリジンへリダイレクトした場合（オープンリダイレクトなど）や，http へ切り替えた場合，転送先のサーバー（攻撃者のものであってもよい）は，CORS の判定を通過する応答ヘッダーを返すだけで，自らのデータを課題，教員名，シラバス，教科書，提出の状態，フォルダの一覧として拡張に表示させることができる．Fetch 標準では，別のオリジンへのリダイレクトの後，CORS の判定に用いる要求のオリジンは `null` として直列化される（redirect-taint）が，転送先が `Access-Control-Allow-Origin: null` と `Access-Control-Allow-Credentials: true` を返せば，資格情報を伴う要求であっても判定は成功する [[Fetch]](#参考文献)．
+- 暗号学的な検証について: KULMS（Sakai）も KULASIS も，応答に署名を付与しない．したがって，拡張が依拠できる暗号学的な保証は TLS [[RFC8446]](#参考文献) のみであり，TLS が保証するのはデータの送信元のサーバーである．最終的な取得元が https であり，期待するホストであることを確かめれば，TLS による保証をそのまま利用できる．Chrome の拡張は，ホスト権限を宣言したホストとスキームに限り CORS を経ずに取得できる [[ChromeNetwork]](#参考文献) が，取得元の証明書そのものを参照する API は持たない．Firefox では，`webRequest.onHeadersReceived` の blocking リスナーの中で `webRequest.getSecurityInfo()` を呼ぶことにより，証明書チェーンを取得できる [[MDN-getSecurityInfo]](#参考文献)．これを用いれば，大学のホストの証明書（または発行者）を固定（ピン留め）できる．
+- 根拠: コードを読んだ．ハーネスの fetch は，Fetch 標準のリダイレクトの扱い（HTTP fetch と HTTP-redirect fetch），redirect-taint，CORS の判定 [[Fetch]](#参考文献) と，Chrome の拡張の取得の扱い [[ChromeNetwork]](#参考文献) に従い，content script の http への要求は混在コンテンツとして止める [[MixedContent]](#参考文献)．そのうえで，リダイレクトで別のオリジンや http から届いた応答の本文を拡張が読んだ場合に失敗とする（2026-10-14．[harness/net.mjs](../harness/net.mjs)）．ファズ対象 `site-contact` で確かめた（pages.json の取得が外部へリダイレクトされ，転送先が CORS で読み取りを許可した場合に，background はそれを LMS の応答として読む）．
+- 直し方: リダイレクトを想定しない取得には `redirect: "error"` を指定する．ログアウトの検知のためにリダイレクトを扱う `sakaiGet()` は，`redirect: "manual"` を指定して opaque-redirect の応答 [[Fetch]](#参考文献) をログアウトとみなすか，`res.url` のオリジンが `https://lms.gakusei.kyoto-u.ac.jp` であることを確かめてから使用する．
+- 対応: 応答を使う前に，最終的な取得元のオリジン（スキームとホスト）が求めた先と同じであることを確かめ，違えば取得の失敗として扱う（7 か所．[fix/redirect-origin](https://github.com/yumasansansan/kulms-extension/tree/fix/redirect-origin)）．
+- テスト: `fuzz/known/site-contact/S12-redirect-elsewhere`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
 ## 不具合
 
@@ -205,7 +247,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 場所: [src/assignments.js:548-550](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L548-L550)，[:660-662](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L660-L662)，[:726-728](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L726-L728)
 - 何が起きるか: 各タブは，ページを開いたときに状態を一度だけ読み込む（[:2975-2977](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2975-L2977)）．その後は，メモリにある全体をそのまま上書き保存する．assignments.js には `chrome.storage.onChanged` の処理が無く，他のタブの変更を知らない．
 - 根拠: タブ B でメモを追加し，続いてタブ A で追加すると，B のメモが消えた．完了チェックと非表示も同じ書き方をしている．
-- 影響: LMS をよく複数タブで開く利用者のデータが消える．
+- 影響: LMS を頻繁に複数のタブで開く利用者のデータが消える．
 - 直し方: 操作のたびに「最新を読む → 差分を当てる → 書く」にするか，`storage.onChanged` で他のタブと同期する．より良いのは，項目ごとのキーにするか，background が更新を一列に並べる方式．
 - 対応: `storage.onChanged` で，ほかのタブが保存した状態をメモリに取り込み，開いているパネルを描き直す．バックフォワードキャッシュから戻ったページは読み直す（[fix/sync-state-across-tabs](https://github.com/yumasansansan/kulms-extension/tree/fix/sync-state-across-tabs)，PR [#75](https://github.com/Radian0523/kulms-extension/pull/75)）．2026-10-13 に上流に取り込まれ（[`0a0683b`](https://github.com/Radian0523/kulms-extension/commit/0a0683b905fa924cc4931f58bd6e2e19d9302949)），v1.21.1 で出た．
 - テスト: `tests/assignments.test.mjs` の「B1」の 4 件（メモ，完了チェック，削除，開いているパネルの表示）．
@@ -243,16 +285,16 @@ specification: the GNU General Public License, version 3 or any later version
 - 影響: LMS を開いている間，CPU と電池を使い続ける（この機能は既定でオフ）．
 - 直し方: 処理済みの印を明示的に付ける．並びが変わるときだけ並べ替える．監視はサイドバーに絞る．自分の変更は `takeRecords()` で読み捨てる．
 - 対応: 表示ツールがすでにその順で並んでいれば付け直さず，処理の後に自分の変更の通知を `takeRecords()` で読み捨てる（[fix/tool-visibility-loop](https://github.com/yumasansansan/kulms-extension/tree/fix/tool-visibility-loop)）．効いていなかった処理中のフラグは外した．監視の範囲は P3 で扱う．
-- テスト: `tests/sidebar.test.mjs` の「B4」．
+- テスト: `tests/sidebar.test.mjs` の「B4」と，`fuzz/known/sidebar/B4-every-tool-shown`（`tests/fuzz-inputs.test.mjs` が todo として流す）．ファズ対象 `sidebar` が，ページの時計を進めたときに見つけた（再処理が止まらず，仕事が上限を超える）．
 
 ### B5
 **Safari 版に `vendor/` が同梱されない**（中・再現（ビルド））
 
-- 場所: [build.sh:49](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/build.sh#L49)．Xcode プロジェクトは，ビルドの段（Sync Web Extension Resources）で Resources/ の中身をすべて appex に写すので，Resources/ に置けば入る．
+- 場所: [build.sh:49](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/build.sh#L49)．Xcode プロジェクトは，ビルドの段（Sync Web Extension Resources）で Resources/ の内容をすべて appex に写すため，Resources/ に置けば同梱される．
 - 何が起きるか: v1.18.0 以降，manifest は `vendor/jsqr.min.js` と `vendor/qrcode-gen.js` を参照している．しかし Safari への同期と Xcode のリソースには `vendor/` が無い．そのため Safari では，auth.iimc の登録補助（jsQR と同じ組）と QR 表示が動かないはずである（Safari 実機では未確認）．
 - 根拠: コピーで `build.sh safari` を実行すると，manifest が参照する 2 ファイルが Resources に無かった．
 - 直し方: 同期の対象に `vendor` を加える．あわせて，各ビルド出力に manifest の参照するファイルが揃っているかを CI で検査する．
-- 対応: 拡張機能が動くのに要るものを build.sh の 1 か所に並べ，Safari への同期と zip の両方でそれを使う（[fix/build-contents](https://github.com/yumasansansan/kulms-extension/tree/fix/build-contents)，B6 と同じ）．上流は 2026-10-13 に，この指摘をもとに同じ形の修正を自ら入れ（[`97a8746`](https://github.com/Radian0523/kulms-extension/commit/97a87462f3ab2950867ef53c2171713a77a7b3a8)），v1.21.1 で出た．あわせて Safari の Resources を src に揃えた（M4）．
+- 対応: 拡張機能の動作に必要なものを build.sh の 1 か所に並べ，Safari への同期と zip の両方でそれを使う（[fix/build-contents](https://github.com/yumasansansan/kulms-extension/tree/fix/build-contents)，B6 と同じ）．上流は 2026-10-13 に，この指摘をもとに同じ形の修正を自ら入れ（[`97a8746`](https://github.com/Radian0523/kulms-extension/commit/97a87462f3ab2950867ef53c2171713a77a7b3a8)），v1.21.1 で出た．あわせて Safari の Resources を src に揃えた（M4）．
 - テスト: `tests/build.test.mjs` の「B5」．
 
 ### B6
@@ -270,7 +312,7 @@ specification: the GNU General Public License, version 3 or any later version
 
 - 場所: [src/assignments.js:2910-2919](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2910-L2919)
 - 何が起きるか:
-  - 課題ツールの地図を，クイズにも当てはめてしまう．
+  - 課題ツールの対応表を，クイズにも当てはめる．
   - サイドバーに無い科目では，項目ごとに `pages.json` を直列に取りに行く．そして解決した URL をキャッシュに書き戻さないので，パネルを開くたびに繰り返す．
 - 直し方: 地図は種類ごとに当てる．解決は科目ごとに 1 回，並行して行い，結果をキャッシュに残す．
 - 対応: 課題には課題ツールの，クイズにはテスト・クイズツールの地図を当てる．地図に無い科目の課題は，科目ごとに 1 回だけ並行して引き，キャッシュが読んだときのままなら，タイムスタンプを変えずにそこへ残す（[fix/cached-tool-links](https://github.com/yumasansansan/kulms-extension/tree/fix/cached-tool-links)）．
@@ -280,10 +322,10 @@ specification: the GNU General Public License, version 3 or any later version
 **バナーが重複し，設定タブにも紛れ込む**（低・再現）
 
 - 場所: [src/assignments.js:1940-2020](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L1940-L2020)
-- 何が起きるか: 描画のたびにストレージを非同期に読み，読み終わったときにバナーを付け足す．そのとき，まだ同じ描画のままか，今のタブが課題一覧かを確かめていない．
+- 何が起きるか: 描画のたびにストレージを非同期に読み，読み終わったときにバナーを付け足す．そのとき，描画が同じままであるか，現在のタブが課題一覧であるかを確かめていない．
 - 根拠: 2 回続けて描画すると，バナーが 2 個から 4 個になった．設定タブにも現れた．
 - 直し方: 描画ごとに世代番号を持たせて照合する．あるいは，バナーを出すかどうかを初期化時に一度だけ読む．
-- 対応: 描画のときにバナーの場所に目印を置き，ストレージを読み終えたときに，目印がまだパネルの中身にあるときだけバナーに置き換える（[fix/assignment-banners](https://github.com/yumasansansan/kulms-extension/tree/fix/assignment-banners)）．描画し直すか別のタブに移ると，中身ごと目印も消える．
+- 対応: 描画のときにバナーの場所に目印を置き，ストレージを読み終えたときに，目印がまだパネルの中にあるときに限りバナーに置き換える（[fix/assignment-banners](https://github.com/yumasansansan/kulms-extension/tree/fix/assignment-banners)）．描画し直すか別のタブに移ると，内容とともに目印も消える．
 - テスト: `tests/assignments.test.mjs` の「B8」の 2 件（2 回続けて描画したとき，設定タブに移ったとき）．
 
 ### B9
@@ -291,25 +333,25 @@ specification: the GNU General Public License, version 3 or any later version
 
 - 場所: [src/assignments.js:2891-2893](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2891-L2893)，[:3043-3047](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L3043-L3047)，[:577](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L577)
 - 何が起きるか: 読み込み中に `loadAssignments` を呼ぶと，何もせずに返る．そのため，popup の更新ボタンは成功と表示するが，実際には更新していない．提出直後に強制する再取得も，同じ理由で捨てられることがある．
-- 直し方: 進行中の Promise を返す．強制更新の要求は，今の処理が終わった後に 1 回実行する．
-- 対応: そのとおりに直し，続けて頼まれた強制更新は 1 回にまとめる（[fix/refresh-while-loading](https://github.com/yumasansansan/kulms-extension/tree/fix/refresh-while-loading)）．読み込み中かどうかを表す `isLoading` は，B1 の修正がタブ間の同期で読むので残し，読み込みの間 true にする．
+- 直し方: 進行中の Promise を返す．強制更新の要求は，実行中の処理が終わった後に 1 回実行する．
+- 対応: そのとおりに直し，続けて要求された強制更新は 1 回にまとめる（[fix/refresh-while-loading](https://github.com/yumasansansan/kulms-extension/tree/fix/refresh-while-loading)）．読み込み中かどうかを表す `isLoading` は，B1 の修正がタブ間の同期で読むので残し，読み込みの間 true にする．
 - テスト: `tests/assignments.test.mjs` の「B9」．
 
 ### B10
 **i18n の置換で，値の中の `$&` や置き場所の名前が展開され，結果が値の長さの 3 乗まで伸びる（潜在）**（低・再現・ファズ）
 
 - 場所: [src/settings.js:112](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/settings.js#L112)，[popup.js:29](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L29)
-- 何が起きるか: 値が，置いたとおりに入らない．今の呼び出しは数値しか渡さないので，表には出ていない．
+- 何が起きるか: 値が，置いたとおりに入らない．現在の呼び出しは数値しか渡さないため，表面化していない．
   - 値を `String.prototype.replace` の置換文字列として渡しているので，`$&` は `$MINS$` に，`$$` は `$` に変わる．
   - 置き場所ごとに順に置き換えるので，前に入れた値の中に後の置き場所の名前（`$MINS$` など）があると，それも置き換わる．`t("remainDaysHoursMins", ["$HOURS$", "5", "7"])` は「残り5日5時間7分」になる．
   - 置換文字列の `` $` `` と `$'` は，一致の前と後の文字列を差し込む．置き場所が 2 つある文では，前の置換が差し込んだ文字列の中にある後の置き場所の名前を，後の置換がまた置き換えるので，結果の長さと仕事は値の長さの 2 乗（`` $` ``）や 3 乗（`$'`）で伸びる．`$'` を 256 回繰り返した値を `remainHoursMins` の 2 つの置き場所に入れると，結果は約 7,600 万文字になる．
-- 根拠: 後半は，前半を直したブランチを読んで気づき，ファズ対象 `i18n` もそのブランチで見つけた（2026-10-07，期待する結果と比べる確かめ方にしてから）．伸びは，ファズ対象 `i18n` が段で見つけた（2026-10-07．仕事の次数は，`` $` `` で 1.98，`$'` で 2.99）．
+- 根拠: 後半は，前半を直したブランチを読む過程で判明し，ファズ対象 `i18n` もそのブランチで見つけた（2026-10-07，期待する結果と比べる確かめ方にしてから）．伸びは，ファズ対象 `i18n` が段で見つけた（2026-10-07．仕事の次数は，`` $` `` で 1.98，`$'` で 2.99）．
 - 直し方: メッセージを 1 回だけ置き換え，値は関数で返す．
 - 対応: メッセージを 1 回だけ置き換え，値は関数で返してそのまま入れる（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)，B15，B21 と同じブランチ）．
 - テスト: `fuzz/known/i18n/B10-placeholder-in-value`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/i18n.test.mjs` の「B10」の 4 件（settings.js と popup.js の `t()` が，値をそのまま入れることと，仕事が値の長さに線形に伸びること）．
 
 ### B11
-**教科書一覧が科目名をキーにしていて，同名の科目が衝突する**（低・読解・再現）
+**教科書一覧が科目名をキーとしており，同名の科目が衝突する**（低・読解・再現）
 
 - 場所: [src/textbooks.js:368-373](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L368-L373)
 - 何が起きるか: 名前が同じ科目があると，後の科目の項目が前の科目の項目を上書きし，一覧には 1 つしか出ない．
@@ -320,13 +362,14 @@ specification: the GNU General Public License, version 3 or any later version
 ### B12
 **ページから書き換えられる Web Storage の値で例外になる**（低・読解）
 
-- 場所: [src/assignments.js:556-579](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L556-L579)，[src/tool-visibility.js:31](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/tool-visibility.js#L31)，[src/top-favbar.js:87](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/top-favbar.js#L87)
-- 何が起きるか: LMS の sessionStorage と localStorage は，ページ自身の JS から書き換えられる．
+- 場所: [src/assignments.js:556-579](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L556-L579)，[src/tool-visibility.js:31](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/tool-visibility.js#L31)，[src/top-favbar.js:87](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/top-favbar.js#L87)，[src/submit-detect.js:68-75](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/submit-detect.js#L68-L75)
+- 何が起きるか: LMS の sessionStorage と localStorage は，ページ自身の JS から（攻撃者のものも）いつでも書き換えられる．
   - `kulms-submitted-ids` が配列でない JSON（`"abc"` など）だと，`ids.forEach` で未処理の拒否になる．
-  - `kulms-tool-config` の値に `hasOwnProperty` という名前の項目があると，TypeError になる．
-- 直し方: 読んだ値の形を確かめ，`Object.hasOwn` を使う．拡張の状態は，できるだけ chrome.storage に置く．
-- 対応: 提出の ID は文字列の配列だけを使い，それ以外の要素は捨てる．ツールの設定は，オブジェクトでなければ空とみなし，科目の設定の有無は `Object.prototype.hasOwnProperty.call` で確かめる（[fix/web-storage-values](https://github.com/yumasansansan/kulms-extension/tree/fix/web-storage-values)）．
-- テスト: `tests/assignments.test.mjs` の「B12」（提出の ID）と，`tests/sidebar.test.mjs` の「B12」の 2 件（ツールの設定）．
+  - `kulms-tool-config` の値に `hasOwnProperty` という名前の項目があると，TypeError になる．項目がオブジェクトでない場合，表示の切り替えが strict モードでそれにプロパティを置こうとして TypeError になる．
+  - 提出を検知する submit-detect.js は，提出ボタンが押されたときに `kulms-submitted-ids` を読み，配列でない値（文字列など）の `push` を呼んで TypeError になる．提出は完了として記録されない（2026-10-13 にファズ対象 `submission` で確かめた）．
+- 直し方: 読んだ値の形を確かめ，`Object.hasOwn` を使う．拡張の状態は，可能な限り chrome.storage に置く．
+- 対応: 提出の ID は文字列の配列だけを使い，それ以外の要素は捨てる．ツールの設定は，オブジェクトでなければ空とみなし，科目の設定の有無は `Object.prototype.hasOwnProperty.call` で確かめる（[fix/web-storage-values](https://github.com/yumasansansan/kulms-extension/tree/fix/web-storage-values)）．top-favbar.js の同じ読み方と submit-detect.js の提出の ID の一覧も，同じブランチの続く修正で同じように直した（2026-10-14）．
+- テスト: `tests/assignments.test.mjs` の「B12」（提出の ID）と，`tests/sidebar.test.mjs` の「B12」の 2 件（ツールの設定）と，`fuzz/known/submission/B12-ids-not-a-list`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
 ### B13
 **シラバス検索の最後のフォールバックが無関係な科目を選びうる**（低・読解）
@@ -346,7 +389,7 @@ specification: the GNU General Public License, version 3 or any later version
 **`t()` がキーをプロトタイプ越しに引き，`t("hasOwnProperty")` が undefined になる（潜在）**（低・ファズ）
 
 - 場所: [src/settings.js:104-117](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/settings.js#L104-L117)，[popup.js:21-33](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L21-L33)
-- 何が起きるか: 読み込んだ messages.json を `__kulmsOverrideMessages[key]` で引くので，`constructor`，`toString`，`hasOwnProperty` などのキーは Object.prototype の関数に当たる．その `message` は undefined なので，`t()` は文字列でなく undefined を返す．今の呼び出しはキーが定数なので，表には出ていない．
+- 何が起きるか: 読み込んだ messages.json を `__kulmsOverrideMessages[key]` で引くので，`constructor`，`toString`，`hasOwnProperty` などのキーは Object.prototype の関数に当たる．その `message` は undefined であるため，`t()` は文字列ではなく undefined を返す．現在の呼び出しではキーが定数であるため，表面化していない．
 - 根拠: ファズ対象 `i18n` が，起動から 1 秒足らず（390 回目）で見つけた．
 - 直し方: `Object.hasOwn(messages, key)` で引く．
 - 対応: 辞書自身のキーだけを引き，それ以外は `chrome.i18n.getMessage` に任せる（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)，B10，B21 と同じブランチ）．
@@ -358,7 +401,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 場所: [src/grading-ta.js:62-68](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta.js#L62-L68)，[:134-142](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta.js#L134-L142)
 - 何が起きるか: 提出へのリンクや URL のクエリから ID を取り出すとき，`decodeURIComponent` を例外の処理なしに呼ぶ．`%` の後に 16 進数が続かないリンクがあると URIError で止まり，提出一覧の状態アイコンの装飾がその場で途切れる．URL のクエリに壊れた `%` があると，採点画面の起動そのものが止まる．
 - 根拠: ファズ対象 `grading-status` が，約 6 万回目（10 秒）で見つけた．
-- 直し方: 失敗したら元の文字列を使う（あるいは `URLSearchParams` で読む）．
+- 直し方: 失敗した場合は元の文字列を使う（あるいは `URLSearchParams` で読む）．
 - 対応: デコードできないときは，元の文字列をそのまま使う（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)，B18 と同じブランチ）．
 - テスト: `fuzz/known/grading-status/B16-malformed-percent`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/grading-ta.test.mjs` の「B16」．
 
@@ -367,8 +410,8 @@ specification: the GNU General Public License, version 3 or any later version
 
 - 場所: [src/assignments.js:1064-1066](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L1064-L1066)，[:1468-1470](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L1468-L1470)，[:674-676](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L674-L676)，[:720](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L720)，[popup.js:390-393](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L390-L393)
 - 何が起きるか:
-  - メモは `normalizeMemo()` を通してから `.deadline` や `.id` を読むが，`normalizeMemo()` は文字列しか直さず，null をそのまま返す．そのため，保存されたメモの一覧に null が 1 つでもあると TypeError になり，課題パネルの描画全体が止まる．popup の一覧と，期限の切れた非表示の掃除（読み込み時）も同じところで止まる．
-  - メモの一覧は `loadMemos()` が `result[MEMO_KEY] || []` として読むので，保存された値が配列でなく，偽でもないとき（文字列やオブジェクトなど）は，それがそのまま一覧になる．描画が `memos.forEach` を呼ぶところで TypeError になり，課題パネルの描画全体が止まる．popup も，長さを持つ値（文字列など）では一覧が止まる．
+  - メモは `normalizeMemo()` を通してから `.deadline` や `.id` を読むが，`normalizeMemo()` は文字列しか直さず，null をそのまま返す．そのため，保存されたメモの一覧に null が 1 つでもあると TypeError になり，課題パネルの描画全体が止まる．popup の一覧と，期限の切れた非表示の掃除（読み込み時）も同じ箇所で止まる．
+  - メモの一覧は `loadMemos()` が `result[MEMO_KEY] || []` として読むので，保存された値が配列でなく，偽でもないとき（文字列やオブジェクトなど）は，それがそのまま一覧になる．描画が `memos.forEach` を呼ぶ箇所で TypeError になり，課題パネルの描画全体が止まる．popup も，長さを持つ値（文字列など）では一覧が止まる．
   - 値は拡張自身のストレージから来るが，旧版や，計画中のスマホ版との同期，ストレージの破損などで 1 件でも壊れると，パネルを開けない状態が続く．
 - 根拠: ファズ対象 `assignments` が，Linux で約 2,500 回目（9 秒）に null のメモを見つけた．配列でない一覧は，2026-10-09 の毎日のファジング（[run 37853268307](https://github.com/yumasansansan/kulms-extension-fuzz/actions/runs/37853268307)）が見つけた．
 - 直し方: 読み込んだ値が配列でなければ空の一覧とし，一覧から，オブジェクトでない要素を取り除く（`normalizeMemo()` で null や数値を捨てる）．
@@ -388,7 +431,7 @@ specification: the GNU General Public License, version 3 or any later version
 ### B19
 **Sakai の応答に形の崩れた項目が 1 つあると，ほかの科目や課題も一覧から消える**（低・ファズ）
 
-- 場所: [src/assignments.js:265-367](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L265-L367)（課題），[:380-413](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L380-L413)（クイズ），[:103-113](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L103-L113)，[:155-166](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L155-L166)（科目の一覧），[:247-263](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L247-L263)（課題ツールの URL），[src/textbooks.js:24-37](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L24-L37)（教科書の科目一覧）
+- 場所: [src/assignments.js:265-367](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L265-L367)（課題），[:380-413](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L380-L413)（クイズ），[:103-113](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L103-L113)，[:155-166](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L155-L166)（科目の一覧），[:247-263](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L247-L263)（課題ツールの URL），[src/textbooks.js:24-37](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L24-L37)（教科書の科目一覧），[src/assignments.js:581-584](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L581-L584)（描画）
 - 何が起きるか: 科目ごとの取得は，Sakai の API の応答を，形を確かめずに読む．次のようなときに TypeError になる．
   - 応答や項目が null のとき（`data.assignment_collection`，`a.entityId`，`a.dueTime`）
   - 提出の `status` が文字列でないとき（`toLowerCase` が無い）
@@ -397,15 +440,17 @@ specification: the GNU General Public License, version 3 or any later version
   取得全体を囲む try がこれを受けて `console.warn` に書き，その科目の課題を空にする．そのため，形の崩れた項目が 1 つあるだけで，同じ科目の正しい課題も一覧から黙って消える．クイズの取得は，警告も出さずに，その科目のクイズをすべて捨てる．
 
   科目の一覧（`site.json`）でも同じで，項目が 1 つ崩れていると，API から得た一覧をすべて捨てて，ポータルのページから科目を読む方法に切り替わる．ポータルのページから読めない科目は，課題ごと一覧から消える（ページも読めなければ「科目が見つからない」になる）．課題ツールの URL を pages.json から探すときも，null のページがあると探すのをやめ，科目のページへのリンクで代える（警告は出さない）．教科書の科目一覧（textbooks.js）も，項目が 1 つ崩れると API から得た一覧をすべて捨て，サイドバーから読む方法に切り替わる．
+
+  取得を通った値も，形のまま描画まで届く．課題の名前（`title`）が，自分の `toString` を持つオブジェクト（JSON では，そのキーを持つオブジェクト）で，ID が無いと，描画が既読と削除の記録のキーを作る箇所（`getCheckedKey()`）で，文字列にできずに TypeError になる．これは捕まえられず，課題パネルが描かれない．
 - 根拠: ファズ対象 `assignments` が，拡張の捕まえたプログラムの誤りも失敗とするようにした最初の実行で見つけた（課題の一覧の応答が JSON の `null` だった）．次の 2 つのとき，同じ科目の正しい課題も消えることを確かめた．
   - 項目に null があるとき
   - 提出の `status` が数のとき
 
-  クイズでも，null の項目があると同じことが起きる．科目の一覧の経路は，13 本の修正をすべて当てた拡張のファジングで見つけた（`site.json` の応答が `null` だった）．
-- 見立て: Sakai の API がこの形を返すことは，まず無い．ただ，期限を知らせる拡張で，科目ごと期限の一覧から黙って消えるのは重い失敗になる．
+  クイズでも，null の項目があると同じことが起きる．科目の一覧の経路は，13 本の修正をすべて当てた拡張のファジングで見つけた（`site.json` の応答が `null` だった）．描画で止まる経路は，2026-10-13 の 30 分ずつの毎日のファジングが見つけた（課題の名前が `{"toString": …}` だった）．クイズの取得が警告も出さずに捨てる誤りは，拡張が捕まえた誤りも見る検出器（「fuzz リポジトリの仕組み」）で検出できるようになった．
+- 見立て: Sakai の API がこの形を返すことは，ほとんど考えられない．ただし，期限を知らせる拡張において，科目ごと期限の一覧から黙って消えることは重大な失敗である．
 - 直し方: 応答と項目の形を確かめ，形の崩れた項目だけを飛ばす．文字列の項目は，文字列のときだけ使う．
 - 対応: 応答の一覧は配列のときだけ読み，オブジェクトでない項目は飛ばす．文字列の欄は，文字列か数のときだけ使う．日時は，数か数の文字列で，Date で表せるときだけ使う．ID の無い課題には個別の API を呼ばない．課題ツールの URL と教科書の科目一覧も，同じように直した（[fix/sakai-answer-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/sakai-answer-shape)）．
-- テスト: `fuzz/known/assignments/B19-null-assignment`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B19」の 3 件（課題，クイズ，科目の一覧）．
+- テスト: `fuzz/known/assignments/B19-null-assignment` と `B19-title-object`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B19」の 4 件（課題，クイズ，科目の一覧，描画）．修正ブランチ（v1.21.1 に当てたもの）で，描画の 1 件も通る．
 
 ### B20
 **サイト連絡先の取得で，pages.json の形の崩れたページが，後のページを隠す**（低・ファズ）
@@ -413,7 +458,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 場所: [background.js:75-83](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L75-L83)
 - 何が起きるか: `fetchSakaiSiteContact()` は，pages.json の各ページの `tools` を，形を確かめずに読む．ページが null のとき（`p.tools`）や，`tools` が反復できない値のときに TypeError になる．関数全体を囲む try がこれを受けて null を返すので，後に Site Info のツールがあっても連絡先が見つからない．
 - 根拠: ファズ対象 `site-contact` が，拡張の捕まえたプログラムの誤りも失敗とするようにした最初の実行で見つけた（pages.json が `[null]` だった）．
-- 見立て: Sakai がこの形を返すことは，まず無い．失うのも，同名の科目を教員名で絞り込む手がかりだけなので，影響は小さい．
+- 見立て: Sakai がこの形を返すことは，ほとんど考えられない．失われるのも，同名の科目を教員名で絞り込む手がかりのみであるため，影響は小さい．
 - 直し方: オブジェクトでないページと，配列でない `tools` を飛ばす．
 - 対応: 配列でない pages.json，オブジェクトでないページとツール，配列でない `tools` を飛ばす．`placementId` は，空でない文字列のときだけ使う（[fix/site-contact-pages](https://github.com/yumasansansan/kulms-extension/tree/fix/site-contact-pages)）．
 - テスト: `fuzz/known/site-contact/B20-null-page`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/background.test.mjs` の「B20」．
@@ -422,8 +467,8 @@ specification: the GNU General Public License, version 3 or any later version
 **`t()` に値を 1 つだけ空文字列で渡すと，`$HOURS$` などが残る（潜在）**（低・ファズ）
 
 - 場所: [src/settings.js:107](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/settings.js#L107)，[popup.js:24](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L24)
-- 何が起きるか: `t()` は，置換値を `if (substitutions && entry.placeholders)` で確かめる．そのため，1 つだけ渡した値が空文字列だと置換しない．たとえば `t("sectionDanger", "")` は `$HOURS$時間以内` を返す．配列で渡した `[""]` なら空文字列が入るので，渡し方によって結果が食い違う．今の呼び出しはどれも配列で渡すので，表には出ていない．
-- 根拠: ファズ対象 `i18n` の確かめ方を，値が結果のどこかにあるかを見るものから，期待する結果と比べるものに変えたところで見つけた．
+- 何が起きるか: `t()` は，置換値を `if (substitutions && entry.placeholders)` で確かめる．そのため，1 つだけ渡した値が空文字列だと置換しない．たとえば `t("sectionDanger", "")` は `$HOURS$時間以内` を返す．配列で渡した `[""]` なら空文字列が入るので，渡し方によって結果が食い違う．現在の呼び出しはいずれも配列で渡すため，表面化していない．
+- 根拠: ファズ対象 `i18n` の確かめ方を，値が結果のどこかにあるかを見るものから，期待する結果と比べるものに変えた時点で見つけた．
 - 直し方: `substitutions != null` で確かめる．
 - 対応: 値が null か undefined のときだけ置換しない（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)，B10，B15 と同じブランチ）．
 - テスト: `fuzz/known/i18n/B21-empty-value`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/i18n.test.mjs` の「B21」の 2 件（settings.js と popup.js の `t()`）．
@@ -432,11 +477,43 @@ specification: the GNU General Public License, version 3 or any later version
 **長い TOTP シークレットを background が保存できない（潜在）**（低・ファズ）
 
 - 場所: [background.js:706-718](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L706-L718)
-- 何が起きるか: `encryptSecret()` は，暗号文を `btoa` に渡す前に `String.fromCharCode(...bytes)` で文字列にする．スプレッドで渡す引数の数にはエンジンの上限があり（V8 で約 12.5 万），それより長いシークレットでは `RangeError`（Maximum call stack size exceeded）になる．`kulms-totp-save` はエラーを返し，何も保存しない．実際の TOTP シークレットは 32 字ほどなので，利用者がこの上限に出会うことはまずない．
-- 根拠: background の対象が，入力の初めの TOTP の保存の中身を入力から作るようにしたところで，そのテストが 6.5 万字のシークレットで見つけた（ハーネスは組み込み関数を包んで引数をもう一度渡すので，上限が約 6 万バイトに下がる）．Node だけでも，12.6 万バイトから同じ例外になる．
+- 何が起きるか: `encryptSecret()` は，暗号文を `btoa` に渡す前に `String.fromCharCode(...bytes)` で文字列にする．スプレッドで渡す引数の数にはエンジンの上限があり（V8 で約 12.5 万），それより長いシークレットでは `RangeError`（Maximum call stack size exceeded）になる．`kulms-totp-save` はエラーを返し，何も保存しない．実際の TOTP シークレットは 32 字程度であるため，利用者がこの上限に達することはほとんどない．
+- 根拠: background の対象が，入力の初めの TOTP の保存内容を入力から作るようにした時点で，そのテストが 6.5 万字のシークレットで見つけた（ハーネスは組み込み関数を包んで引数をもう一度渡すため，上限が約 6 万バイトに下がる）．Node だけでも，12.6 万バイトから同じ例外になる．
 - 直し方: 暗号文を少しずつ文字列にする．
 - 対応: 8,192 バイトずつ `String.fromCharCode.apply` で文字列にする関数を加え，暗号文と IV の両方に使う（[fix/long-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/long-totp-secret)）．
 - テスト: `fuzz/known/background-message/B22-long-secret`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/totp.test.mjs` の「B22」（20 万字のシークレットを保存して読み出す）．
+
+### B23
+**ページの Web Storage が埋まっていると，ツールの表示の切り替え，サイドバーの幅の保存，提出の検知，TOTP の登録補助，課題パネルの読み込みが例外で止まる**（低・ファズ）
+
+- 場所: [src/tool-visibility.js:16-18](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/tool-visibility.js#L16-L18)（`saveConfig()`），[src/sidebar-resize.js:17-20](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/sidebar-resize.js#L17-L20)，[:81](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/sidebar-resize.js#L81)，[src/submit-detect.js:66](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/submit-detect.js#L66)，[:75](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/submit-detect.js#L75)，[src/auth-totp-register.js:134](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/auth-totp-register.js#L134)，[src/assignments.js:931](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L931)
+- 何が起きるか: ツール表示管理とサイドバーの幅は，拡張の状態を LMS のページの localStorage に書く．localStorage は，ページ自身のデータやページのスクリプト（攻撃者のものも）でいつでも埋められ，書き換えられる．上限（Storage 標準は localStorage と sessionStorage の保存領域ごとに 5 MiB を推奨値とする [[Storage]](#参考文献)．ハーネスは jsdom の既定の 500 万コード単位とする）まで埋まっていると，`setItem()` が QuotaExceededError を投げる [[HTML]](#参考文献)．拡張はこれを捕まえないので，ツールの切り替えは例外で止まってツールが動かず，ドラッグした幅は保存されない（どちらもイベントの処理の中で捕まえられない例外になる）．提出の検知も，提出の目印を書く sessionStorage が埋まっていると例外で止まり，提出は完了として記録されない．TOTP の登録補助も，読み取ったシークレットを置く sessionStorage が埋まっていると，コードを入力せずに未処理の拒否で止まる．課題パネルは，開くときに sessionStorage に開いた状態を書くため，埋まっていると開いた直後に例外で止まり，課題を読み込まない．
+- 根拠: ファズ対象 `sidebar` が，ページのデータで localStorage を埋めた入力で見つけた．提出の検知はファズ対象 `submission` で，登録補助は `totp-register` で確かめた．
+- 直し方: 拡張の状態はページの localStorage ではなく `chrome.storage` に置く（ページから読めず，書き換えられない．B12 の直し方と同じ）．書き込みが失敗しうる箇所では例外を受け，状態をメモリに残して続ける．
+- 対応: 埋まりうる Web Storage への書き込みで例外を受け，書けないまま処理を続ける（[fix/storage-full](https://github.com/yumasansansan/kulms-extension/tree/fix/storage-full)）．ツールの設定とサイドバーの幅は，埋まった localStorage には保存されない．状態を chrome.storage に移すこと（B12 の直し方）は，別に扱う．
+- テスト: `fuzz/known/sidebar/B23-storage-full`，`fuzz/known/submission/B23-session-full`，`fuzz/known/totp-register/B23-session-full`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B23」（課題パネル）．
+
+### B24
+**TA 採点支援のページ側の橋渡しが，ページのオブジェクトが投げる例外で止まり，文字列でない ID や名前をそのまま渡す**（低・ファズ）
+
+- 場所: [src/grading-ta-page.js:19-67](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta-page.js#L19-L67)
+- 何が起きるか: 橋渡しはページの世界で動き，Sakai の採点画面の要素（`<sakai-grader>`）の `originalSubmissions` を読んで，content script の求めに JSON の文字列で答える．その要素と値はページのもので，ページのスクリプト（攻撃者のものも）がいつでも作り変えられる．
+  - 橋渡しは値を読む箇所で例外を受けない．ページのオブジェクトが投げる例外（getter，Proxy の罠，取り消された Proxy），`JSON.stringify()` が書けない値（BigInt，循環），`String()` が変換できない値（`reference` の `toString` が関数でないなど）で，そのまま例外を投げる．答えは返らず，content script は 300ms 待って何も表示しない．例外はページのコンソールと `window.onerror` に，拡張のスクリプトのものとして届く．ページが送る求めの ID が JSON にできない値でも同じである．
+  - ID（`id` か `submissionId`），提出者名，提出日時は，真と見なせる値なら型を確かめずにそのまま渡す（数，オブジェクト，Symbol など）．Symbol は JSON で落ちて ID の無い提出になり，オブジェクトは content script の側で B18 の例外になる．
+- 根拠: ファズ対象 `grading-bridge`（2026-10-14 に加えた）が見つけた．
+- 直し方: 求めの処理全体で例外を受け，受けたら空の一覧で答える．提出は 1 件ずつ読み，読めないものは捨てる．ID，名前，日時は文字列のときだけ使い，ほかは空にする（ID が空の提出は捨てる）．求めの ID も文字列のときだけ受ける．
+- 対応: 上のとおりに直し，ID は有限の数も文字列にして受ける（[fix/grading-bridge-values](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-bridge-values)．P7 と同じブランチ）．
+- テスト: `fuzz/known/grading-bridge/B24-getter-throws` と `fuzz/known/grading-bridge/B24-id-not-a-string`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
+
+### B25
+**保存された課題のキャッシュが拡張の書く形でないと，課題パネルと popup の描画が止まる**（低・ファズ）
+
+- 場所: [src/assignments.js:2909-2925](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2909-L2925)（キャッシュの読み込み），[:462-466](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L462-L466)（`isSubmitted()`），[popup.js:313-360](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L313-L360)（`render()`），[:87-91](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L87-L91)（`isSubmitted()`），[:93-96](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L93-L96)（`getCheckedKey()`）
+- 何が起きるか: 課題パネルと popup は，`chrome.storage.local` [[ChromeStorage]](#参考文献) の課題のキャッシュ（`kulms-assignments`）を，拡張自身が書いた形であるものとして読む．課題の一覧（`assignments`）が配列でない値（文字列やオブジェクト）であれば `forEach` や `filter` の呼び出しで，項目に null などのオブジェクトでない値があればその項目のプロパティの読み取りで，状態（`status`）が文字列でない真の値であれば `isSubmitted()` の `toLowerCase()` の呼び出しで，TypeError になる．課題パネルは例外を捕まえて警告するのみで一覧を描かず，popup では例外が設定の読み込みの後の Promise の中で起き，誰も受けないため，一覧は空のまま残る．値は拡張自身のストレージから来るが，旧版との互換，ストレージの破損，将来の同期（B17 と同様）で 1 件でも壊れると，課題パネルではキャッシュの有効期間（既定で 2 分）が過ぎて取り直すまで，popup では content script がキャッシュを書き直すまで，一覧を表示できない．
+- 根拠: ファズ対象 `popup`（2026-10-14 に加えた）が見つけた．課題パネルでも同じ 3 通りの値で止まることを確かめた．
+- 直し方: キャッシュの一覧が配列でなければ空の一覧とみなし，オブジェクトである項目のみを受ける．`status` など文字列であるべき項目は，文字列でなければ空文字列とみなす．
+- 対応: キャッシュを読む箇所（課題パネルの `loadCache()` と `loadStaleCache()`，popup の `render()`）で形を整える `normalizeCache()` を加えた（[fix/cache-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/cache-shape)）．
+- テスト: `fuzz/known/popup/B25-assignments-not-a-list`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B25」の 2 件（課題パネルと popup）．
 
 ## 速度・負荷
 
@@ -458,10 +535,14 @@ specification: the GNU General Public License, version 3 or any later version
   - 挙動が変わるので，先に上流で Issue を立てる．
 
 ### P2
-**フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行う**（中・読解・上流 [#62](https://github.com/Radian0523/kulms-extension/issues/62)）
+**フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行い，開かないフォルダを何度も要求し直す**（中・読解・ファズ・上流 [#62](https://github.com/Radian0523/kulms-extension/issues/62)）
 
 - 場所: [src/tree-view.js:208-263](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/tree-view.js#L208-L263)
-- 直し方: Sakai の `/direct/content/site/{siteId}.json` なら，ツリー全体を 1 回で取れるはず（KULMS で使えるかは要確認）．それを取得して拡張の側で描画する．
+- 何が起きるか: `expandAllFolders()` は，閉じたフォルダの先頭を 1 つずつ開く．そのたびにページ全体を POST で取り直し，一覧の tbody を丸ごと置き換えて，置き換えた一覧全体から次の閉じたフォルダを探す．どのフォルダを要求したかを記録していないため，サーバーの答えがまだそのフォルダを閉じたまま示していると（開けなかったときなど），同じフォルダを 30 回まで要求し直す．フォルダが多いと，POST のたびに一覧全体を解析し直すので，仕事は一覧の大きさの最大 30 倍になる．
+- 根拠: 読解．ファズ対象 `resources` が，答えがフォルダを閉じたまま示す入力で，同じ POST を 30 回送り，一覧を 30 回解析し直すのを見つけた（2026-10-14．1 回 19,309 歩で，入力 250 単位の線形の上限 605,692 歩を超えた）．対象は，利用者が何も操作しないうちに拡張が同じフォルダを 2 度要求した場合に失敗とする．
+- 直し方: Sakai の `/direct/content/site/{siteId}.json` なら，ツリー全体を 1 回で取れるはず（KULMS で使えるかは要確認）．それを取得して拡張の側で描画する．現在の設計を保つ場合は，要求したフォルダ（collectionId）を記録し，同じフォルダを 2 度は要求しない．
+- 対応: 要求したフォルダを記録し，まだ要求していない閉じたフォルダのみを開くようにした（[fix/expand-folders-once](https://github.com/yumasansansan/kulms-extension/tree/fix/expand-folders-once)）．ツリー全体を 1 回で取る方法は，上流 Issue で扱う．
+- テスト: `fuzz/known/resources/P2-folder-stays-closed`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
 ### P3
 **`document.body` 全体を監視する MutationObserver が多く，重い**（中・読解）
@@ -479,7 +560,7 @@ specification: the GNU General Public License, version 3 or any later version
 
 - 場所: [manifest.json:29-33](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/manifest.json#L29-L33)（jsQR 256KB を auth.iimc の全ページに），[:54-58](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/manifest.json#L54-L58)（qrcode-gen 56KB を LMS の全ページに）
 - 直し方: `include_globs` で範囲を絞るか，必要になったときに `chrome.scripting` で注入する．
-- 対応: jsQR は，TOTP の登録補助が QR を読む `app=qrsecret` のページでしか使わないので，別の組に分けて `include_globs` でそのページにだけ注入する（[fix/jsqr-where-read](https://github.com/yumasansansan/kulms-extension/tree/fix/jsqr-where-read)）．登録補助は，登録の完了を確かめるため，これまでどおり全ページに注入する．qrcode-gen は課題パネルの中の QR の表示に使い，必要になったときに注入するには `scripting` の権限が要るので，残した．
+- 対応: jsQR は，TOTP の登録補助が QR を読む `app=qrsecret` のページでしか使わないので，別の組に分けて `include_globs` でそのページにだけ注入する（[fix/jsqr-where-read](https://github.com/yumasansansan/kulms-extension/tree/fix/jsqr-where-read)）．登録補助は，登録の完了を確かめるため，これまでどおり全ページに注入する．qrcode-gen は課題パネルの中の QR の表示に使い，必要になったときに注入するには `scripting` の権限が必要であるため，残した．
 - テスト: `tests/totp.test.mjs` の「P4」（ハーネスは manifest の `include_globs`，`exclude_globs`，`exclude_matches` を Chrome と同じに読む）．
 
 ### P5
@@ -495,13 +576,33 @@ specification: the GNU General Public License, version 3 or any later version
 - ファジング: 表は，Service Worker が起きてから最初の検索で作られ，ハーネスの数え方で約 15.6 万歩になる．検索語によらない一度きりの仕事だが，小さな入力の線形の上限（`background-message` の 11 単位の入力で 96,122 歩）を超える．`background-message` の対象は，最初の入力の前に表を作っておき，どの入力にも数えない（P6 を探すときは，入力ごとに表を消す．下の「ファジングで避けている既知の問題」）．`syllabus-search` の対象は，入力が空のとき（上限の基になる仕事量を数えるとき）にも検索するので，表の仕事はその基に入り，どの入力にも数えない．
 - テスト: `fuzz/known/background-message/P6-first-search`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
+### P7
+**TA 採点支援のページ側の橋渡しが，配列もどきの `length` が示す回数だけ反復する**（低・ファズ）
+
+- 場所: [src/grading-ta-page.js:45](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta-page.js#L45)
+- 何が起きるか: `normalizeSubmissions()` は，`originalSubmissions` が配列でも Map でもなく，`length` が数なら，`Array.from()` で配列にする．`Array.from()` は要素の有無に関わらず `length` まで反復する [[ECMA-262]](#参考文献) ため，`length` が 2^32 − 2 なら約 43 億回反復し，それより大きければ「Invalid array length」の RangeError になる．値はページのものであるため，ページのスクリプトはいつでもこの状態を作れる（ページが自らを停止させうるのと同様であり，害はそのページに留まる）．Sakai 自身は配列を置くため，通常は発生しない．
+- 根拠: ファズ対象 `grading-bridge`．ハーネスは，配列もどきの長さまで反復する組み込み（`Array.from()` と `%TypedArray%.from()`）を，走る前にその長さで数え，入力の上限を超えるなら走らせずに止める（[harness/costs.mjs](../harness/costs.mjs) の `least`）．
+- 直し方: 配列と Map だけを受け，ほかは空の一覧とする．
+- 対応: 配列，Map，キーごとのオブジェクトのみを受け，`length` の値は使わない（[fix/grading-bridge-values](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-bridge-values)．B24 と同じブランチ）．
+- テスト: `fuzz/known/grading-bridge/P7-array-like-length`．
+
+### P8
+**表示中の TOTP コードを毎秒作り直すたびに，シークレットをデコードし，HMAC の鍵を作り直す**（低・再現・ファズ）
+
+- 場所: [popup.js:646-657](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L646-L657)，[:754](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L754)，[src/assignments.js:2301](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2301)，[:2375](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2375)
+- 何が起きるか: popup と LMS の設定パネルは，TOTP のコードを表示している間，1 秒ごとにコードを作り直す．そのたびに，保存されたシークレットを base32 からデコードし，`crypto.subtle.importKey()` で HMAC の鍵を作る．そのため，1 秒の仕事はシークレットの長さに比例し，表示している時間との積で増える（ハーネスの数え方で，16 字のシークレットで 1 秒に 2,651 歩，4,096 字で 63,341 歩）．通常のシークレット（32 字程度）では無視できる量であるが，保存されたシークレットが長いほど，表示している間の負荷が増える．
+- 根拠: `tests/large.test.mjs` の「P8」（シークレットの長さ n，2n，4n での 1 秒の仕事の伸びの次数が 1.00）．ファズ対象 `popup` で，コードを表示したまま時間を進める入力の仕事を数えて確かめた（2026-10-14）．
+- 直し方: 表示を始めるときに 1 度だけデコードして鍵を作り，毎秒は署名（HMAC の計算）だけを行う．
+- 対応: popup と設定パネルの両方で，そのようにした（[fix/totp-key-once](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-key-once)．2026-10-14）．
+- テスト: `tests/large.test.mjs` の「P8」の 2 件（popup と設定パネル．todo）．
+
 ## 保守性
 
 - **M1**: TOTP の base32 デコードと HMAC の計算が，popup.js，assignments.js，auth-totp.js，auth-totp-register.js の 4 か所に重複している．background の 1 か所にまとめる（S1 の修正と同時に行う）．
 - **M2**: 緊急度・表示形式・提出判定が popup.js と assignments.js に，コース一覧の取得が textbooks.js と assignments.js に重複している．
-- **M3**: テストが無く，CI は PR 時の ESLint だけ．関数が IIFE に閉じていて，chrome API と DOM に依存するので，単体ではテストしにくい．
-- **M4**: `safari/KULMS+ Extension/Resources/` がコミットされた複製で，本体から遅れる．`087452e` では `src/assignments.js` と `src/submit-detect.js` が古いままだった．v1.21.1 では，上流が src に揃え（[`97a8746`](https://github.com/Radian0523/kulms-extension/commit/97a87462f3ab2950867ef53c2171713a77a7b3a8)），CONTRIBUTING.md に，`./build.sh safari` で生成される複製なので直接編集しない，と書いた．複製をコミットする形は変わらない．
-- **M5**: 動かないコードがある．[src/textbooks.js:7](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L7) は，設定を読み込む前に設定を確かめている．[popup.js:901-917](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L901-L917) の SVG 走査は，作った画像を使っていない．
+- **M3**: テストが無く，CI は PR 時の ESLint だけ．関数が IIFE に閉じており，chrome API と DOM に依存するため，単体ではテストしにくい．
+- **M4**: `safari/KULMS+ Extension/Resources/` がコミットされた複製で，本体から遅れる．`087452e` では `src/assignments.js` と `src/submit-detect.js` が古いままだった．v1.21.1 では，上流が src に揃え（[`97a8746`](https://github.com/Radian0523/kulms-extension/commit/97a87462f3ab2950867ef53c2171713a77a7b3a8)），CONTRIBUTING.md に，`./build.sh safari` で生成される複製であるため直接編集しないよう記した．複製をコミットする形は変わらない．
+- **M5**: 動かないコードがある．[src/textbooks.js:7](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L7) は，設定を読み込む前に設定を確かめている．[popup.js:901-917](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L901-L917) の SVG 走査は，作った画像を使っていない．[src/assignments.js:478-496](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L478-L496) の `getStatusBadgeClass()` と `getStatusLabel()` はどこからも呼ばれず，`isGraded()` はこの 2 つからのみ呼ばれる（2026-10-14．カバレッジで見つけ，呼び出しが無いことをコードで確かめた）．
 
 ## ドキュメント
 
@@ -510,7 +611,7 @@ specification: the GNU General Public License, version 3 or any later version
 
 - 何が起きるか:
   - `docs/privacy.html` は「暗号文は chrome.storage.local に，鍵は IndexedDB に置く」と書いているが，v1.21.0 からはどちらも同じ IndexedDB にある．
-  - 鍵が暗号文の隣にあるので，ディスクを読める攻撃者には平文とほぼ同じである．「AES-256-GCM で暗号化」という書き方は，実際より強く見える．
+  - 鍵が暗号文の隣にあるので，ディスクを読める攻撃者には平文とほぼ同じである．「AES-256-GCM で暗号化」という記述は，実際より強い保護であるかのように読める．
   - 扱うデータはすべて chrome.storage.local にあると書いているが，サイドバーのツール表示設定と幅は LMS のページの localStorage に，パネルの開閉や提出の目印，登録途中の TOTP シークレット（S3）は sessionStorage にある．2段階認証の設定ガイドとセキュリティのページも同じ書き方である．
 - 対応: 3 つのページの保存先の記述を実装に合わせ，鍵が同じ端末にあるので端末のデータを読める人からは守れないことを書いた（[fix/privacy-storage](https://github.com/yumasansansan/kulms-extension/tree/fix/privacy-storage)）．
 
@@ -527,7 +628,7 @@ specification: the GNU General Public License, version 3 or any later version
 
 ## JS のファジングとサニタイザ（2026-10-06 時点の調査）
 
-JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起きない．代わりに見るのは次の 4 つ．
+JS はメモリ安全であるため，ASan や MSan が検出する種類の不具合は生じない．代わりに見るのは次の 4 つ．
 
 - 落ちる: 未捕捉の例外，未処理の Promise 拒否
 - 固まる: ReDoS や無限ループ（時計ではなく，数えた仕事量の伸びで検出する．S2，S8，S9 がこれ）
@@ -536,7 +637,7 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
 
 | C++ | JS での相当物 | 状況 |
 |---|---|---|
-| libFuzzer | Jazzer.js：libFuzzer を内蔵したカバレッジ誘導型のファザー．Apache-2.0．Node のネイティブアドオンなので bun では動かない | v4.0.0（2026-04-15），2026-09 も更新あり |
+| libFuzzer | Jazzer.js：libFuzzer を内蔵したカバレッジ誘導型のファザー．Apache-2.0．Node のネイティブアドオンであるため bun では動作しない | v4.0.0（2026-04-15），2026-09 も更新あり |
 | 性質ベーステスト | fast-check：`fc.uint8Array()` などで入力を生成し，失敗例を最小化する | v4.10.2（2026-09-19） |
 | ASan / MSan | 不要 | — |
 | UBSan に近いもの | TypeScript の `checkJs`（JSDoc の型）による静的検査 | — |
@@ -547,33 +648,43 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
 ## fuzz リポジトリの仕組み
 
 - **このリポジトリ（kulms-extension-fuzz）の役割**: kulms-extension を submodule として持ち，上流のコードは変えずに，ハーネス側でテストとファジングを行う．
-- **ハーネス**（[harness/](../harness/)）: 偽の chrome API と jsdom を用意し，submodule のスクリプトを manifest と同じ順で読み込む．偽の API は，複数タブで共有するストレージ，メッセージとその記録，拡張自身のファイル（web_accessible_resources の制限つき）を備える．IIFE の中の関数は，読み込み時に AST 変換で外へ公開する（行番号は変えない）．読み込むコードは Jazzer.js の計装を通すので，vm や jsdom で動くコードからもカバレッジがファザーに届く．jsdom は，リンクの `href` や `host` を読むたびに URL を解析し直し（標準の「reinitialize url」のとおり），セレクタの照合も，上る要素ごとに `host` を読む．その解析器は JavaScript で，1 文字に 1〜3 マイクロ秒かかる（Node の URL の数百倍）．そのため，最上段の数百万字のリンクを持つ入力では，数えた仕事は線形のまま，1 つの入力が数十分かかることがあった．解析は文字列と文書のベース URL と文字コードで決まるので，ハーネスは直近の 8 つの結果を取っておき，その写しを渡す．数える仕事は標準の手順のままである．
-- **検出器**（[harness/detectors.mjs](../harness/detectors.mjs)）: 例外のほか，ページに入り込んだスクリプトを動かすマークアップ（DOM XSS），プロトタイプの汚染，誰も受けない Promise の拒否を失敗とする．
+- **ハーネス**（[harness/](../harness/)）: 偽の chrome API と jsdom を用意し（jsdom に無く Chrome にある ResizeObserver と Trusted Types の API も持たせる），submodule のスクリプトを manifest と同じ順で読み込む．偽の API は，複数タブで共有するストレージ，メッセージとその記録，拡張自身のファイル（web_accessible_resources の制限つき）を備える．タブは Chrome の文書のとおりに扱う．ウィンドウは 1 つで，前面のタブは 1 つであり，拡張に渡すタブの URL は，拡張がそのページを見てよいとき（ホスト権限があるか，activeTab が与えられたとき）に限る（拡張は "tabs" の権限を持たない）[[ChromeTabs]](#参考文献)．popup はアクションから開かれるので，開いたときに前面のタブへ activeTab を与える [[ChromeActiveTab]](#参考文献)．`tabs.query()` は，前面かどうか，ウィンドウ，URL のパターン（見てよいページに限る）で絞る（2026-10-14 に改めた．それまでは，すべてのタブを前面とし，条件を URL のパターンに限っていた）．IIFE の中の関数は，読み込み時に AST 変換で外へ公開する（行番号は変えない）．読み込むコードは Jazzer.js の計装を通すので，vm や jsdom で動くコードからもカバレッジがファザーに届く．jsdom は，リンクの `href` や `host` を読むたびに URL を解析し直し（HTML 標準の「reinitialize url」[[HTML]](#参考文献) のとおり），セレクタの照合も，上る要素ごとに `host` を読む．その解析器（URL 標準 [[URL]](#参考文献) の URL パーサーの実装）は JavaScript で書かれ，1 文字に 1〜3 マイクロ秒かかる（Node の URL の数百倍）．そのため，最上段の数百万字のリンクを持つ入力では，数えた仕事は線形のまま，1 つの入力が数十分かかることがあった．解析は文字列と文書のベース URL と文字コードで決まるので，ハーネスは直近の 8 つの結果を取っておき，その写しを渡す．数える仕事は標準の手順のままである．また，jsdom の HTML パーサー（parse5）は，下位サロゲートの後に続く下位サロゲートを対として結合し，U+10FFFF を超えるコード点で例外を投げる．HTML 標準の入力ストリームの前処理は，孤立したサロゲートをそれぞれ 1 つのコード点として扱う（解析エラー surrogate-in-input-stream）[[HTML]](#参考文献)．そのため，ハーネスは上位サロゲートに限り結合するよう parse5 を正す（2026-10-14．ファズ対象 `resources` が見つけた）．
+- **検出器**（[harness/detectors.mjs](../harness/detectors.mjs)）: 例外のほか，次のものを失敗とする．いずれも，入力の前と後のコンテキスト全体を比べ，拡張がしそうなことに範囲を絞らない（2026-10-13 に広げた）．
+  - マークアップ: 文書と，開いたシャドウツリーと，フレームの文書に，新しい要素でも前からある要素でも，スクリプトを動かすもの，外部から読み込むもの，ページを外部へ送るものが増えたら失敗とする．`<script>`（自分の文のもの，src が integrity のハッシュ（Subresource Integrity [[SRI]](#参考文献)）で確かめられないもの．ハッシュは sha256，sha384，sha512 のいずれかが実際の内容と一致するときに限り認め，内容を確かめられるのは拡張自身のファイルに限られる．nonce は認めない．拡張が付ける nonce は何も確かめないため），`<style>`（nonce があっても），確かめられないスタイルシートの `<link>`，マークアップや `setAttribute()` で付いた style 属性（CSSOM で付いたものは除く），`<object>`，`<embed>`，iframe の srcdoc，イベントハンドラの属性（コードが変わったものも），URL の属性が URL 標準 [[URL]](#参考文献) の URL パーサー（ブラウザと同じ）で `javascript:` か `vbscript:` に読めるもの（タブや改行を挟んでも同じ），フレームやスクリプトの `data:` と `blob:`，リンクをそれに変える SVG のアニメーション，`<base>`，`<meta http-equiv>`，スクリプトを読み込む `<link>`，拡張の host_permissions とページと拡張自身のいずれでもないオリジンから資源を読み込むマークアップ．
+  - 組み込みの書き換え: 全域オブジェクトが持つすべての関数とそのプロトタイプ，名前空間（Math，JSON，Reflect，Intl，Atomics，WebAssembly），名前の無い組み込み（イテレータ，ジェネレータ，非同期のプロトタイプ，%TypedArray%，%ThrowTypeError%），それらがたどるすべてのプロトタイプで，プロパティの増減と変化（値，getter，setter，属性），プロトタイプの付け替え，拡張不可にすること．全域オブジェクトの関数と名前空間の差し替えと削除．
+  - Trusted Types: ハーネスの窓は Chrome と同じ Trusted Types [[TT]](#参考文献) の API を持つ．拡張が受け口（innerHTML，outerHTML，insertAdjacentHTML，DOMParser，createContextualFragment，document.write，iframe の srcdoc，script の src と text，イベントハンドラの属性，文字列のタイマー）に文字列を渡した場合は，空の文字列であっても失敗とする．型を形だけにする方針も失敗とする．default の方針と，作られたときに試すと，スクリプトを動かすマークアップ，スクリプトを動かすか外部を指すスクリプトの URL，任意のスクリプトの文を通す方針．
+  - 誰も受けない例外と Promise の拒否．
+  - 拡張が握りつぶしたプログラムの誤り: 拡張のすべての catch 節と，拡張が Promise に渡す拒否の処理に，受けたものを渡す呼び出しを行を動かさずに差し込み（harness/source.mjs），Promise.all，allSettled，any，race が値として返したり捨てたりする拒否も見る．TypeError などの文言（`Cannot read properties`，`is not a function`，`Cannot destructure` など）のものを失敗とする．JSON の構文の誤り，URL でない文字列，壊れた %-エンコードのように，データを読むコードが受けるはずの誤りは除く．
+  - 通信: 拡張の host_permissions，そのコンテキストのオリジン，拡張自身のいずれでもない宛先への要求．
+  - 保証の無い応答: https で host_permissions のオリジンから来たものでも，拡張自身のものでもない応答の本文を，拡張が読むこと（2026-10-14 に加えた）．KULMS と KULASIS は応答に署名しないため，データを保証するのは TLS [[RFC8446]](#参考文献) のみであり，TLS が保証するのは送信元である．応答が拡張に届くかどうかは，ハーネスの fetch が，Fetch 標準のリダイレクトの扱い，redirect-taint，CORS の判定 [[Fetch]](#参考文献) と，Chrome の拡張の取得の扱い [[ChromeNetwork]](#参考文献) に従って決める．content script の http への要求は，混在コンテンツとして止める [[MixedContent]](#参考文献)．
 - **仕事量**（[harness/work.mjs](../harness/work.mjs)）: 遅さは時計で判定せず，拡張がした仕事を数えて判定する（2026-10-07 に作り直した）．
-  - 拡張のコードは，関数の呼び出し，ループの 1 周，値をたどる構文（コードに書かれていない文字列どうしの比較，実行時に作るキー，オブジェクトの展開，プロトタイプチェーンをたどる演算子）を数える．組み込み関数と Web API は，標準の手順の歩数で数える（[harness/costs.mjs](../harness/costs.mjs)，[harness/web-costs.mjs](../harness/web-costs.mjs)）．標準が上限だけを求めるものはその上限，エンジンに任せるものは Chrome のやり方で数える．DOM は標準の手順どおりに数えるので，Chrome が索引で速く済ませるもの（getElementById など）もツリーをたどる分を数え，数は Chrome にとっての上限になる．正規表現は，V8 と答えを突き合わせながら，バックトラックするエンジンの歩数で数える（[harness/backtrack.mjs](../harness/backtrack.mjs)）．そのエンジンは，戻る先の選択肢を，固定の大きさのブロック（Int32Array）の連なりに積む．貪欲なループは 1 単位ごとに 4 つの数を積み，配列は約 1.3 億要素までしか持てないので，最上段の長いリンクで足りなくなったためである．
+  - 拡張のコードは，関数の呼び出し，ループの 1 周，値をたどる構文（コードに書かれていない文字列どうしの比較，実行時に作るキー，オブジェクトの展開，プロトタイプチェーンをたどる演算子）を数える．組み込み関数と Web API は，標準（ECMAScript [[ECMA-262]](#参考文献)，DOM [[DOM]](#参考文献)，HTML [[HTML]](#参考文献)，URL [[URL]](#参考文献) など）の手順の歩数で数える（[harness/costs.mjs](../harness/costs.mjs)，[harness/web-costs.mjs](../harness/web-costs.mjs)）．標準が上限だけを求めるものはその上限，エンジンに任せるものは Chrome のやり方で数える．DOM は標準の手順どおりに数えるので，Chrome が索引で速く済ませるもの（getElementById など）もツリーをたどる分を数え，数は Chrome にとっての上限になる．正規表現は，V8 と答えを突き合わせながら，バックトラックするエンジンの歩数で数える（[harness/backtrack.mjs](../harness/backtrack.mjs)）．そのエンジンは，戻る先の選択肢を，固定の大きさのブロック（Int32Array）の連なりに積む．貪欲なループは 1 単位ごとに 4 つの数を積み，配列は約 1.3 億要素までしか持てないので，最上段の長いリンクで足りなくなったためである．
   - 規則の抜けは [tests/costs.test.mjs](../tests/costs.test.mjs) が防ぐ．ECMAScript の組み込み関数のすべて（1 つの realm に 645），拡張のコードが名前を挙げる Web API のメンバーのすべて，構文の形のすべて，拡張のコードが書く selector のすべてに規則があることを確かめる．拡張は eval も Function も使わない（使えば数えられないので，これも確かめる）．
   - 数えた仕事量で，テストは入力の大きさ n，2n，4n での伸びの次数を見る（[harness/work.mjs](../harness/work.mjs) の `degree()`．1.5 未満を線形とする）．ファジングは，入力を段に分けて同じ基準で見る（下）．
-  - 仕事量を数える手順そのもの（ハーネスの関数，jsdom の内部の呼び出し，前の入力の遅れて動くタイマー）は，入力の仕事に数えない．入力ごとに非同期の文脈（AsyncLocalStorage）を分け，その入力の文脈で動いた仕事だけを数える．拡張が前の入力のために覚えたり描いたりしたもの（課題パネルの科目の一覧と，描いた中身）は，対象が入力の初めに数えずに取り除く．background の TOTP の保存は，入力の初めに空にして，入力が言うシークレット（または無し）を拡張自身の `saveTotpSecret()` で置く．その仕事はどの入力にも数えない（harness/work.mjs の `aside()`）．前の入力が動かし始めたことは，次の段の前に終わらせ，そこで起きた未処理の拒否を次の段のものとしない．
+  - 仕事量を数える手順そのもの（ハーネスの関数，jsdom の内部の呼び出し，前の入力の遅れて動くタイマー）は，入力の仕事に数えない．入力ごとに非同期の文脈（AsyncLocalStorage）を分け，その入力の文脈で動いた仕事だけを数える．拡張が前の入力のために覚えたり描いたりしたもの（課題パネルの科目の一覧と，描いた内容）は，対象が入力の初めに数えずに取り除く．background の TOTP の保存は，入力の初めに空にして，入力が言うシークレット（または無し）を拡張自身の `saveTotpSecret()` で置く．その仕事はどの入力にも数えない（harness/work.mjs の `aside()`）．前の入力が動かし始めたことは，次の段の前に終わらせ，そこで起きた未処理の拒否を次の段のものとしない．
+  - ライブなコレクション（`getElementsByTagName()` などが返すもの）は，数える見方（Proxy）を通して拡張に渡し，添字の読みを数える．その forEach，values，keys，entries と反復子は，Web IDL [[WebIDL]](#参考文献) が Array.prototype のものとするため，どの realm のものも見方の上で動かす．2026-10-13 まで，ハーネスは realm を作るたびにこの包みを前の realm の包みに重ねており，2 つめ以降の realm では，それらを素のコレクションに束ねていた．そのため，同じプロセスで 2 つめ以降に開いたページでは，コレクションを走査する読み取りが数えられていなかった（100 個のリンクを走査する同じ操作が，1 つめのページで 10,811 歩，2 つめ以降で 313 歩）．包みの重なりは，開いたすべてのページを掴んでもいて，ページを入力ごとに開く対象（`resources`）のファジングは 12GB を使い，数えた呼び出しのたびにすべての包みを通って，1 つの入力に 2 秒かかるまで遅くなった．包みは realm を掴まない 1 つの関数にした．検出器が見る記録（例外，拡張が捕まえたもの，Trusted Types の受け口に渡された文字列）も，ほかの記録と同じく入力の初めに忘れる（`Browser.forget()`）．
+  - 入力の大きさによらない，入力のした操作の固定の仕事は，対象が，入力が空のときの仕事量と同じく測り，その入力の上限に加える（[harness/work.mjs](../harness/work.mjs) の `allow()`．2026-10-14 に加えた）．下の段から外挿した上限には加えない．下の段も同じだけ払うからである．popup の QR の生成（最短のシークレットで約 78 万歩）と，表示したコードの毎秒の更新（16 字のシークレットで 1 秒に 2,652 歩．ページの時計がタイマーを動かす前に払う）がこれに当たる．それより長いシークレットが加える分は入力のものとして数え，判定する．それまでは，QR を作るかコードを表示する小さな入力が，線形のコードの上限を超えていた．また，対象が利用者の操作のために要素を探す処理（`querySelectorAll()`，`getElementById()`）も拡張の仕事として数えていたので，数えないようにした．
   - 線形のコードがするはずの上限は，対象ごとに決まる．数える場所は，その対象のブラウザが読み込んだスクリプトのもので，入力が空のときの仕事量も，その対象のものである．同じプロセスでほかの対象が読み込んだスクリプト（テストは対象をまとめて動かす）は数えない．
 - **テスト**（[tests/](../tests/)）: 各問題の再現（todo），ハーネス自体のテスト，ファズ対象のシードと回帰入力と既知の失敗入力の再生．
-- **ファジング**（[fuzz/](../fuzz/)）: 外から入力が来る面ごとの 7 つの対象と canary．対象の一覧と運用は [fuzz/README.md](../fuzz/README.md) にある．
-  - 入力は手加減しない（2026-10-07 に見直した）．文字列は入力のビット列を 16 ビットずつ（すべての符号単位），8 ビットずつ（ASCII が出やすい），UTF-8 のいずれかで読む．数は任意の 64 ビットのパターンと境目の値，値は undefined，null，BigInt，任意の深さの入れ子などを含む．ネットワークは失敗，任意のステータスと Content-Type，途中で切れた本文も返す．JSON の文字列にできない数（NaN，Infinity）をどう書くかは，入力から読まずに，入力のバイト列から作る乱数（どの段でも同じ並び）で選ぶ．値のキーが段で繰り返す文字列だと，段によってキーが重なり，そうした数の個数が段で変わるからである．
-  - 大きさは段で作る．入力そのもの（libFuzzer に作らせるバイト列）と，その下の段で作る値は 4,096 単位まで．入力は最初に段数を選び，段を上がるたびに，入力が繰り返す片を 2 倍の回数繰り返す．最上段で作る値は，Chrome の runtime メッセージ 1 通が運べる量（JSON の UTF-8 で 64MiB．1 単位は 6 バイト以内なので 11,184,810 単位）まで．
-  - 段から段へ，仕事の増えが前の段の増えの 2^1.5 倍（n log n の仕事が増える量）を超えたら，速い伸びとみる．伸びを読むのは，コードが段の足した分をたどった（1 単位に 1 歩以上を使った）ときだけで，繰り返す部分が入力の残り以上の長さになった段から．それまでは，繰り返す部分と残りとの掛け合わせ（繰り返す文字列の中で残りの文字列を探すなど）が，段ごとに伸びの割合を変える．一度だけの速い伸びは，繰り返しが初めて行を閉じたときなどの段差なので，速い伸びがあった段の上の段にだけ，下の段の仕事量から外挿した上限を走らせる前に与え，超えたら止めて失敗とする．線形でない入力は，速い伸びが 2 段続いた所で止まり，何時間も走らない．ほかの段は，線形のコードがするはずの上限（対象のブラウザが読み込んだコードの，数える場所の数 × (U+1) × ⌈log₂(U+2)⌉ ＋ その対象の，入力が空のときの仕事量）で判定する．
+  - 拡張の非同期の処理は，固定の時間ではなく，ハーネスが拡張に代わって行う処理（chrome API の応答とイベント，メッセージ，fetch，IndexedDB，Web Crypto）がすべて終わるまで待つ（[harness/work.mjs](../harness/work.mjs) の `idle()`）．ページのタイマーにかかわる処理は，ページに自分の時計を持たせて進める（[harness/clock.mjs](../harness/clock.mjs)）．2026-10-14 まで，いくつかのテストは固定の時間（20〜800 ms）を待っていた．カバレッジの計測で機械の負荷が高まると，B12 の todo のテストでは，最初の値に対する拡張の拒否が待ち時間の後に届いたため，テストは最初の値を問題なしとして次の値へ進んだ．最初の値の拒否が届いた時点でテストは失敗として終わり，次の値に対する拒否はテストの終了後に届いた．Node のテストランナーは，これをトップレベルの診断として報告し [[NodeTest]](#参考文献)，失敗の数を 0 としたまま終了コードを 1 とした．すべての固定の待ちを置き換えた後は，16 個の CPU をすべて塞いだ状態でカバレッジを測りながら実行しても，失敗はなく，テストの終了後に届く処理も生じない．
+- **ファジング**（[fuzz/](../fuzz/)）: 外から入力が来る面ごとの 13 の対象と canary．`sidebar`（2026-10-13 に加えた）は，ページの DOM と localStorage と時刻と利用者の操作を入力にする最初の対象で，ページに自分の時計を持たせ（[harness/clock.mjs](../harness/clock.mjs)．タイマーは HTML 標準のタイマーの初期化手順 [[HTML]](#参考文献) に従って設定する），入力の操作の後に時計を 10 分進めて，スクリプトが仕掛けたタイマーをすべてその入力の中で動かす．それでも尽きないタイムアウトは，終わらない処理として失敗とする．`grading-bridge`（2026-10-14 に加えた）は，TA 採点支援がページの世界に入れる橋渡し（grading-ta-page.js）を，ページの採点の要素とその値（ページのスクリプトが作れるものすべて）と，届く求めで動かす．`totp-register`（2026-10-14 に加えた）は，認証サーバーの TOTP 登録のページで動く登録補助を，ページの URL，本文，リンク，画像，コードの入力欄，jsQR の読み取り結果，ページの sessionStorage で動かす（jsQR は拡張が同梱する外部のライブラリであるため，入力の言う結果で置き換える）．jsdom は innerText を持たないため，ハーネスは HTML 標準が CSS を扱わないユーザーエージェントについて定めるとおり，子孫のテキスト内容として与える [[HTML]](#参考文献)．`popup`（2026-10-14 に加えた）は，popup を，chrome.storage.local の値（拡張の書く形，または JSON の任意の値），background の TOTP シークレット，ページの QR の読み取りの結果，ウィンドウのタブ（LMS，認証サーバー，その他のページのタブと，それぞれの content script が popup の更新の求めに返す答え，前面のタブ），利用者の操作で動かす．タブのページは作らず，その content script は入力の言う答えで置き換える（content script は，それぞれを入口にする対象がファジングする）．対象の一覧と運用は [fuzz/README.md](../fuzz/README.md) にある．
+  - 入力は手加減しない（2026-10-07 に見直した）．文字列は入力のビット列を 16 ビットずつ（すべての符号単位），8 ビットずつ（ASCII が出やすい），UTF-8 のいずれかで読む．数は任意の 64 ビットのパターンと境目の値，値は undefined，null，BigInt，任意の深さの入れ子などを含む．ネットワークは失敗，任意のステータスと Content-Type，途中で切れた本文と，リダイレクトで別のオリジンや http から来た応答（相手が CORS で許すかどうかも）も返す．JSON の文字列にできない数（NaN，Infinity）をどう書くかは，入力から読まずに，入力のバイト列から作る乱数（どの段でも同じ並び）で選ぶ．値のキーが段で繰り返す文字列だと，段によってキーが重なり，そうした数の個数が段で変わるからである．
+  - 大きさは段で作る．入力そのもの（libFuzzer [[libFuzzer]](#参考文献) に作らせるバイト列）と，その下の段で作る値は 4,096 単位まで．入力は最初に段数を選び，段を上がるたびに，入力が繰り返す片を 2 倍の回数繰り返す．最上段で作る値は，Chrome の runtime メッセージ 1 通が運べる量（JSON の UTF-8 で 64MiB．1 単位は 6 バイト以内であるため 11,184,810 単位）まで．
+  - 段から段へ，仕事の増えが前の段の増えの 2^1.5 倍（n log n の仕事が増える量）を超えたら，速い伸びとみなす．伸びを読むのは，コードが段の足した分をたどった（1 単位に 1 歩以上を使った）ときだけで，繰り返す部分が入力の残り以上の長さになった段から．それまでは，繰り返す部分と残りとの掛け合わせ（繰り返す文字列の中で残りの文字列を探すなど）が，段ごとに伸びの割合を変える．一度だけの速い伸びは，繰り返しが初めて行を閉じたときなどに生じる段差であるため，速い伸びがあった段の上の段にだけ，下の段の仕事量から外挿した上限を走らせる前に与え，超えたら止めて失敗とする．線形でない入力は，速い伸びが 2 段続いた所で止まり，何時間も走らない．ほかの段は，線形のコードがするはずの上限（対象のブラウザが読み込んだコードの，数える場所の数 × (U+1) × ⌈log₂(U+2)⌉ ＋ その対象の，入力が空のときの仕事量）で判定する．
   - 時間は，数え方を確かめるために見る．2 段離れた段どうしで，時間の伸びの次数が仕事量の伸びの次数を 0.5 より多く上回ったら，数えていない仕事があるとして失敗とする（下の「時計の揺れ」）．CI では見ない．
   - 時計で止めるのは，何も数えない所で終わらないものだけ．CI はジョブの終わるべき時刻を `ci/fuzz.sh --until` に渡し，各対象は残りの時間を残りの対象で等しく分けたものを使う．
   - 拡張が自分で捕まえて警告だけ出すエラーのうち，プログラムの誤りを示すもの（TypeError などの文言）も失敗とする．B19 と B20 はこれで見つかった．
   - シードと既知の問題の入力は，`fuzz/inputs.mjs` が，対象の読む値の並びから書く（`fuzz/encode.mjs` が FuzzedDataProvider の逆をたどる）．入力の読み方を変えたときに，これらが黙って別の入力になるのを防ぐためで，テストは，既知の入力がその問題だけを起こすことも確かめる．
   - 修正ブランチは，`KULMS_EXTENSION_DIR` でその拡張を指し，`KULMS_FUZZ_LOOK_FOR` で直した問題を避けずに探して，ファジングで確かめる（下の「ファジングで避けている既知の問題」）．
 - **カバレッジ**（[harness/coverage.mjs](../harness/coverage.mjs)，[ci/coverage.sh](../ci/coverage.sh)）: テストとファズのコーパスが，拡張自身のコードのどこまで届くかを測る．拡張自身のコードは，manifest.json と popup のページが読み込むスクリプトの 17 本で，同梱のライブラリ（vendor/）は除く．
-  - 計装は足さず，V8 が数える（`NODE_V8_COVERAGE`）．vm で動く background も，jsdom の窓で動く content script と popup も数えられる．
+  - 計装は足さず，V8 が数える（`NODE_V8_COVERAGE` [[NodeCoverage]](#参考文献)）．vm で動く background も，jsdom の窓で動く content script と popup も数えられる．
   - ハーネスが書き換えたコードで数えた範囲は，拡張のコードの元の位置に戻す（harness/source.mjs の `sourcePlaces()`）．ハーネスが足した部分（仕事を数える呼び出しと，内部を公開する getter と setter）は，範囲が空になって落ちる．
-  - プロセスごとの数をスクリプトごとにまとめ，ast-v8-to-istanbul で拡張のコードの構文木に当てて，istanbul-lib-instrument と同じ単位（文，分岐，関数）で数える．1 度も動かなかったスクリプトは，どこにも届いていないものとして入れる．
+  - プロセスごとの数をスクリプトごとにまとめ，ast-v8-to-istanbul で拡張のコードの構文木に当てて，istanbul [[istanbul]](#参考文献) と同じ単位（文，分岐，関数）で数える．1 度も動かなかったスクリプトは，どこにも届いていないものとして入れる．
   - 数字は判定に使わない．次のテストやファズ対象をどこに向けるかを読むためのもので，結果は，スクリプトごとの表と，届いていない関数の一覧と，1 行ずつ示すページ（istanbul の HTML）にする．V8 は，入ったブロックを最後まで動いたと数えるので，途中で例外を投げた呼び出しの後ろも届いたことになる．
   - [tests/coverage.test.mjs](../tests/coverage.test.mjs) が，すべてのスクリプトで位置の戻し方を確かめ，別のプロセスで実際に数えた回数が，background と窓のどちらでも拡張の関数と文に出ることを確かめる．
 - **CI**（[yumasansansan/ADLplug-Next](https://github.com/yumasansansan/ADLplug-Next) にならう）:
   - 素の git でチェックアウトし，submodule も含める．Node と pnpm は，どちらも最新版を（pnpm は npm のレジストリが `latest` とする版を），`ci/setup.sh` が SHA-256 を確かめて入れる．外部の action は，commit で固定した `actions/upload-artifact` だけ．
-  - `ci.yml`（push ごと）: Ubuntu と Windows でのテスト，lint（このリポジトリには ESLint のすべての指摘で失敗し，submodule の拡張には DOM XSS と ReDoS のルールを掛けて報告だけする），REUSE，canary と各対象 1 分のファジング，カバレッジの計測．落ちた入力は artifact に残す．カバレッジの計測は，テストと，次の毎日のファジングが引き継ぐコーパス（[ci/carry-over.sh](../ci/carry-over.sh)）を流し，1 行ずつ示すページを artifact に残す．数字では失敗にしないが，コーパスの入力がそのコミットで落ちれば失敗にする（次の毎日のファジングより先に分かる）．
+  - `ci.yml`（push ごと）: Ubuntu と Windows でのテスト，lint（このリポジトリには ESLint のすべての指摘で失敗し，submodule の拡張には DOM XSS と ReDoS のルールを掛けて報告だけする），REUSE，canary と各対象 1 分のファジング，カバレッジの計測．落ちた入力は artifact に残す．カバレッジの計測は，テストと，次の毎日のファジングが引き継ぐコーパス（[ci/carry-over.sh](../ci/carry-over.sh)）を流し，1 行ずつ示すページを artifact に残す．数字では失敗にしないが，コーパスの入力がそのコミットで落ちれば失敗にする（次の毎日のファジングより先に判明する）．
   - `fuzz.yml`（毎日）: 各対象 20 分のファジング．コーパスを artifact で引き継ぎ，前回落ちた入力を最初に再生する．
   - どちらのジョブも，始めに，ファジングが終わるべき時刻（GitHub がジョブを止める 6 時間から，残したものを保存する 30 分を引いた時刻．`fuzz.yml` はジョブ自身の上限 330 分の 5 分前）を記録して `ci/fuzz.sh --until` に渡す．
 
@@ -590,13 +701,13 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
 
 - `NOISE` は，捕まえるべき最小の信号（数えていない 2 乗の仕事で 1）の半分の 0.5 とした．
 - `TIME_FLOOR` は，測った揺れの最大が `NOISE` の半分（0.25）以下に収まる，最小の時間の増えとした．0.1 秒では 0.32 まで揺れるので，0.3 秒である．そこでの揺れの最大は 0.10 で，`NOISE` はその 5 倍ある．
-- 隣の段どうしで比べると，揺れがずっと大きい．ある段の時間が少し長く（短く）出ると，その段の下と上の増えが逆向きに変わるためである．電源につながず，ふだんと違う電源プランで似た入力を流したときは，隣の段どうしでは 0.3 秒以上の増えでも 1.22 まで揺れ，2 段離すと 0.14（Jazzer の下で 0.19）だった．数えていない仕事の信号は，離しても変わらない．そこで 2 段離して比べる（`TIME_SPAN` = 2）．
+- 隣の段どうしで比べると，揺れがはるかに大きい．ある段の時間が少し長く（短く）出ると，その段の下と上の増えが逆向きに変わるためである．電源につながず，通常と異なる電源プランで似た入力を流したときは，隣の段どうしでは 0.3 秒以上の増えでも 1.22 まで揺れ，2 段離すと 0.14（Jazzer の下で 0.19）だった．数えていない仕事の信号は，離しても変わらない．そこで 2 段離して比べる（`TIME_SPAN` = 2）．
 - 揺れの違う機械では，環境変数 `KULMS_FUZZ_NOISE` で `NOISE` を変えられる．
 - CI の機械は，ほかのジョブと分け合うので静かにできず，揺れも測っていない．そのため CI では時間を確かめない（`KULMS_FUZZ_NOISE=Infinity`）．続く修正の後の CI では，`assignments` の ×65536 から ×262144 までの 2 段で，仕事量は 4.0 倍なのに時間が 8.45 倍（12.6 秒から 106.5 秒）になり，0.54 上回った．手元では，同じ入力が Node だけでも Jazzer の下でも 4.4 倍ほどで，GC はその段の時間の 13% だった．
 
 ## ファジングで避けている既知の問題
 
-ファザーは最初の失敗で止まる．そのため，まだ直っていない問題を起こす入力は，ファズ対象の側で避けている（`fuzz/open-findings.mjs`）．避けている場所にはどれも `Known:` で始まるコメントがあり，[fuzz/README.md](../fuzz/README.md) にも同じ表がある．直った問題は `open-findings.mjs` から外し，対象はまたそれを探す．
+ファザーは最初の失敗で止まる．そのため，まだ直っていない問題を起こす入力は，ファズ対象の側で避けている（`fuzz/open-findings.mjs`）．避けている場所にはいずれも `Known:` で始まるコメントがあり，[fuzz/README.md](../fuzz/README.md) にも同じ表がある．直った問題は `open-findings.mjs` から外し，対象はまたそれを探す．
 
 | ID | 対象 | 避けているもの |
 |---|---|---|
@@ -610,13 +721,29 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
 | B16 | `grading-status` | `%` の並びが壊れたリンクを読ませない |
 | B17 | `assignments` | 保存されたメモが配列でなければ無いものとし，一覧から null を除く（メモは拡張自身の読み込み関数で読む） |
 | B18 | `grading-status` | `toString` か `valueOf` を自分に持つオブジェクトを含む応答を読ませない．提出の項目の型を確かめない |
-| B19 | `assignments` | 科目の一覧と科目ごとの取得が捕まえたプログラムの誤りを数えない |
-| B20 | `site-contact`，`background-message` | `fetchSakaiSiteContact()` が捕まえたプログラムの誤りを数えない |
+| B19 | `assignments` | 科目の一覧と科目ごとの取得が捕まえたプログラムの誤り（警告に書いたものも，catch が受けたものも）を数えない．課題，クイズ，サイトの名前が自分の `toString` を持つオブジェクトなら，その名前を除く |
+| B20 | `site-contact`，`background-message` | `fetchSakaiSiteContact()` が捕まえたプログラムの誤り（警告に書いたものも，catch が受けたものも）を数えない |
 | B21 | `i18n` | 値を 1 つだけ，空文字列で渡したときは，値が無いものとして確かめる |
-| B22 | `background-message` | UTF-8 で 32 KiB を超えるシークレットを，メッセージでも，入力の初めの TOTP の保存の中身としても保存しない（その入力は流さない） |
-| P6 | `background-message` | Shift_JIS の表を最初の入力の前に作っておき，どの入力にも数えない（探すときは，入力ごとに表を消し，Service Worker が起きたばかりの状態から始める） |
+| B22 | `background-message` | UTF-8 で 32 KiB を超えるシークレットを，メッセージでも，入力の初めの TOTP の保存内容としても保存しない（その入力は流さない） |
+| S10 | すべての対象 | 拡張が自分のファイルを，integrity のハッシュで確かめられない `<script>` で入れることと，`<style>` を入れることを数えない（その要素が運ぶものは，ほかの検出器が見る） |
+| S11 | すべての対象 | 拡張が Trusted Types の受け口に文字列を渡すことを数えない（渡したもので起きることは，ほかの検出器が見る） |
+| S12 | すべての対象 | リダイレクトで，https でホスト権限のオリジンでない所から来た応答の本文を，拡張が読むことを数えない（読んだもので拡張がすることは，ほかの検出器が見る） |
+| B4 | `sidebar` | tool-visibility.js が DOM の変化から 200 ms 後に設定する再処理を，設定させない（設定済みのタイマーとみなされる値を入れる）．再処理は，ページを組んだ後と各操作の後に，対象が自分で呼ぶ |
+| B12 | `sidebar` | ページの localStorage のツールの設定が，オブジェクトでない値か，オブジェクトでない項目や `hasOwnProperty` というキーを持つ項目を含むなら，置かない（途中で書くときも） |
+| B23 | `sidebar`，`submission`，`totp-register` | 拡張のコードが投げた QuotaExceededError を数えない（これらの対象で Web Storage に書くのは tool-visibility.js，sidebar-resize.js，submit-detect.js，auth-totp-register.js のみ） |
+| S6 | `totp-register` | 鍵にできないほど短いシークレットによる `DataError: Zero-length key is not supported` の未処理の拒否を数えない |
+| S6 | `popup` | base32 でない文字を含むシークレットを保存したまま「QR」を押す入力は，流さない |
+| B12 | `submission` | ページの sessionStorage の提出の ID が，JSON で配列でない値なら，置かない（途中で書くときも） |
+| P6 | `background-message` | Shift_JIS の表を最初の入力の前に作っておき，どの入力にも数えない（探すときは，入力ごとに表を消し，Service Worker が起動した直後の状態から始める） |
+| B25 | `popup` | 保存された課題のキャッシュのうち，一覧が配列でないもの，オブジェクトでない項目を持つもの，文字列でない状態を持つ項目を含むものは，置かない（途中で書くときも） |
+| B17 | `popup` | 保存されたメモが，配列でない値か，null を含む一覧なら，置かない（途中で書くときも） |
+| B22 | `popup` | 保存するシークレットと，入力欄に打つシークレットのいずれかが UTF-8 で 32 KiB を超える入力は，流さない |
+| B24 | `grading-bridge` | 橋渡しが答えずに，ページのオブジェクトが投げたものか，取り消された Proxy，BigInt，循環，プリミティブに変換できない値でエンジンが投げる例外だけを投げた求めは，問わない（その例外も数えない）．答えた提出の ID，名前，日時は，渡されたまま受ける |
+| P7 | `grading-bridge` | 持っている要素より大きい `length` を言う配列もどきは，ページに置かない |
+| P8 | `popup` | 表示しているコードの 1 秒の更新には，固定の仕事（16 字のシークレットで測ったもの）に加えて，表示しているシークレットが 16 字を超える分の仕事（1 字あたりの量を対象が測ったもの）を，入力の上限に加える |
+| P2 | `resources` | 利用者が何も操作しないうちに，拡張が以前に要求したのと同じフォルダの操作を再び要求した場合，サーバーは 404 で答える |
 
-S2，S8，S9 の正規表現は，以前は入力を切って避けていた（サイト情報のページを 512 バイト，KULASIS のページを 16,384 バイトで）．今は入力を切らず，正規表現だけを線形のエンジンに移す．線形のエンジンは同じ一致を入力長に比例する時間で見つけるので，ほかの部分の遅さは，そのまま数えて判定できる．
+S2，S8，S9 の正規表現は，以前は入力を切って避けていた（サイト情報のページを 512 バイト，KULASIS のページを 16,384 バイトで）．現在は入力を切らず，正規表現のみを線形のエンジンに移す．線形のエンジンは同じ一致を入力長に比例する時間で見つけるので，ほかの部分の遅さは，そのまま数えて判定できる．
 
 このほか，次の境界は意図して残している（[fuzz/README.md](../fuzz/README.md) の「入力の作り方」）．
 
@@ -637,60 +764,86 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 | fix/syllabus-parse | `syllabus-detail` | S8 | 60 秒で失敗なし |
 | fix/sakai-answer-shape | `assignments` | B19 | 120 秒で失敗なし（その前に，jsdom の URL の解析の遅さで時間切れになる入力が出たので，サイドバーの href の長さに上限を設けた） |
 | fix/site-contact-pages | `site-contact`，`background-message` | B20 | 各 120 秒で失敗なし |
-| 13 本すべてを当てたもの | 7 対象すべて | S2，S7，S8，B10，B15〜B18，B21 | `assignments` が，科目の一覧でも B19 と同じ誤りが起きるのを見つけた（B19 に加えた）．避ける範囲を広げた後は，`assignments` を 120 秒，ほかの 6 対象を各 60 秒回して失敗なし．入力の件数などの上限を外した後も，7 対象を各 60 秒回して失敗なし |
-| 24 本すべてを当てたもの（2026-10-08） | 7 対象すべて | S2，S6，S7，S8，S9，B10，B15〜B21 | 各 60 秒，続けて各 300 秒で失敗なし．当てると，S1 の前半と S9 が `src/auth-totp.js` で衝突したので，S9 のブランチはそこに触れないようにした（そのデコードは S1 の前半が取り除く）．その後は，24 本の 2 本ずつのどの組も，24 本を続けて取り込む 40 通りの順も衝突せず，どの順でも同じ結果になる（`git merge-tree` で確かめた）．S1 の前半が background に移したデコードに S9 の正規表現が残っていたのと，B1 の修正が読む `isLoading` を B9 の修正が消していたのも，それぞれのブランチで直した．テストは失敗 0 で，todo 62 件のうち 58 件が通る（残りは，判断の要る B14，S1 の後半，コミットを `git archive` してビルドする B5 と B6）．2026-10-12 に，B17 の続く修正も当てて流すと，失敗 0 で，todo 66 件のうち 61 件が通る（残りは同じ 4 件と，直していない P6）．2026-10-13 に B22 の修正（25 本目）も当てると，失敗 0 で，todo 68 件のうち 63 件が通る．同じ日に，上流の v1.21.1 に残る 22 本（取り込まれた 2 本と，上流が同じ修正を入れた fix/build-contents を除く）を当てると，40 通りの順のどれでも衝突せずに同じツリーになり，失敗 0 で，todo 61 件のうち 58 件が通る（残りは B14，S1 の後半，P6） |
+| 13 本すべてを当てたもの | 7 対象すべて | S2，S7，S8，B10，B15〜B18，B21 | `assignments` が，科目の一覧でも B19 と同じ誤りが起きるのを見つけた（B19 に加えた）．避ける範囲を広げた後は，`assignments` を 120 秒，ほかの 6 対象を各 60 秒実行して失敗なし．入力の件数などの上限を外した後も，7 対象を各 60 秒実行して失敗なし |
+| 24 本すべてを当てたもの（2026-10-08） | 7 対象すべて | S2，S6，S7，S8，S9，B10，B15〜B21 | 各 60 秒，続けて各 300 秒で失敗なし．当てると，S1 の前半と S9 が `src/auth-totp.js` で衝突したので，S9 のブランチはそこに触れないようにした（そのデコードは S1 の前半が取り除く）．その後は，24 本の 2 本ずつのどの組も，24 本を続けて取り込む 40 通りの順も衝突せず，どの順でも同じ結果になる（`git merge-tree` で確かめた）．S1 の前半が background に移したデコードに S9 の正規表現が残っていたのと，B1 の修正が読む `isLoading` を B9 の修正が消していたのも，それぞれのブランチで直した．テストは失敗 0 で，todo 62 件のうち 58 件が通る（残りは，判断を要する B14，S1 の後半，コミットを `git archive` してビルドする B5 と B6）．2026-10-12 に，B17 の続く修正も当てて流すと，失敗 0 で，todo 66 件のうち 61 件が通る（残りは同じ 4 件と，直していない P6）．2026-10-13 に B22 の修正（25 本目）も当てると，失敗 0 で，todo 68 件のうち 63 件が通る．同じ日に，上流の v1.21.1 に残る 22 本（取り込まれた 2 本と，上流が同じ修正を入れた fix/build-contents を除く）を当てると，40 通りの順のいずれでも衝突せずに同じツリーになり，失敗 0 で，todo 61 件のうち 58 件が通る（残りは B14，S1 の後半，P6） |
+| fix/grading-bridge-values（2026-10-14） | `grading-bridge` | B24，P7 | 既知の入力 3 件とコーパス 144 入力が通り，120 秒（8,899 回）で失敗なし |
+| fix/storage-full（2026-10-14） | `sidebar`，`submission`，`totp-register` | B23 | 既知の入力 3 件が通り，各 60 秒で失敗なし．課題パネルの B23 のテストも通る |
+| fix/expand-folders-once（2026-10-14） | `resources` | P2 | 既知の入力と，P2 を見つけた入力を含む 90 入力が通り，90 秒（556 回）で失敗なし |
+| fix/cache-shape（2026-10-14） | `popup` | B25 | 既知の入力を含む 157 入力が通り，90 秒（1,238 回）で失敗なし．B25 のテスト 2 件も通る |
+| fix/redirect-origin（2026-10-14） | `site-contact` ほか取得を行う 5 対象 | S12 | 既知の入力を含む 71 入力が通り，5 対象を各 60 秒実行して失敗なし |
+| fix/web-storage-values の続く修正（2026-10-14） | `submission`，`sidebar` | B12 | 既知の入力（提出の ID が配列でない）とシードが通る |
+| fix/totp-key-once（2026-10-14） | `popup` | P8 | 150 秒（1,687 入力）で失敗なし．`tests/large.test.mjs` の P8 の 2 件が通り，テスト全体も失敗 0．ほかの修正ブランチと衝突なく合わさる（上流が v1.21.1 で自ら直した B5 と B6 の fix/build-contents は，v1.21.1 を基にしたどのブランチとも build.sh で衝突するため除く） |
+| fix/validate-totp-secret の続く修正（2026-10-14） | `totp-register` | S6 | 既知の入力とシードを含む 55 入力が通る．同日に加えた更新時の移行の修正は，`tests/totp.test.mjs` の S6 のテスト（更新時の移行）が通り，ほかの 29 本と衝突なく合わさる（`git merge-tree`） |
+| 27 本すべて（2026-10-14） | — | — | 上の 5 本と 2 本の続く修正を含む修正ブランチ 27 本の 351 組は，どれも衝突なく合わさる（`git merge-tree`）．v1.21.1 を基にした 5 本では，テストは失敗 0 で，それぞれの問題の todo が通る |
 
 段で判定するようにした後のファジング（2026-10-07）:
 
-- 段の最初の規則（一度でも n log n より速く伸びた段の上で止める）では，5 つの対象が止まった．どれも，ごく小さな仕事の増えの後の段差（繰り返しが行を閉じたとき，数の偶奇で道筋が変わったとき）だった．伸びを読むのは，コードが段の足した分をたどったときだけにし，速い伸びが 2 段続いたときに止めるようにした後は，7 対象を各 60 秒回して失敗はなかった（時間の確かめも入れて，電源につないだ状態で）．
-- 直した問題を避けずに探すと，main では S8 が検索結果で 1 秒以内に，シラバスで 3 秒で見つかり，S2 が 4 秒で見つかった．どれも，仕事の増えが段ごとに 3.6〜3.9 倍になり，2 段続けて 2^1.5 倍を超えた．直したブランチ（fix/syllabus-parse の続く修正，fix/backtracking-regexes，fix/site-contact-regex）では，それぞれの対象を各 60 秒回して失敗はなかった．
+- 段の最初の規則（一度でも n log n より速く伸びた段の上で止める）では，5 つの対象が止まった．いずれも，ごく小さな仕事の増えの後の段差（繰り返しが行を閉じたとき，数の偶奇で道筋が変わったとき）だった．伸びを読むのは，コードが段の足した分をたどったときだけにし，速い伸びが 2 段続いたときに止めるようにした後は，7 対象を各 60 秒実行して失敗はなかった（時間の確かめも入れて，電源につないだ状態で）．
+- 直した問題を避けずに探すと，main では S8 が検索結果で 1 秒以内に，シラバスで 3 秒で見つかり，S2 が 4 秒で見つかった．いずれも，仕事の増えが段ごとに 3.6〜3.9 倍になり，2 段続けて 2^1.5 倍を超えた．直したブランチ（fix/syllabus-parse の続く修正，fix/backtracking-regexes，fix/site-contact-regex）では，それぞれの対象を各 60 秒実行して失敗はなかった．
 - S9 は，main でも 60 秒では見つからなかった．曜日と時限，フォルダの深さ，TOTP のシークレットを読む部分には，どのファズ対象も届かないためで，そこは [tests/runs.test.mjs](../tests/runs.test.mjs) が次数で確かめる．
-- その後の CI では，`site-contact` と `background-message` が止まったが，どちらもファジングの側の誤りだった．応答の本文を途中で切る位置を，本文の長さまでの位置として読んでいたので，段で本文が長くなると，位置を書くバイト数が変わり，その後の読み方がずれて，段どうしが別の入力になっていた．`background-message` は「答えが返らない」として止まった．上限を超えた後は数える一歩がどれも例外を投げるので，ハーネスが答えを送り手の realm に写すところで答えが失われていた．これは，同じ background で前の入力が Shift_JIS の表（最初の検索で約 16 万歩）を作り終えていたときだけ起きる．表を作る最初の段では，次の段で仕事が減るので伸びを読まないからである．切る位置は本文に対する割合として読み，どの段も provider に同じ問いをすることを，ファジングの最中とテストで確かめるようにした．答えは写しが例外を投げても届け，失敗の文言は，上限を超えたことを先に述べる．
-- 直した後のファジングでは，この突き合わせが，`i18n` の対象の読み方のずれを見つけた（B15 を避ける判定を入力を読み終える前にしていたので，繰り返したキーの段では続きを読んでいた）．また `grading-status` が，拡張が要求の ID に使う乱数の長さが段ごとに違うことで止まった（同じ入力を 1 つのプロセスで 300 回流すと 1 回）．判定は入力を読み終えてからにし，拡張の `Math.random` は，入力のバイト列から作るシードで始まる乱数に替えて，同じ入力のどの段にも同じ並びを返すようにした．続いて `i18n` が，B10 の値が置換の記法として読まれることで，結果と仕事が値の長さの 3 乗まで伸びるのを見つけた（B10 に加え，避ける範囲を `t()` を呼ぶことまで広げた）．その後は，7 対象を各 60 秒回して失敗はなかった．
-- それを直した後の CI では，`syllabus-search` が，探す科目名を繰り返した入力で止まった．科目名の中で検索結果の行の名前を探す処理は，科目名が行の名前より短いうちは試す場所が無く，追い越すと 1 単位ごとに行の名前の長さだけ増える．長さの違う行が 2 つあったので，その追い越しが 2 段にまたがり，速い伸びが 2 段続いて見えた（×16 から先は線形）．伸びは，繰り返す部分が入力の残り以上の長さになった段から読むようにした．また `assignments` が，大きな段で時間の伸びが仕事量の伸びを 0.54 上回って止まった．手元では起きないので，CI では時間を確かめないことにした（「時計の揺れ」）．その後は，CI と同じ設定で 7 対象を各 300 秒回して失敗はなく，canary も 4 秒で見つかった．
-- 2026-10-08 の毎日のファジングは，この修正の前のコードで走り，`assignments` が CI の時間の確かめで止まった（ほかの 6 対象は各 20 分で失敗なし）．そのコーパスを今のコードで順に流すと，2 バイトの入力が，線形のコードの上限を超えた．前の入力が課題パネルに描いたカードのリンクを，科目を探す処理（`extractCoursesFromDOM()`）が読み，その仕事がこの入力に数えられていた．カードのリンクは，課題ツールの URL が引けないと科目のページを指すので，科目へのリンクとして読まれる．課題パネルの対象は，入力の初めにパネルの中身を数えずに取り除くようにした（[tests/fuzz-history.test.mjs](../tests/fuzz-history.test.mjs)）．その後は，引き継ぐコーパスと，止まった入力と遅かった入力がすべて通る．
+- その後の CI では，`site-contact` と `background-message` が止まったが，どちらもファジングの側の誤りだった．応答の本文を途中で切る位置を，本文の長さまでの位置として読んでいたので，段で本文が長くなると，位置を書くバイト数が変わり，その後の読み方がずれて，段どうしが別の入力になっていた．`background-message` は「答えが返らない」として止まった．上限を超えた後は数える一歩がいずれも例外を投げるので，ハーネスが答えを送り手の realm に写す箇所で答えが失われていた．これは，同じ background で前の入力が Shift_JIS の表（最初の検索で約 16 万歩）を作り終えていたときだけ起きる．表を作る最初の段では，次の段で仕事が減るので伸びを読まないからである．切る位置は本文に対する割合として読み，どの段も provider に同じ問いをすることを，ファジングの最中とテストで確かめるようにした．答えは写しが例外を投げても届け，失敗の文言は，上限を超えたことを先に述べる．
+- 直した後のファジングでは，この突き合わせが，`i18n` の対象の読み方のずれを見つけた（B15 を避ける判定を入力を読み終える前にしていたので，繰り返したキーの段では続きを読んでいた）．また `grading-status` が，拡張が要求の ID に使う乱数の長さが段ごとに違うことで止まった（同じ入力を 1 つのプロセスで 300 回流すと 1 回）．判定は入力を読み終えてからにし，拡張の `Math.random` は，入力のバイト列から作るシードで始まる乱数に替えて，同じ入力のどの段にも同じ並びを返すようにした．続いて `i18n` が，B10 の値が置換の記法として読まれることで，結果と仕事が値の長さの 3 乗まで伸びるのを見つけた（B10 に加え，避ける範囲を `t()` を呼ぶことまで広げた）．その後は，7 対象を各 60 秒実行して失敗はなかった．
+- それを直した後の CI では，`syllabus-search` が，探す科目名を繰り返した入力で止まった．科目名の中で検索結果の行の名前を探す処理は，科目名が行の名前より短いうちは試す場所が無く，追い越すと 1 単位ごとに行の名前の長さだけ増える．長さの違う行が 2 つあったので，その追い越しが 2 段にまたがり，速い伸びが 2 段続いたように観測された（×16 から先は線形である）．伸びは，繰り返す部分が入力の残り以上の長さになった段から読むようにした．また `assignments` が，大きな段で時間の伸びが仕事量の伸びを 0.54 上回って止まった．手元では起きないので，CI では時間を確かめないことにした（「時計の揺れ」）．その後は，CI と同じ設定で 7 対象を各 300 秒実行して失敗はなく，canary も 4 秒で見つかった．
+- 2026-10-08 の毎日のファジングは，この修正の前のコードで走り，`assignments` が CI の時間の確かめで止まった（ほかの 6 対象は各 20 分で失敗なし）．そのコーパスを現在のコードで順に流すと，2 バイトの入力が，線形のコードの上限を超えた．前の入力が課題パネルに描いたカードのリンクを，科目を探す処理（`extractCoursesFromDOM()`）が読み，その仕事がこの入力に数えられていた．カードのリンクは，課題ツールの URL が引けないと科目のページを指すので，科目へのリンクとして読まれる．課題パネルの対象は，入力の初めにパネルの内容を数えずに取り除くようにした（[tests/fuzz-history.test.mjs](../tests/fuzz-history.test.mjs)）．その後は，引き継ぐコーパスと，止まった入力と遅かった入力がすべて通る．
 - 2026-10-09 から 12 日の毎日のファジングは，4 回とも `assignments` と `background-message` で止まった（ほかの 5 対象は各 20 分で失敗なし．2 回目からは，前の回に止まった 2 つの入力を流し直して止まった）．
   - `assignments` は，保存されたメモの一覧が配列でないと課題パネルの描画が止まることを見つけた（B17 に加えた）．対象は，メモをストアに置いて拡張自身の読み込み関数（`loadMemos()`）で読むようにした．それまでは，読み込み関数のすること（`|| []`）を対象の側でまねて内部の変数に入れていたので，読み込み関数での修正をファジングで確かめられなかった．
   - `background-message` は，8 バイトの入力が線形のコードの上限を超えた．Service Worker が起きてから最初の検索で作る Shift_JIS の表（P6，約 15.6 万歩）が，そのプロセスで最初に検索した入力に数えられていた．コーパスを小さい順に流すので，どの入力が止まるかは順序で決まっていた．対象は，最初の入力の前に表を作り，どの入力にも数えないようにした（「ファジングで避けている既知の問題」に P6 を加えた）．
   - この入力の失敗をテストで確かめると，対象をまとめて動かすテストのプロセスでは止まらなかった．数える場所を，プロセスで読み込んだすべてのスクリプトから数えていたので，ほかの対象の分まで上限に入っていた．上限は，対象のブラウザが読み込んだコードと，その対象の空の入力の仕事量で決めるようにした．また，上限を超えた入力の後に残った拡張の処理が拒否で終わり，次の入力やテストの失敗として数えられうるので，段の前に，前の入力が動かし始めたことを終わらせ，テストは既知の入力を 1 つずつ別のプロセスで流すようにした．
-  - 修正ブランチ fix/invalid-memo を，B17 を避けずに手元で回すと，失敗はなかったが，11 バイトの入力で 33 秒と 58 秒かかるものが出た．その後は，拡張の定期更新が最上段の巨大なサイドバーを読み直し続け，30 分を過ぎても実行が終わらなかった．jsdom がリンクの URL を読むたびに解析し直すためで，ハーネスが直近の解析結果を使い回すようにすると，この 2 つの入力は 21〜37 秒から 6〜8 秒になった（i7-1360P，電源につないで，各 2 回）．
-  - その後は，次の毎日のファジングが引き継ぐコーパス（7 対象の 911 入力）を小さい順に流しても，止まった入力と遅かった入力を流しても，CI の設定ですべて通る．CI の設定で 7 対象を各 3 分回しても失敗はなく，canary は 1 秒で見つかった．
-- 2026-10-13 の毎日のファジングは，前の回に止まった 2 つの入力が通るようになって各対象を 20 分回し，3 つの対象で止まった（ほかの 4 対象は失敗なし）．
+  - 修正ブランチ fix/invalid-memo を，B17 を避けずに手元で実行すると，失敗はなかったが，11 バイトの入力で 33 秒と 58 秒かかるものが出た．その後は，拡張の定期更新が最上段の巨大なサイドバーを読み直し続け，30 分を過ぎても実行が終わらなかった．jsdom がリンクの URL を読むたびに解析し直すためで，ハーネスが直近の解析結果を使い回すようにすると，この 2 つの入力は 21〜37 秒から 6〜8 秒になった（i7-1360P，電源につないで，各 2 回）．
+  - その後は，次の毎日のファジングが引き継ぐコーパス（7 対象の 911 入力）を小さい順に流しても，止まった入力と遅かった入力を流しても，CI の設定ですべて通る．CI の設定で 7 対象を各 3 分実行しても失敗はなく，canary は 1 秒で見つかった．
+- 2026-10-13 の毎日のファジングは，前の回に止まった 2 つの入力が通るようになって各対象を 20 分実行し，3 つの対象で止まった（ほかの 4 対象は失敗なし）．
   - `assignments` は，ハーネスの正規表現のエンジンが `RangeError: Invalid array length` で止まった．貪欲なループは 1 単位ごとに 4 つの数を戻る先として積み，最上段の 1 億字近いリンクで，配列の上限（約 1.3 億要素）を超えた．戻る先は，固定の大きさのブロックの連なりに積むようにした．数える歩数は変わらない（[tests/regexp.test.mjs](../tests/regexp.test.mjs) が 4,000 万字のリンクで確かめる）．
   - `background-message` は，6 単位の `kulms-totp-load` が線形のコードの上限を超えた．background は入力をまたいで TOTP の保存を持ち越していたので，前の入力が保存した長いシークレットの復号が，この入力に数えられていた．入力の初めに保存を空にし，入力が言うシークレット（または無し）を，拡張自身の `saveTotpSecret()` で，どの入力にも数えずに置くようにした（[tests/fuzz-history.test.mjs](../tests/fuzz-history.test.mjs)）．そのテストで，長いシークレットを保存できない B22 を見つけた．
-  - `site-contact` は，段 ×2 が入力を下の段と違う順に読んで止まった．`jsonText()` は，JSON にできない数を書くたびに書き方を入力から読んでいた．値のキーが段で繰り返す文字列だと，段によってキーが重なり（"9" を繰り返すと ×2 で "99" になり，もう 1 つのキー "99" と重なる），そうした数の個数が段で変わっていた．書き方は，入力から読まずに，入力のバイト列から作る乱数で選ぶようにした（[tests/fuzz-reads.test.mjs](../tests/fuzz-reads.test.mjs)）．
-  - その後は，次の毎日のファジングが引き継ぐコーパス（7 対象の 1,085 入力）を小さい順に流しても，止まった入力と遅かった入力（15 件）を流しても，CI の設定ですべて通る．CI の設定で 7 対象を各 3 分回しても失敗はなく，canary も見つかった．
-- 同じ日に，上流が v1.21.1（[`20d7da3`](https://github.com/Radian0523/kulms-extension/commit/20d7da3b9193960a2a1b38f1281e2e12c8155817)）を出した．B1 と B2 の PR を取り込み，B5 と B6 を同じ形で自ら直し，教科書パネルを今の学期の科目に絞った（[`f2cdec2`](https://github.com/Radian0523/kulms-extension/commit/f2cdec20f04a3ebdcc636a14d26aa8637101edd6)．教科書のキャッシュに学期を記録し，学期を持たないキャッシュや学期の違うキャッシュは取り直す）．submodule をこの版に進めた．
-  - B1，B2，B5，B6 のテストは todo を外した．名前をキーにした教科書のキャッシュを描くテストは，学期を持たないキャッシュが使われなくなって失敗したので，今の学期を記録したキャッシュで確かめるようにした．
-  - 同じ日に手動で各対象 20 分回したファジングのコーパス（7 対象の 737 入力）と，遅かった入力（8 件）は，v1.21.1 でも CI の設定ですべて通る．CI の設定で 7 対象を各 3 分回しても失敗はなく，canary も見つかった．拡張の DOM XSS と ReDoS の報告は，`087452e` と同じ規則と件数のままである．
+  - `site-contact` は，段 ×2 が入力を下の段と違う順に読んで止まった．`jsonText()` は，JSON にできない数を書くたびに書き方を入力から読んでいた．値のキーが段で繰り返す文字列だと，段によってキーが重なり（"9" を繰り返すと ×2 で "99" になり，別のキー "99" と重なる），そうした数の個数が段で変わっていた．書き方は，入力から読まずに，入力のバイト列から作る乱数で選ぶようにした（[tests/fuzz-reads.test.mjs](../tests/fuzz-reads.test.mjs)）．
+  - その後は，次の毎日のファジングが引き継ぐコーパス（7 対象の 1,085 入力）を小さい順に流しても，止まった入力と遅かった入力（15 件）を流しても，CI の設定ですべて通る．CI の設定で 7 対象を各 3 分実行しても失敗はなく，canary も見つかった．
+- 同じ日に，上流が v1.21.1（[`20d7da3`](https://github.com/Radian0523/kulms-extension/commit/20d7da3b9193960a2a1b38f1281e2e12c8155817)）を出した．B1 と B2 の PR を取り込み，B5 と B6 を同じ形で自ら直し，教科書パネルを現在の学期の科目に絞った（[`f2cdec2`](https://github.com/Radian0523/kulms-extension/commit/f2cdec20f04a3ebdcc636a14d26aa8637101edd6)．教科書のキャッシュに学期を記録し，学期を持たないキャッシュや学期の違うキャッシュは取り直す）．submodule をこの版に進めた．
+  - B1，B2，B5，B6 のテストは todo を外した．名前をキーにした教科書のキャッシュを描くテストは，学期を持たないキャッシュが使われなくなって失敗したので，現在の学期を記録したキャッシュで確かめるようにした．
+  - 同じ日に手動で各対象 20 分実行したファジングのコーパス（7 対象の 737 入力）と，遅かった入力（8 件）は，v1.21.1 でも CI の設定ですべて通る．CI の設定で 7 対象を各 3 分実行しても失敗はなく，canary も見つかった．拡張の DOM XSS と ReDoS の報告は，`087452e` と同じ規則と件数のままである．
+
+- 2026-10-13 の夜から 14 日にかけて，ページと拡張の各面を入力にする対象を 6 つ加え（`sidebar`，`resources`，`submission`，`grading-bridge`，`popup`，`totp-register`），検出器を広げ，ハーネスを Web 標準に沿わせた（「fuzz リポジトリの仕組み」）．
+  - 同日の毎日のファジング（38382757101）は，課題の名前が自らの `toString` を持つオブジェクトのときに課題パネルの描画が止まることを見つけた（B19 に加えた）．この入力を避けた後は，引き継ぐコーパス（7 対象の 741 入力）と，止まった入力と遅かった入力（16 件）が，CI の設定ですべて通る．
+  - `resources` の 2 回目のファジングは，12GB のメモリを使ったため止めた．ハーネスが realm ごとに結果の包みを重ねていたためであり，直した後は，同じコーパスを流してもヒープは 54MB 前後で増えない．
+  - 10 対象を各 2 分実行すると，`resources` が P2 を見つけた．避けた後は，`resources` と `grading-bridge` を各 2 分実行して失敗はなかった．リダイレクトの答えを加えた後に 11 対象を各 1 分実行すると，`resources` が，jsdom の HTML パーサーの孤立したサロゲートの扱いの誤りで止まった（ハーネスで正した）．
+  - ハーネスを Fetch 標準と HTML 標準のタイマーに沿わせた後に 12 対象を各 90 秒実行すると，`popup` が S6 の帰結（base32 でないシークレットの QR）を見つけた．`submission` は，段を ×262144 まで上がる入力（数えた仕事は各段で一定であり，ハーネスの時間が単位数に比例して最上段で 227 秒かかる）を流している間に，手元の実行で `--until` が与えた持ち時間を超えて止められた（毎日のファジングの持ち時間には収まる）．
+  - その後，`popup` と `totp-register` を各 2 分実行して失敗はなかった．`submission` は，初期のコーパス（その遅い入力を含む）を流すのに 458 秒かかり，失敗はなかった．
+  - テストと 13 対象のコーパスでカバレッジを測ると（「カバレッジ」），コーパスの入力はすべて通り，テストの失敗も 0 件であったが，`ci/coverage.sh` は失敗で終わった．B12 の todo のテストが固定の時間を待っていたためであり（「fuzz リポジトリの仕組み」のテスト），テストの固定の待ちをすべて置き換えて測り直した．
+  - 測り直した結果から，`popup` の対象がタブを 1 つも開いておらず，popup の更新（LMS のタブへの求め）と QR の読み取りの経路に届いていないことが判明した（入力が読み取りの結果を言っても，使われていなかった）．ウィンドウのタブを入力に加え，ハーネスのタブを Chrome の文書のとおりに改めた．`popup` の最初の実行は，入力の文字列からタブの URL を作る対象の処理（`encodeURIComponent()`）が孤立したサロゲートで URIError を投げて止まった．これは対象の誤りであり，URL は URL パーサーで作るようにした．その後，`popup` を 3 分実行して（3,206 入力）失敗はなかった．
+  - `popup` を 10 分実行すると，41 秒で，QR を 2 回作り，コードを表示したまま時間を進める 137 単位の入力が，線形のコードの上限を超えた．調べると，QR の生成（1 回に約 78 万歩）とコードの毎秒の更新は，入力の大きさによらない固定の仕事であり，それを含む小さな入力はすべて上限を超えていた．固定の仕事を測って入力の上限に加える仕組み（`allow()`）を設け，あわせて，コードの毎秒の更新がシークレットの長さに比例すること（P8）を見つけた．その後，`popup` を 8 分（5,220 入力）実行して失敗はなかった．
+  - カバレッジで届いていなかった background の更新時（`runtime.onInstalled`）の移行にテストを書く際，移行が，旧版の平文のシークレットを，コードを作れないものも文字列でない値も保存することを見つけた（S6 に加え，fix/validate-totp-secret で続けて直した）．
+  - これらの後，canary と 13 対象を，カバレッジを測ったコーパスから各 60 秒実行して，失敗はなかった（canary は 7 秒で見つかった）．
 
 ## カバレッジ
 
-2026-10-13 に，v1.21.1 で初めて測った．テストと，その日のファジングのコーパスとシード（7 対象の 749 入力）を流すと，拡張自身のコードのうち，文の 51.7%，分岐の 42.3%，関数の 54.5% に届く．テストだけでは文の 48.9%，コーパスだけでは 31.5% である．次の表は，文がテスト，コーパス，その両方で届く割合と，両方で届く分岐と関数の割合で，届く割合の低い順に並べた．
+2026-10-13 に，v1.21.1 で初めて測った．テストと，その日のファジングのコーパスとシード（7 対象の 749 入力）を流すと，拡張自身のコードのうち，文の 51.7%，分岐の 42.3%，関数の 54.5% に届いた．テストだけでは文の 48.9%，コーパスだけでは 31.5% であった．ほとんど届かなかったのは，ページの DOM を整える content script，提出の検知，TOTP の登録補助，TA 採点支援，popup であり，いずれも，それを入口にするファズ対象が無かった．
+
+2026-10-14 に，それらを入口にする 6 つの対象を加え（「fuzz リポジトリの仕組み」），届いていなかった関数のテスト（[tests/panel.test.mjs](../tests/panel.test.mjs) の課題パネルの関数と，[tests/totp.test.mjs](../tests/totp.test.mjs) の background の更新時と起動時の処理）を加えて，測り直した．テスト（256 件）と，13 対象のコーパスとシード（1,729 入力．同日のファジングで育てたもの）を流すと，文の 75.5%（4,040/5,354），分岐の 64.1%（1,956/3,053），関数の 78.5%（542/690）に届く．テストだけでは文の 67.4%，コーパスだけでは 56.1% である．次の表は，文がテスト，コーパス，その両方で届く割合と，両方で届く分岐と関数の割合で，届く割合の低い順に並べた．
 
 | スクリプト | テスト | コーパス | 合わせて | 分岐 | 関数 |
 |---|---:|---:|---:|---:|---:|
-| `src/grading-ta-page.js` | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
-| `src/auth-totp-register.js` | 5.4% | 0.0% | 5.4% | 7.0% | 16.7% |
-| `src/sidebar-resize.js` | 10.2% | 10.2% | 10.2% | 9.4% | 33.3% |
-| `src/top-favbar.js` | 14.2% | 14.2% | 14.2% | 8.2% | 22.4% |
-| `src/file-drop.js` | 14.9% | 14.9% | 14.9% | 17.9% | 40.0% |
 | `src/grading-ta.js` | 13.2% | 17.5% | 17.5% | 21.3% | 20.8% |
-| `src/course-name.js` | 19.8% | 15.9% | 19.8% | 13.1% | 18.2% |
-| `src/course-click.js` | 25.0% | 25.0% | 25.0% | 16.7% | 66.7% |
-| `src/submit-detect.js` | 27.1% | 27.1% | 27.1% | 13.9% | 66.7% |
-| `src/tree-view.js` | 28.5% | 1.9% | 28.5% | 18.9% | 37.5% |
-| `popup.js` | 43.4% | 16.5% | 43.4% | 35.5% | 50.6% |
 | `src/settings.js` | 50.6% | 50.6% | 50.6% | 66.0% | 68.8% |
-| `src/textbooks.js` | 70.7% | 4.5% | 70.7% | 46.8% | 84.2% |
-| `src/tool-visibility.js` | 71.4% | 8.0% | 71.4% | 67.3% | 69.6% |
-| `src/assignments.js` | 68.5% | 45.0% | 72.4% | 62.3% | 71.6% |
-| `background.js` | 81.6% | 90.2% | 90.7% | 89.6% | 84.6% |
+| `src/submit-detect.js` | 66.7% | 72.9% | 72.9% | 67.4% | 100.0% |
+| `src/tree-view.js` | 65.7% | 76.8% | 77.3% | 62.1% | 91.7% |
+| `src/auth-totp-register.js` | 75.3% | 78.5% | 78.5% | 62.8% | 100.0% |
+| `src/textbooks.js` | 81.0% | 4.5% | 81.0% | 63.7% | 94.7% |
+| `src/assignments.js` | 81.0% | 44.8% | 83.1% | 68.5% | 80.9% |
+| `src/sidebar-resize.js` | 86.4% | 84.7% | 86.4% | 62.5% | 100.0% |
+| `popup.js` | 61.8% | 87.8% | 88.1% | 84.3% | 96.1% |
+| `src/course-name.js` | 81.7% | 88.9% | 88.9% | 83.3% | 100.0% |
+| `src/top-favbar.js` | 74.0% | 89.9% | 89.9% | 79.0% | 100.0% |
+| `src/course-click.js` | 40.0% | 90.0% | 90.0% | 83.3% | 100.0% |
+| `background.js` | 84.3% | 90.2% | 93.4% | 90.5% | 88.5% |
 | `src/auth-totp.js` | 94.3% | 0.0% | 94.3% | 80.0% | 85.7% |
+| `src/grading-ta-page.js` | 70.5% | 95.5% | 95.5% | 96.2% | 100.0% |
+| `src/tool-visibility.js` | 83.9% | 96.4% | 96.4% | 88.5% | 100.0% |
+| `src/file-drop.js` | 74.3% | 97.3% | 97.3% | 85.7% | 100.0% |
 
-- どこからも動いていないのは `src/grading-ta-page.js` である．これは，TA 採点支援がページの世界に入れるブリッジで，Sakai の採点画面から提出の一覧や評点を読む．ハーネスの窓はページに入れた `<script>` を動かさず，`grading-status` の対象はブリッジの答えを自分で作るので，テストにもファジングにも入っていない．
-- テストとコーパスのどちらもほとんど届かないのは，LMS のページを整える content script（`top-favbar.js`，`sidebar-resize.js`，`file-drop.js`，`course-name.js`，`course-click.js`，`tree-view.js`），提出の検知（`submit-detect.js`），TOTP の登録補助（`auth-totp-register.js`），TA 採点支援（`grading-ta.js`）である．ファズ対象は 7 つとも，Sakai と KULASIS の応答，runtime のメッセージ，i18n の置換値，採点の応答から入るので，ページの DOM そのものを入力にする対象が無い．
-- `popup.js` はテストで 43.4%，コーパスで 16.5% に届く．`textbooks.js` と `tool-visibility.js` は，テストではそれぞれ 70.7% と 71.4% に届くが，コーパスでは 4.5% と 8.0% にとどまる．どれも，それを入口にするファズ対象が無い．
+- 最も届かないのは `src/grading-ta.js`（TA 採点支援の本体）であり，関数の 84/106 に届かない．届かないのは，Sakai の採点画面と提出一覧の DOM を読む関数（`findGraderElement`，`parseSubmissionList` など）である．`grading-status` は採点の応答から，`grading-bridge` はページの世界の橋渡しから入るため，採点画面の DOM そのものを入口にする対象もテストも無い．これを入口にする対象を加えることが，次の課題である．
+- `popup.js` のうち，QR の読み取りでページに入れる関数（`scanPageForQR`，`extractSecret`，`tryDecodeImageData`）には届かない．Chrome は，`chrome.scripting.executeScript()` に渡された関数を直列化し，タブの隔離された世界で実行する [[ChromeScripting]](#参考文献)．ハーネスはこれを実行せず，テストや対象の言う結果を返す．関数をタブで実行し，そのカバレッジを popup.js に戻すことが，次の課題である．
+- `src/settings.js` の届かない関数は，読み込みを止めたまま待つ Promise（L8），拡張の更新後に再読み込みを促すバナー（L17〜L34），メッセージの上書きの読み込みの失敗（L132）である．`background.js` の届かない関数は，IndexedDB の要求とトランザクションの失敗の処理（L572〜L617）であり，ハーネスの IndexedDB は失敗しない．
+- `src/assignments.js` の `isGraded`，`getStatusBadgeClass`，`getStatusLabel` は，どこからも呼ばれない（M5）．
+- `src/textbooks.js` と `src/auth-totp.js` には，テストでのみ届く（コーパスでは 4.5% と 0.0%）．教科書のパネルと，ログインページの自動入力を入口にする対象は無い．
+- 測る過程で，テストの固定の待ち（「fuzz リポジトリの仕組み」のテスト），`popup` の対象がタブを開いていないこと，QR の生成とコードの毎秒の更新という固定の仕事の扱い（同じく仕事量），更新時の移行の S6 と，コードの表示の P8 が判明した．また，カバレッジを測る再生は，対象がページを入力ごとに開くと，コーパスが大きくなるにつれてメモリが尽きた（V8 は，数えている間，コンパイルしたスクリプトをその数とともに保つ．`popup` の 405 入力で 4 GB を超えた）．`ci/coverage.sh` は，コーパスを 100 入力ずつ別のプロセスで再生し，その数を合わせるようにした．
 
 ## 進める順序
 
@@ -702,4 +855,39 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 
 - kulms-extension は fork（[yumasansansan/kulms-extension](https://github.com/yumasansansan/kulms-extension)）を submodule `kulms-extension/` として持つ．修正はこの fork のブランチで行い，上流（[Radian0523/kulms-extension](https://github.com/Radian0523/kulms-extension)）へ PR を出す．
 - このリポジトリのパッケージ管理は pnpm で，Node も pnpm も最新版を使う（2026-10-06 の検証は Windows 11 で Node 26.10.0 と pnpm 12.9.1，2026-10-12 の検証は Ubuntu 26.04 で Node 26.11.1 と pnpm 12.11.2）．pnpm の版は `package.json` で固定しない（`packageManager` を書かない）．上流は bun を使うが，このリポジトリでは不要．
-- このリポジトリのファイルは GPL-3.0-or-later とし，ADLplug-Next と同じ形の SPDX ヘッダを各ファイルの先頭に付ける．コメントを書けないファイルは `REUSE.toml` で指定し，REUSE 仕様に適合させる（CI で `reuse lint` を掛ける）．submodule の kulms-extension は上流の MIT のまま．
+- このリポジトリのファイルは GPL-3.0-or-later とし，ADLplug-Next と同じ形の SPDX ヘッダを各ファイルの先頭に付ける．コメントを書けないファイルは `REUSE.toml` で指定し，REUSE 仕様 [[REUSE]](#参考文献) に適合させる（CI で `reuse lint` を掛ける）．submodule の kulms-extension は上流の MIT のまま．
+
+## 参考文献
+
+本文中の [ ] は次の文献を指す．Web の標準と文書は，いずれも 2026-10-14 に参照した版による．
+
+- [ChromeActiveTab] Google, "The 'activeTab' permission," Chrome for Developers. https://developer.chrome.com/docs/extensions/develop/concepts/activeTab
+- [ChromeContentScripts] Google, "Content scripts," Chrome for Developers（manifest の `content_scripts` と `world`）. https://developer.chrome.com/docs/extensions/reference/manifest/content-scripts
+- [ChromeNetwork] Google, "Cross-origin network requests," Chrome for Developers. https://developer.chrome.com/docs/extensions/develop/concepts/network-requests
+- [ChromeScripting] Google, "chrome.scripting," Chrome for Developers. https://developer.chrome.com/docs/extensions/reference/api/scripting
+- [ChromeStorage] Google, "chrome.storage," Chrome for Developers. https://developer.chrome.com/docs/extensions/reference/api/storage
+- [ChromeTabs] Google, "chrome.tabs," Chrome for Developers（`tabs.query()` と `tabs.Tab`）. https://developer.chrome.com/docs/extensions/reference/api/tabs
+- [CSP3] W3C, "Content Security Policy Level 3," Working Draft. https://www.w3.org/TR/CSP3/
+- [DOM] WHATWG, "DOM Standard," Living Standard. https://dom.spec.whatwg.org/
+- [ECMA-262] Ecma International, "ECMAScript Language Specification," ECMA-262. https://tc39.es/ecma262/
+- [Fetch] WHATWG, "Fetch Standard," Living Standard（§2.2.5 の redirect-taint と要求のオリジンの直列化，§4.4 HTTP fetch，§4.5 HTTP-redirect fetch，§4.10 CORS check）. https://fetch.spec.whatwg.org/
+- [HTML] WHATWG, "HTML Standard," Living Standard（§3.2.7 The innerText and outerText properties，§4.6.3 API for hyperlink elements，§8.7 Timers，§12 Web storage，§13.2.3.5 Preprocessing the input stream）. https://html.spec.whatwg.org/
+- [istanbul] istanbul.js. https://istanbul.js.org/
+- [Jazzer.js] Code Intelligence, "Jazzer.js." https://github.com/CodeIntelligenceTesting/jazzer.js
+- [libFuzzer] LLVM Project, "libFuzzer – a library for coverage-guided fuzz testing." https://llvm.org/docs/LibFuzzer.html
+- [MDN-getSecurityInfo] MDN Web Docs, "webRequest.getSecurityInfo()." https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/webRequest/getSecurityInfo
+- [MixedContent] W3C, "Mixed Content." https://www.w3.org/TR/mixed-content/
+- [NodeCoverage] OpenJS Foundation, "Command-line API: NODE_V8_COVERAGE=dir," Node.js Documentation. https://nodejs.org/api/cli.html#node_v8_coveragedir
+- [NodeTest] OpenJS Foundation, "Test runner: Extraneous asynchronous activity," Node.js Documentation（v26.11.1）. https://nodejs.org/api/test.html#extraneous-asynchronous-activity
+- [recheck] TSUYUSATO Kitsune, "recheck." https://makenowjust-labs.github.io/recheck/
+- [REUSE] Free Software Foundation Europe, "REUSE Specification." https://reuse.software/spec/
+- [RFC4226] D. M'Raihi et al., "HOTP: An HMAC-Based One-Time Password Algorithm," RFC 4226, 2005. https://www.rfc-editor.org/rfc/rfc4226
+- [RFC6194] T. Polk et al., "Security Considerations for the SHA-0 and SHA-1 Message-Digest Algorithms," RFC 6194, 2011（§3.3，§4）. https://www.rfc-editor.org/rfc/rfc6194
+- [RFC6238] D. M'Raihi et al., "TOTP: Time-Based One-Time Password Algorithm," RFC 6238, 2011. https://www.rfc-editor.org/rfc/rfc6238
+- [RFC8446] E. Rescorla, "The Transport Layer Security (TLS) Protocol Version 1.3," RFC 8446, 2018. https://www.rfc-editor.org/rfc/rfc8446
+- [Sanitizer] WICG, "HTML Sanitizer API," Draft Community Group Report. https://wicg.github.io/sanitizer-api/
+- [SRI] W3C, "Subresource Integrity," W3C Recommendation. https://www.w3.org/TR/SRI/
+- [Storage] WHATWG, "Storage Standard," Living Standard（§4.1 Storage endpoints）. https://storage.spec.whatwg.org/
+- [TT] W3C, "Trusted Types," Editor's Draft. https://w3c.github.io/trusted-types/dist/spec/
+- [URL] WHATWG, "URL Standard," Living Standard. https://url.spec.whatwg.org/
+- [WebIDL] WHATWG, "Web IDL Standard," Living Standard（反復可能なインターフェースの forEach，keys，values，entries）. https://webidl.spec.whatwg.org/

@@ -32,7 +32,7 @@
 // (warnings() of fuzz/lib.mjs), not on an HTTP error, a network that fails
 // or an answer that is not JSON, which the catching is there for.
 import { Browser, Net, openBackground, watch } from "../../harness/index.mjs";
-import { answer, brief, bytes, calibrate, fail, isSlip, judge, ladder, provider, string, warnings } from "../lib.mjs";
+import { answer, brief, bytes, calibrate, fail, isSlip, judge, ladder, provider, seen, string, warnings } from "../lib.mjs";
 
 const SEARCH = "https://www.k.kyoto-u.ac.jp/external/open_syllabus/search?";
 let page = {};
@@ -67,7 +67,7 @@ async function run(data) {
   if (result !== null && !(typeof result === "object" && /^\d+$/.test(result.lectureNo) && /^\d*$/.test(result.departmentNo))) {
     fail(`not a course: ${brief(result)}`);
   }
-  const problems = w.check();
+  const problems = seen(w);
   if (problems.length) fail(problems.join("\n"));
   judge();
 }

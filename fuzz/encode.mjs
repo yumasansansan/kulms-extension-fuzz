@@ -286,8 +286,20 @@ export function value(w, v) {
 }
 
 // answer() gives the body as it is, with status 200 and the type, or with
-// `utf8` the type with "; charset=utf-8" (the second of contentType()'s).
-export function answer(w, { utf8 = false } = {}) {
+// `utf8` the type with "; charset=utf-8" (the second of contentType()'s), or
+// with `redirect` ({ to, path, allowed, credentials }) by a redirect: `to`
+// the index of the place in REDIRECTS of lib.mjs, `path` the path, `allowed`
+// the index in ALLOWED of what Access-Control-Allow-Origin says, and
+// `credentials` whether Access-Control-Allow-Credentials is true.
+export function answer(w, { utf8 = false, redirect = null } = {}) {
+  if (redirect) {
+    w.int(0, 9, 6);
+    w.int(0, 3, redirect.to);
+    string(w, redirect.path);
+    w.int(0, 4, redirect.allowed);
+    w.bool(redirect.credentials);
+    return;
+  }
   if (utf8) {
     w.int(0, 9, 2);
     w.int(0, 13, 1);

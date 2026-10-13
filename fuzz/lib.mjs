@@ -55,9 +55,11 @@
 import { constants } from "node:buffer";
 import { FuzzedDataProvider } from "@jazzer.js/core";
 import { BACKTRACKING } from "../harness/backtrack.mjs";
+import { EXTENSION_ID } from "../harness/chrome.mjs";
 import { avoidBacktracking } from "../harness/install.mjs";
 import { LINEAR, addUnits, beginInput, endInput, idle, work } from "../harness/work.mjs";
 import { open } from "./open-findings.mjs";
+import { isSlip } from "../harness/detectors.mjs";
 
 export { FuzzedDataProvider, open };
 
@@ -779,10 +781,36 @@ export const STATUSES = [200, 201, 204, 206, 301, 302, 304, 400, 401, 403, 404, 
 // The shares a body may be cut at (answer()), said in two bytes.
 const CUT = 2 ** 16 - 1;
 
+// Where a redirect takes a request, from the URL it asked for and a path:
+// the same server over http, an origin outside the extension's host
+// permissions, the LMS's login page (an origin it has), or another path of
+// the server it asked. Only the path is the input's: what the redirect leaves
+// is the host, which a path cannot change.
+function at(origin, path) {
+  const u = new URL(origin);
+  u.pathname = `/${path}`;
+  return u.href;
+}
+export const REDIRECTS = [
+  (asked, path) => at(`http://${new URL(asked).host}`, path),
+  (asked, path) => at("https://evil.example", path),
+  () => "https://lms.gakusei.kyoto-u.ac.jp/portal/xlogin",
+  (asked, path) => at(new URL(asked).origin, path),
+];
+
+// What an answer says of who may read it (CORS, the Fetch Standard's
+// Access-Control-Allow-Origin, https://fetch.spec.whatwg.org/#http-access-control-allow-origin):
+// nothing, anyone, a request whose origin a redirect hid ("null"), the LMS's
+// pages, or the extension. A server of an attacker says what lets the
+// extension read it; harness/net.mjs checks it as the browser does.
+export const ALLOWED = [null, "*", "null", "https://lms.gakusei.kyoto-u.ac.jp", `chrome-extension://${EXTENSION_ID}`];
+
 // The answer of the network to one fetch, for a route of harness/net.mjs:
 // mostly `body` as `type`, otherwise, as the input picks, a network that
-// fails, another status, another content type or none, a body cut short, or
-// any bytes in its place.
+// fails, another status, another content type or none, a body cut short, any
+// bytes in its place, or `body` by a redirect from elsewhere (REDIRECTS),
+// with the headers of CORS that the input says (ALLOWED, and whether
+// credentials are allowed).
 export function answer(fdp, body, type) {
   switch (fdp.remainingBytes === 0 ? 9 : fdp.consumeIntegralInRange(0, 9)) {
     case 0: return { failed: true };
@@ -802,16 +830,21 @@ export function answer(fdp, body, type) {
       return { status: 200, headers: { "content-type": type }, body: b.subarray(0, Math.floor((b.length * fdp.consumeIntegralInRange(0, CUT)) / CUT)) };
     }
     case 5: return { status: 200, headers: { "content-type": contentType(fdp, type) }, body: bytes(fdp) };
+    case 6: {
+      const to = fdp.pickValue(REDIRECTS);
+      const path = string(fdp);
+      const headers = { "content-type": type };
+      const allowed = fdp.pickValue(ALLOWED);
+      if (allowed !== null) headers["access-control-allow-origin"] = allowed;
+      if (fdp.consumeBoolean()) headers["access-control-allow-credentials"] = "true";
+      return { status: 200, headers, body, url: (asked) => to(asked, path) };
+    }
     default: return { status: 200, headers: { "content-type": type }, body };
   }
 }
 
-// A slip of the code, as V8 words a TypeError or a RangeError: what the
-// extension does not mean to throw, unlike its own errors ("Fetch failed:
-// 400", "登録コースが見つかりませんでした"), a network that fails ("Failed to
-// fetch") or an answer that is not JSON (a SyntaxError).
-const SLIP = /Cannot read properties|Cannot set properties|Cannot create property|is not a function|is not iterable|is not a constructor|Cannot convert|is not defined|Invalid array length|Invalid string length|Invalid time value|Maximum call stack/;
-export const isSlip = (e) => SLIP.test(typeof e === "string" ? e : String(e && e.message));
+// A slip of the code (harness/detectors.mjs).
+export { isSlip };
 
 const printable = (x) => { try { return String(x); } catch { return "[a value String() cannot convert]"; } };
 
@@ -832,6 +865,30 @@ export function warnings(context) {
       return lines.filter((args) => args.some(isSlip)).map((args) => args.map(printable).join(" "));
     },
   };
+}
+
+// What `watcher` (watch() of harness/detectors.mjs) saw, but for what a finding
+// that stands makes it see in every target:
+// - Known: S10 (docs/findings.md). While it is open, a <script> of the
+//   extension's own files that no integrity hash verifies, and a <style>,
+//   that the extension puts in a page are not counted: it puts in such ones
+//   as it means to (the bridge of grading-ta.js, the styles of the sidebar
+//   and of the urgency colours), as the finding says.
+// - Known: S11. While it is open, a string that the extension passes to a sink
+//   of Trusted Types is not counted: it builds and clears its UI with
+//   innerHTML and parses pages with DOMParser, as the finding says.
+// - Known: S12. While it is open, the body of a response that a redirect
+//   brought from where TLS does not vouch for it, which the extension reads,
+//   is not counted: none of its fetches looks at where the response came
+//   from, as the finding says.
+// What these markup and strings do is seen all the same (a script carrier
+// they bring is still one, harness/detectors.mjs), and so is what the
+// extension makes of such a response.
+export function seen(watcher) {
+  return watcher.check().filter((p) =>
+    !(open("S10") && /^markup that runs script, loads from elsewhere or sends the page elsewhere: <(?:script|style)\b[^\n]*\((?:script from "chrome-extension:\/\/[^/"\s]+\/[^"\n]*"#\S+ that no integrity hash verifies|style: "(?:[^"\\\n]|\\.)*"#\S+)\)$/.test(p)) &&
+    !(open("S11") && /^a string passed to [^\n]*, which a page that requires Trusted Types refuses /.test(p)) &&
+    !(open("S12") && /^the body of a response that a redirect brought from [^\n]*, which is not over https from an origin of the extension's host permissions, read in /.test(p)));
 }
 
 // A value as a failure message shows it: JSON where JSON can write it (a

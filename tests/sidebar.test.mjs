@@ -10,7 +10,7 @@
 // tool visibility (tool-visibility.js) turned on.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Browser, openTab, settle, until } from "../harness/index.mjs";
+import { Browser, Clock, idle, openTab, until } from "../harness/index.mjs";
 import { LMS } from "./lms.mjs";
 
 const course = (id, tools) => `<li class="site-list-item" id="site-list-item-${id}"><ul class="site-page-list">` +
@@ -18,17 +18,23 @@ const course = (id, tools) => `<li class="site-list-item" id="site-list-item-${i
   "</ul></li>";
 
 // How many batches of DOM changes the page sees in `ms` after one change of
-// its own, which any LMS page makes all the time.
+// its own, which any LMS page makes all the time. The page's timers run on a
+// clock of its own (harness/clock.mjs), so that `ms` is the page's time
+// however slow the machine, and between two of them, all that the extension
+// has under way is done (idle()).
 async function batchesAfterOneChange(t, courses, ms) {
   const browser = new Browser();
   t.after(() => browser.close());
   browser.storage.local.load({ "kulms-settings": { toolVisibility: true } });
-  const tab = openTab(browser, { url: `${LMS}/portal`, html: `<body><nav id="portal-nav-sidebar"><ul>${courses}</ul></nav></body>` });
-  await settle(800);
+  const clock = new Clock();
+  const tab = openTab(browser, { url: `${LMS}/portal`, html: `<body><nav id="portal-nav-sidebar"><ul>${courses}</ul></nav></body>`, clock });
+  await idle();
+  await clock.advance(800);
   let batches = 0;
   new tab.window.MutationObserver(() => batches++).observe(tab.document.body, { childList: true, subtree: true });
   tab.document.body.appendChild(tab.document.createElement("div"));
-  await settle(ms);
+  await idle();
+  await clock.advance(ms);
   return batches;
 }
 

@@ -32,9 +32,18 @@
 // A rule is a function of (this, the arguments, the result) giving the steps
 // an operation takes besides the one of the call; null marks an operation
 // whose steps do not grow with anything (the code that calls it is counted
-// where it runs), which is left as it is. An operation whose steps grow only
+// where it runs), which is left as it is. A rule may also be an object: its
+// `after` such a function, which is given what its `before` worked out of
+// (this, the arguments) before the call, and its `least` the steps the call is
+// sure to take if it returns, told from (this, the arguments) before it runs.
+// A call that would pass the bound of its input with those is stopped then,
+// as passing it (harness/work.mjs): an operation that loops to a length it is
+// given (an array-like's), not to what it has, would otherwise run billions of
+// steps before any was counted. An operation whose steps grow only
 // with what the code passes it one by one (the arguments of a call, written in
 // the code or spread, whose spreading is counted) is of the second kind.
+
+import { types } from "node:util";
 
 // --- What an operation goes through.
 
@@ -55,6 +64,27 @@ export function units(x) {
     if (tag === "[object Map]" || tag === "[object Set]") return x.size;
     const d = Object.getOwnPropertyDescriptor(x, "length");
     return d && "value" in d ? integer(d.value) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+// The elements that Array.from() and %TypedArray%.from() go through for
+// `items` that is not iterable: its length, as an array-like's (ToLength of a
+// number or a string). Nothing when it may be iterable (it has an @@iterator
+// on its chain), or when telling would run code of its own (a proxy, a getter,
+// a length that is an object).
+export function lengthOfArrayLike(items) {
+  if (items === null || (typeof items !== "object" && typeof items !== "function")) return 0;
+  try {
+    for (let o = items; o !== null; o = Object.getPrototypeOf(o)) {
+      if (types.isProxy(o)) return 0;
+      if (Object.getOwnPropertyDescriptor(o, Symbol.iterator)) return 0;
+    }
+    const d = Object.getOwnPropertyDescriptor(items, "length");
+    if (!d || !("value" in d) || (typeof d.value !== "number" && typeof d.value !== "string")) return 0;
+    const n = Number(d.value);
+    return n > 0 ? Math.floor(Math.min(n, 2 ** 53 - 1)) : 0;
   } catch {
     return 0;
   }
@@ -189,7 +219,7 @@ export const ECMASCRIPT = {
   "Function.prototype.bind": (self, args) => args.length,
   "Function.prototype.toString": ofResult,
 
-  "Array.from": ofResult,
+  "Array.from": { least: (self, [items]) => lengthOfArrayLike(items), after: ofResult },
   "Array.fromAsync": ofArg(0),
   "Array.prototype.concat": ofResult,
   "Array.prototype.copyWithin": ofThis,
@@ -230,7 +260,7 @@ export const ECMASCRIPT = {
   "%SetIteratorPrototype%.next": eachCall,
   "%RegExpStringIteratorPrototype%.next": eachCall,
 
-  "%TypedArray%.from": ofResult,
+  "%TypedArray%.from": { least: (self, [items]) => lengthOfArrayLike(items), after: ofResult },
   "%TypedArray%.of": ofResult,
   "%TypedArray%.prototype.copyWithin": ofThis,
   "%TypedArray%.prototype.every": until,

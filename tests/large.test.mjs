@@ -20,8 +20,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { Browser, LINEAR, Net, degree, idle, measure, openBackground, openPopup, openTab } from "../harness/index.mjs";
-import { H, LMS, assignment, cached, openCoursePage } from "./lms.mjs";
+import { Browser, Clock, LINEAR, Net, aside, degree, idle, measure, openBackground, openPopup, openTab, until } from "../harness/index.mjs";
+import { H, LMS, assignment, cached, openCoursePage, openPanel } from "./lms.mjs";
 
 const MB = 1 << 20;
 const HTML = { "content-type": "text/html; charset=utf-8" };
@@ -133,4 +133,51 @@ test("the panel draws 20,000 memos in work linear in their number", async () => 
   assertLinear(await degree(5000, (k) => panelWork(memos(k), (panel) => {
     assert.ok(panel.textContent.includes(`メモ${k - 1}`));
   })));
+});
+
+// The popup shows the TOTP code anew every second for as long as it is shown
+// (setInterval of popup.js); a second of it decodes the secret and makes its
+// HMAC key again, so its work grows with the secret.
+test("P8: a second of the TOTP code shown in the popup costs the same whatever the secret's length", { todo: "P8: the popup decodes the secret and makes its HMAC key anew every second" }, async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const bg = openBackground(browser);
+  await idle();
+  const second = async (n) => {
+    await aside(() => bg.global.saveTotpSecret("A".repeat(n)));
+    const clock = new Clock(Date.UTC(2026, 9, 14, 1));
+    const popup = openPopup(browser, { clock });
+    await idle();
+    popup.document.getElementById("totp-show-btn").dispatchEvent(new popup.window.MouseEvent("click", { bubbles: true }));
+    await idle();
+    const work = await measure(() => clock.advance(1000));
+    popup.close();
+    return work;
+  };
+  const d = await degree(1024, second);
+  assert.ok(d < 0.5, `a second's work grows as the ${d.toFixed(2)}th power of the secret's length`);
+});
+
+// The settings panel on the LMS shows the code in the same way (assignments.js).
+test("P8: a second of the TOTP code shown in the settings panel on the LMS costs the same whatever the secret's length", { todo: "P8: the panel decodes the secret and makes its HMAC key anew every second" }, async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const bg = openBackground(browser);
+  await idle();
+  const second = async (n) => {
+    await aside(() => bg.global.saveTotpSecret("A".repeat(n)));
+    browser.storage.local.load(cached([]));
+    const clock = new Clock(Date.UTC(2026, 9, 14, 1));
+    const tab = openCoursePage(browser, { clock });
+    const panel = await openPanel(tab);
+    [...panel.querySelectorAll(".kulms-panel-tab")].at(-1).click();
+    await until(() => panel.querySelector(".kulms-totp-actions .kulms-totp-btn"));
+    panel.querySelector(".kulms-totp-actions .kulms-totp-btn").click(); // its first button shows the code
+    await idle();
+    const work = await measure(() => clock.advance(1000));
+    tab.close();
+    return work;
+  };
+  const d = await degree(1024, second);
+  assert.ok(d < 0.5, `a second's work grows as the ${d.toFixed(2)}th power of the secret's length`);
 });

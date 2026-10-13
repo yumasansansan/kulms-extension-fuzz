@@ -48,7 +48,7 @@ const FUZZ = path.join(import.meta.dirname, "..", "fuzz");
 // lib.mjs's values, the answers first: a value of no bounds takes what is left
 // of an input.
 const READERS = { "lib.mjs's values": (fdp) => [answer(fdp, bytes(fdp), "text/html"), answer(fdp, string(fdp), "text/plain"), jsonText(value(fdp)), value(fdp)] };
-for (const target of ["site-contact", "syllabus-detail", "syllabus-search", "background-message"]) {
+for (const target of ["site-contact", "syllabus-detail", "syllabus-search", "background-message", "sidebar", "resources", "submission", "grading-bridge", "popup", "totp-register"]) {
   READERS[target] = (await import(pathToFileURL(path.join(FUZZ, "targets", `${target}.fuzz.mjs`)).href)).read;
 }
 

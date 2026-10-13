@@ -10,7 +10,7 @@
 // manifest has them, drawn from a fresh cache so that nothing is fetched.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Browser, Net, openPopup, settle, until } from "../harness/index.mjs";
+import { Browser, Net, idle, openPopup, until } from "../harness/index.mjs";
 import { COURSE_PAGE, D, H, LMS, assignment, cached, card, openCoursePage, openPanel } from "./lms.mjs";
 
 function browserWith(stored) {
@@ -21,9 +21,10 @@ function browserWith(stored) {
 
 // Two tabs of the course page with their panels open, as when a user keeps
 // the LMS open in two tabs: each has read the stored state before the other
-// changes it. What one tab stores reaches the other on the next turn, as
-// storage.onChanged does in Chrome, so a wait of 20ms after a change lets the
-// other tab hear of it however slow the machine (its timer comes later).
+// changes it. What one tab stores reaches the other on a later turn, as
+// storage.onChanged does in Chrome; idle() (harness/work.mjs) after a change
+// waits until the other tab has heard of it and done all that follows from
+// it, however slow the machine.
 async function twoTabs(t, assignments) {
   const browser = browserWith(cached(assignments));
   t.after(() => browser.close());
@@ -41,18 +42,18 @@ function addMemo(panel, text) {
 test("B1: a memo added in one tab survives a memo added in another", async (t) => {
   const { stored, panelA, panelB } = await twoTabs(t, [assignment("A1", "レポート1", Date.now() + 30 * H)]);
   addMemo(panelB, "Bで書いたメモ");
-  await settle(20);
+  await idle();
   addMemo(panelA, "Aで書いたメモ");
-  await settle(20);
+  await idle();
   assert.deepEqual((stored("kulms-memos") || []).map((m) => m.text).sort(), ["Aで書いたメモ", "Bで書いたメモ"]);
 });
 
 test("B1: a completion check made in one tab survives one made in another", async (t) => {
   const { stored, panelA, panelB } = await twoTabs(t, [assignment("A1", "レポート1", Date.now() + 30 * H), assignment("A2", "レポート2", Date.now() + 50 * H)]);
   card(panelB, "レポート1").querySelector(".kulms-checkbox").click();
-  await settle(20);
+  await idle();
   card(panelA, "レポート2").querySelector(".kulms-checkbox").click();
-  await settle(20);
+  await idle();
   assert.deepEqual(Object.keys(stored("kulms-checked-assignments") || {}).sort(), ["A1", "A2"]);
 });
 
@@ -62,7 +63,7 @@ test("B1: an assignment hidden in one tab stays hidden when another tab hides on
     const button = card(panel, name).querySelector(".kulms-card-delete");
     button.click(); // asks to confirm
     button.click();
-    await settle(20);
+    await idle();
   }
   assert.deepEqual(Object.keys(stored("kulms-dismissed-assignments") || {}).sort(), ["A1", "A2"]);
 });
@@ -70,7 +71,7 @@ test("B1: an assignment hidden in one tab stays hidden when another tab hides on
 test("B1: a panel open in one tab shows a memo added in another", async (t) => {
   const { panelA, panelB } = await twoTabs(t, [assignment("A1", "レポート1", Date.now() + 30 * H)]);
   addMemo(panelB, "Bで書いたメモ");
-  await settle(20);
+  await idle();
   assert.ok(card(panelA, "Bで書いたメモ"), "the memo is not in the other tab's panel");
 });
 
@@ -90,6 +91,24 @@ test("B2: an assignment hidden 31 days ago stays hidden, out of the deleted sect
   assert.deepEqual(names(panel, ".kulms-deleted-card"), ["昨日隠した課題"]);
 });
 
+// A page whose CSP requires Trusted Types refuses a string at their sinks, and
+// takes only scripts and styles it has a nonce or a hash for (harness/contexts.mjs,
+// harness/detectors.mjs).
+test("S11: the assignment panel is drawn without a string passed to a sink of Trusted Types", { todo: "S11: the panel builds and clears itself with innerHTML" }, async (t) => {
+  const browser = browserWith(cached([assignment("A1", "レポート1", Date.now() + 30 * H)]));
+  t.after(() => browser.close());
+  await openPanel(openCoursePage(browser));
+  assert.deepEqual(browser.untrusted.map((u) => `${u.where}: ${JSON.stringify(String(u.value).slice(0, 60))}`), []);
+});
+
+test("S10: a course page gets no <style> without a nonce from the extension", { todo: "S10: the urgency colours and the sidebar are styled with <style> elements of no nonce" }, async (t) => {
+  const browser = browserWith({ ...cached([]), "kulms-settings": { sidebarResize: true } });
+  t.after(() => browser.close());
+  const tab = openCoursePage(browser);
+  await openPanel(tab);
+  assert.deepEqual([...tab.document.querySelectorAll("style:not([nonce])")].map((st) => st.id || st.textContent.slice(0, 40)), []);
+});
+
 // After a submission, submit-detect.js leaves the IDs submitted in the page's
 // sessionStorage for assignments.js to mark as done; the page's own scripts
 // can write there too.
@@ -98,11 +117,14 @@ test("B12: a list of submitted IDs that the page has spoiled is read as far as i
     const browser = browserWith(cached([assignment("A1", "レポート1", Date.now() + 30 * H)]));
     t.after(() => browser.close());
     openCoursePage(browser, { prepare: (w) => w.sessionStorage.setItem("kulms-submitted-ids", ids) });
-    const checked = () => browser.storage.local.dump()["kulms-checked-assignments"] || {};
-    if (ids.includes("A1")) await until(() => "A1" in checked(), { timeout: 2000 });
-    else await settle(300);
+    // All that the page does with the value is done before it is looked at:
+    // an error that comes late is not taken for a value read well, and
+    // nothing of one value is still under way when the next is tried or the
+    // test ends, however slow the machine.
+    await idle();
+    const checked = browser.storage.local.dump()["kulms-checked-assignments"] || {};
     assert.deepEqual(browser.errors.map((e) => `${ids}: ${e.error}`), []);
-    assert.deepEqual(Object.keys(checked()), ids.includes("A1") ? ["A1"] : [], ids);
+    assert.deepEqual(Object.keys(checked), ids.includes("A1") ? ["A1"] : [], ids);
   }
 });
 
@@ -157,6 +179,40 @@ test("B17: stored memos that are not a list do not stop the popup's list", { tod
   assert.ok(popup.document.body.textContent.includes("レポート1"), "the popup lacks the assignment");
 });
 
+// The stored state of B25: the cache's list of assignments a string, fresh
+// enough that the panel takes it.
+const withAssignmentsNotAList = () => ({ "kulms-assignments": { timestamp: Date.now(), assignments: "課題" } });
+const EMPTY = ["課題が見つかりませんでした", "LMS ページを開いて課題を読み込んでください"];
+
+test("B25: a stored cache whose list of assignments is not a list does not stop the drawing of the panel", { todo: "B25: the panel takes cached.assignments as a list, and assignments.forEach is not a function" }, async (t) => {
+  const browser = browserWith(withAssignmentsNotAList());
+  t.after(() => browser.close());
+  const tab = openCoursePage(browser);
+  await until(() => tab.document.getElementById("kulms-assign-toggle"));
+  tab.document.getElementById("kulms-assign-toggle").click();
+  const panel = tab.document.getElementById("kulms-assign-panel");
+  assert.ok(await until(() => EMPTY.some((text) => panel.textContent.includes(text)), { timeout: 2000 }), "the panel shows no list, empty or not");
+});
+
+test("B25: a stored cache whose list of assignments is not a list does not stop the popup", { todo: "B25: render() calls assignments.filter on what is stored" }, async (t) => {
+  const browser = browserWith(withAssignmentsNotAList());
+  t.after(() => browser.close());
+  const popup = openPopup(browser);
+  assert.ok(await until(() => EMPTY.some((text) => popup.document.body.textContent.includes(text)), { timeout: 2000 }), "the popup shows no list, empty or not");
+});
+
+test("B23: a page that has filled its sessionStorage still has the panel load its assignments", { todo: "B23: openPanel() writes kulms-panel-open to the page's sessionStorage, and QuotaExceededError stops it before it loads" }, async (t) => {
+  const browser = browserWith(cached([assignment("A1", "レポート1", Date.now() + 30 * H)]));
+  t.after(() => browser.close());
+  // The page's own data, up to jsdom's quota of 5,000,000 code units.
+  const fill = (w) => w.sessionStorage.setItem("page-data", "x".repeat(5000000 - "page-data".length));
+  const tab = openCoursePage(browser, { prepare: fill });
+  await until(() => tab.document.getElementById("kulms-assign-toggle"));
+  tab.document.getElementById("kulms-assign-toggle").click();
+  const panel = tab.document.getElementById("kulms-assign-panel");
+  assert.ok(await until(() => card(panel, "レポート1"), { timeout: 2000 }), "the panel did not load the assignments");
+});
+
 test("a memo deleted 31 days ago is deleted for good", async (t) => {
   const memo = { id: 1, text: "古いメモ", created: Date.now() - 40 * D };
   const browser = browserWith({
@@ -174,7 +230,7 @@ test("B3: a course with an overdue assignment is coloured as overdue", { todo: "
   const browser = browserWith(cached([assignment("A1", "期限切れ", Date.now() - 2 * D), assignment("A2", "ずっと先", Date.now() + 60 * D)]));
   t.after(() => browser.close());
   const tab = openCoursePage(browser);
-  await settle(300);
+  await idle();
   const li = tab.document.getElementById("site-list-item-C1");
   assert.ok(li.classList.contains("cs-tab-danger"), `classes: ${li.className}`);
 });
@@ -196,7 +252,7 @@ test("B7: the assignments of a course the sidebar does not show link to its tool
   const panel = await openPanel(openCoursePage(browser, { net }));
   assert.deepEqual([...panel.querySelectorAll(".kulms-assign-card-name a")].map((link) => new URL(link.href).pathname), Array(3).fill("/portal/site/C9/tool/T9"));
   assert.equal(net.requests.filter((r) => r.url.endsWith("/pages.json")).length, 1);
-  await settle(100);
+  await idle();
   const kept = browser.storage.local.dump()["kulms-assignments"];
   assert.equal(kept.timestamp, timestamp);
   assert.deepEqual(kept.assignments.map((x) => x.url), Array(3).fill(`${LMS}/portal/site/C9/tool/T9`));
@@ -206,12 +262,12 @@ test("B8: drawing the list twice in a row leaves one banner of each kind", { tod
   const browser = browserWith(cached([assignment("A1", "レポート1", Date.now() + 30 * H)]));
   t.after(() => browser.close());
   const panel = await openPanel(openCoursePage(browser));
-  await settle(100); // the banners come when storage answers
+  await idle(); // the banners come when storage answers
   assert.equal(panel.querySelectorAll(".kulms-tester-banner").length, 2);
   const checkbox = () => panel.querySelector(".kulms-checkbox");
   checkbox().click();
   checkbox().click();
-  await settle(100);
+  await idle();
   assert.equal(panel.querySelectorAll(".kulms-tester-banner").length, 2);
 });
 
@@ -224,7 +280,7 @@ test("B8: the list's banners do not come into the settings view opened before st
   // settings view opened before it does.
   panel.querySelector(".kulms-checkbox").click();
   tab.internals["src/assignments.js"].showSettingsView();
-  await settle(100);
+  await idle();
   assert.equal(panel.querySelectorAll(".kulms-tester-banner").length, 0);
 });
 
@@ -237,7 +293,7 @@ test("B9: a refresh asked for while the list loads is carried out after it, and 
     .on(`${LMS}/direct/sam_pub/context/C1.json`, json({ sam_pub_collection: [] }));
   const tab = openCoursePage(browser, { net });
   await until(() => tab.internals["src/assignments.js"] && tab.document.getElementById("kulms-assign-toggle"));
-  await settle(100);
+  await idle();
   const a = tab.internals["src/assignments.js"];
   const fetches = () => net.requests.filter((r) => r.url.endsWith("/direct/assignment/site/C1.json")).length;
   const before = fetches();
@@ -317,6 +373,17 @@ test("B19: one malformed assignment does not take the course's other assignments
 test("B19: one malformed quiz does not take the course's other quizzes out", { todo: B19 }, async (t) => {
   const names = await fetchedNames(t, [], [null, { title: "小テスト1", publishedAssessmentId: 7, dueDate: due }]);
   assert.ok(names.includes("小テスト1"), JSON.stringify(names));
+});
+
+test("B19: an assignment whose title is an object of its own toString does not stop the drawing of the panel", { todo: "B19: the title is kept as it is, and making a string of it throws where the panel is drawn" }, async (t) => {
+  const json = (body) => ({ headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const net = new Net()
+    .on(`${LMS}/direct/assignment/site/C1.json`, json({ assignment_collection: [{ title: { toString: 0 }, dueTime: due }, { title: "レポート1", entityId: "A1", dueTime: due }] }))
+    .on(`${LMS}/direct/sam_pub/context/C1.json`, json({ sam_pub_collection: [] }));
+  const panel = await openPanel(openCoursePage(browser, { net }));
+  assert.ok(card(panel, "レポート1"), "the panel lacks レポート1");
 });
 
 test("B19: one malformed site in Sakai's list of courses does not take the other courses out", { todo: B19 }, async (t) => {

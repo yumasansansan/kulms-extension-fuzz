@@ -52,7 +52,7 @@
 // or an answer that is not JSON, which the catching is there for.
 import vm from "node:vm";
 import { Browser, Net, aside, idle, openBackground, openPopup, openTab, uncounted, watch } from "../../harness/index.mjs";
-import { answer, brief, bytes, calibrate, fail, json, judge, ladder, open, provider, string, value, warnings } from "../lib.mjs";
+import { answer, brief, bytes, calibrate, fail, json, judge, ladder, open, provider, seen, string, value, warnings } from "../lib.mjs";
 
 const LMS = "https://lms.gakusei.kyoto-u.ac.jp";
 let replies = [];
@@ -195,7 +195,9 @@ async function run(data) {
   if (!open("S1") && from.kind === "tab" && result.response && result.response.secret) {
     fail(`a content script of ${from.url} was handed a TOTP secret for ${brief(sent.value)}`);
   }
-  const problems = w.check();
+  // Known: B20, as above: the same slip, as the function's catch clause hands
+  // it on (harness/detectors.mjs).
+  const problems = seen(w).filter((p) => !(open("B20") && /^a slip the extension caught at background\.js:\d+ in fetchSakaiSiteContact /.test(p)));
   if (problems.length) fail(`message ${brief(sent.value)} from ${input.from}:\n${problems.join("\n")}`);
   judge();
 }

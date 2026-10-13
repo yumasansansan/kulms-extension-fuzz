@@ -19,7 +19,7 @@
 # entered (harness/coverage.mjs). The tests run as package.json has them, each
 # test file in a process of its own, and the known inputs each in one of
 # their own beneath it. A target's corpus, with the target's seeds, is
-# replayed in a process of its own (fuzz/replay.mjs) with the settings of
+# replayed a hundred inputs to a process (fuzz/replay.mjs) with the settings of
 # the fuzzing in CI, where the time of the rungs is not looked at.
 #
 # The number is not a gate: nothing here fails for a figure being low. It is
@@ -39,6 +39,7 @@ corpora=${1:-}
 
 out=coverage
 raw=$out/raw
+chunk=100 # the inputs a process replays (below)
 status=0
 if [ "$report_only" -eq 0 ]; then
   rm -rf "$out"
@@ -59,8 +60,24 @@ if [ "$report_only" -eq 0 ]; then
       fi
       echo "== the corpus of $target, counting what it reaches"
       mkdir -p "$raw/fuzz-$target"
-      if ! KULMS_FUZZ_NOISE=Infinity NODE_V8_COVERAGE="$PWD/$raw/fuzz-$target" \
-          node fuzz/replay.mjs "$target" "${inputs[@]}" > "$raw/fuzz-$target.log" 2>&1; then
+      # The inputs go $chunk at a time, each lot in a process of its own. A
+      # process that counts keeps every script it compiled, with its counts,
+      # and a target that opens a page for each input compiles the
+      # extension's scripts anew for each: one process for a whole corpus ran
+      # out of memory as the corpus grew (the popup's 405 inputs passed the
+      # heap's 4 GB). The counts of all the processes are merged
+      # (harness/coverage.mjs).
+      files=()
+      for d in "${inputs[@]}"; do
+        while IFS= read -r f; do files+=("$f"); done < <(find "$d" -maxdepth 1 -type f ! -name '.*' ! -name '*.md' ! -name '*.license' | LC_ALL=C sort)
+      done
+      : > "$raw/fuzz-$target.log"
+      failed=0
+      for ((i = 0; i < ${#files[@]}; i += chunk)); do
+        KULMS_FUZZ_NOISE=Infinity NODE_V8_COVERAGE="$PWD/$raw/fuzz-$target" \
+          node fuzz/replay.mjs "$target" "${files[@]:i:chunk}" >> "$raw/fuzz-$target.log" 2>&1 || failed=1
+      done
+      if [ "$failed" -ne 0 ]; then
         status=1
         grep -v '^ok' "$raw/fuzz-$target.log" | tail -n 20
       fi

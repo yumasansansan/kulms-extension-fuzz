@@ -30,6 +30,15 @@
 // fuzzer coverage although the harness runs it in vm contexts and jsdom
 // windows, not as a module. Elsewhere the code comes back as it went in.
 //
+// What the extension catches and goes on from is out of sight of every other
+// detector: a TypeError swallowed by a catch clause leaves no trace but the
+// part of the page it took away. So each catch clause of the extension hands
+// what it caught, and where, to __kulmsCaught() before its own code runs, a
+// clause without a binding given one; and each handler of a rejection that
+// it passes to .catch() or to the second place of .then() is handed to
+// __kulmsRejected(), which hands the reason on in the same way
+// (harness/detectors.mjs). Both are put on the line they belong to.
+//
 // sourcePlaces() says where in the extension's own code each place of the
 // code the harness runs comes from, so that what V8 counts of the code the
 // harness runs can be read as counts of the extension's code
@@ -111,6 +120,74 @@ function pieces(code, edits) {
   return made.reverse();
 }
 
+// The name a function of `ast` goes by in a report: its own, or the one of
+// the variable, property or method it is the value of.
+function functionName(fn, parent) {
+  if (fn.id) return fn.id.name;
+  if (!parent) return null;
+  const named = (k) => (k && (k.type === "Identifier" ? k.name : k.type === "Literal" ? String(k.value) : null));
+  if (parent.type === "VariableDeclarator") return named(parent.id);
+  if (parent.type === "AssignmentExpression") return parent.left.type === "MemberExpression" ? named(parent.left.property) : named(parent.left);
+  if (parent.type === "Property" || parent.type === "MethodDefinition" || parent.type === "PropertyDefinition") return named(parent.key);
+  return null;
+}
+
+// The edits that hand to __kulmsCaught() what each catch clause of `ast` (the
+// code of `file`) catches, and to __kulmsRejected() each rejection handler the
+// code gives a promise, with where: "<file>:<line> in <function>" (see the
+// top of this file). A catch clause that destructures what it catches binds
+// the whole and destructures it as the first statement of its block.
+function catchers(ast, file, code) {
+  const lineStarts = [0];
+  for (let i = code.indexOf("\n"); i !== -1; i = code.indexOf("\n", i + 1)) lineStarts.push(i + 1);
+  const lineOf = (at) => {
+    let lo = 0;
+    let hi = lineStarts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (lineStarts[mid] <= at) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo + 1;
+  };
+  const edits = [];
+  const names = [];
+  const site = (at) => JSON.stringify(`${file}:${lineOf(at)}${names.length && names[names.length - 1] ? ` in ${names[names.length - 1]}` : ""}`);
+  const visit = (node, depth, parent) => {
+    if (!node || typeof node.type !== "string") return;
+    const fn = node.type === "FunctionDeclaration" || node.type === "FunctionExpression" || node.type === "ArrowFunctionExpression";
+    if (fn) names.push(functionName(node, parent) || (names.length ? names[names.length - 1] : null));
+    if (node.type === "CatchClause") {
+      const at = node.body.start + 1;
+      if (!node.param) {
+        edits.push({ at: node.start + "catch".length, text: " (__kulmsCaughtError)" });
+        edits.push({ at, text: ` __kulmsCaught(__kulmsCaughtError, ${site(node.start)});` });
+      } else if (node.param.type === "Identifier") {
+        edits.push({ at, text: ` __kulmsCaught(${node.param.name}, ${site(node.start)});` });
+      } else {
+        const pattern = code.slice(node.param.start, node.param.end);
+        if (/\/\/|\/\*/.test(pattern)) throw new Error(`${file}:${lineOf(node.start)}: a catch clause destructures with a comment in its pattern, which harness/source.mjs cannot move to the clause's block on one line`);
+        edits.push({ at: node.param.start, end: node.param.end, text: "__kulmsCaughtError" + "\n".repeat((pattern.match(/\n/g) || []).length) });
+        edits.push({ at, text: ` __kulmsCaught(__kulmsCaughtError, ${site(node.start)}); let ${pattern.replace(/\s+/g, " ")} = __kulmsCaughtError;` });
+      }
+    } else if (node.type === "CallExpression" && node.callee.type === "MemberExpression" && !node.callee.computed && node.callee.property.type === "Identifier") {
+      const handler = node.callee.property.name === "catch" ? node.arguments[0] : node.callee.property.name === "then" ? node.arguments[1] : null;
+      if (handler && handler.type !== "SpreadElement") {
+        edits.push({ at: handler.start, text: "__kulmsRejected(", depth: depth + 1, side: "open" });
+        edits.push({ at: handler.end, text: `, ${site(handler.start)})`, depth: depth + 1, side: "close" });
+      }
+    }
+    for (const key of Object.keys(node)) {
+      const v = node[key];
+      if (Array.isArray(v)) v.forEach((x) => visit(x, depth + 1, node));
+      else if (v && typeof v.type === "string") visit(v, depth + 1, node);
+    }
+    if (fn) names.pop();
+  };
+  visit(ast, 0, null);
+  return edits;
+}
+
 // The edits that hand each regular expression literal of `ast` (the code of
 // `file`) that is one of a finding to __kulmsBacktracking().
 function backtrackingRegExps(ast, file, code) {
@@ -187,6 +264,9 @@ function editsOf(name, code, { expose, extension }) {
     const counting = counters(ast, tokens);
     edits.push(...counting.inserts, ...backtrackingRegExps(ast, name, code));
     sites = counting.sites;
+    // The libraries the extension bundles (vendor/) catch what they throw as
+    // their own way of going on; what they let out is seen like the rest.
+    if (!name.startsWith("vendor/")) edits.push(...catchers(ast, name, code));
   }
   return { edits, sites };
 }
