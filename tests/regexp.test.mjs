@@ -258,3 +258,16 @@ test("the backtracking matcher of the harness finds what V8 finds, on each regul
     }), { numRuns: 300 });
   }
 });
+
+// A greedy loop keeps four numbers on the matcher's stack a unit it goes
+// through, and a link of the extension's reaches tens of millions of units on
+// the top rung of a fuzzing input: past what one array of V8 holds (some 134
+// million elements), the matcher threw a RangeError of its own, which the
+// daily fuzzing of assignments met on 2026-10-13 in extractCoursesFromDOM().
+test("the backtracking matcher keeps the choices of a greedy loop over 40 million units", () => {
+  const r = regular.find((x) => x.file === "src/assignments.js" && x.source === String.raw`\/portal\/site\/([^\/?#]+)`);
+  assert.ok(r, "src/assignments.js has no longer the regular expression of its course links");
+  const s = "https://lms.gakusei.kyoto-u.ac.jp/portal/site/" + "x".repeat(4e7);
+  const m = new RegExp(r.source, r.flags).exec(s);
+  assert.deepEqual(run(compile(r.source, r.flags), s, 0, () => {}), { index: m.index, end: m.index + m[0].length });
+});

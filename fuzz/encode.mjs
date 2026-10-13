@@ -285,18 +285,6 @@ export function value(w, v) {
   throw new TypeError(`value() is not written for ${Object.prototype.toString.call(v)}`);
 }
 
-// jsonText() reads nothing for v when v holds no number that JSON has no
-// literal for (NaN, ±Infinity, -0) and no BigInt, which these plans do not
-// use.
-export function jsonText(w, v) {
-  JSON.stringify(v, (key, x) => {
-    if (typeof x === "bigint" || (typeof x === "number" && (!Number.isFinite(x) || Object.is(x, -0)))) {
-      throw new TypeError(`jsonText() is not written for ${String(x)}`);
-    }
-    return x;
-  });
-}
-
 // answer() gives the body as it is, with status 200 and the type, or with
 // `utf8` the type with "; charset=utf-8" (the second of contentType()'s).
 export function answer(w, { utf8 = false } = {}) {

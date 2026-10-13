@@ -107,7 +107,7 @@ async function check(data) {
   const href = (fdp.consumeBoolean() ? "?assignmentId=/assignment/a/" : "") + string(fdp) + (fdp.consumeBoolean() ? "&submissionId=/assignment/s/" : "") + string(fdp);
   const payload = { requestId: "@REQUEST@", submissions: fdp.consumeBoolean() ? value(fdp) : submissions(fdp, status) };
   switch (fdp.consumeIntegralInRange(0, 2)) {
-    case 0: detail = jsonText(fdp, payload); break;
+    case 0: detail = jsonText(payload); break;
     case 1: detail = string(fdp); break;
     default: {
       const sent = clone(payload);

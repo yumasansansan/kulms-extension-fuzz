@@ -135,7 +135,7 @@ function memo(fdp) {
 
 // The answer to one kind of request: JSON text of make()'s value, or of any
 // value, through answer().
-const reply = (fdp, make) => answer(fdp, jsonText(fdp, either(fdp, make)), "application/json");
+const reply = (fdp, make) => answer(fdp, jsonText(either(fdp, make)), "application/json");
 
 // The sidebar's courses: none, or as many links to /portal/site/<ID> as the
 // input has bytes for, the IDs and the names any strings (a page holds only

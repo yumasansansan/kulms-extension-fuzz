@@ -188,6 +188,65 @@ export function compile(source, flags) {
   return p;
 }
 
+// The choices to go back to, as pairs of numbers, on a stack of blocks: a
+// plain array holds some 134 million elements at most (V8's limit for the
+// elements of one array, past which push() throws a RangeError), and a greedy
+// loop keeps four numbers a unit it goes through (a split and a mark, each a
+// pair), so a loop over a link of tens of millions of units passed it. The
+// stack is one for every try, which run() empties of its blocks when it ends.
+const BLOCK = 1 << 22; // numbers a block holds, once the first has grown to it
+class Choices {
+  constructor() {
+    this.blocks = []; // the full blocks under the top one
+    this.top = new Int32Array(1 << 10);
+    this.n = 0; // the numbers in the top block
+  }
+
+  get empty() {
+    return this.n === 0 && this.blocks.length === 0;
+  }
+
+  // A pair: the blocks hold an even count of numbers, so a pair never
+  // straddles two.
+  push(a, b) {
+    if (this.n === this.top.length) {
+      if (this.top.length < BLOCK) {
+        const grown = new Int32Array(this.top.length * 2);
+        grown.set(this.top);
+        this.top = grown;
+      } else {
+        this.blocks.push(this.top);
+        this.top = new Int32Array(BLOCK);
+        this.n = 0;
+      }
+    }
+    this.top[this.n++] = a;
+    this.top[this.n++] = b;
+  }
+
+  pop() {
+    if (this.n === 0) {
+      this.top = this.blocks.pop();
+      this.n = this.top.length;
+    }
+    return this.top[--this.n];
+  }
+
+  // Empty, keeping one block for the next try.
+  clear() {
+    if (this.blocks.length) this.top = this.blocks[0];
+    this.blocks = [];
+    this.n = 0;
+  }
+
+  // Empty, and as small as it began.
+  shrink() {
+    this.clear();
+    if (this.top.length > 1 << 10) this.top = new Int32Array(1 << 10);
+  }
+}
+const back = new Choices();
+
 // One try at `start`: the end of the match, or -1, and the steps it took.
 function attempt(p, s, start, counted) {
   const { code } = p;
@@ -195,7 +254,7 @@ function attempt(p, s, start, counted) {
   const marks = new Array(p.marks).fill(-1);
   // Choices to go back to, as [pc, i], and marks to restore, as [-1 - mark,
   // the place it had].
-  const back = [];
+  back.clear();
   let pc = 0;
   let i = start;
   let steps = 0;
@@ -224,7 +283,7 @@ function attempt(p, s, start, counted) {
     }
     // Back to the last choice, restoring the marks set since.
     for (;;) {
-      if (back.length === 0) {
+      if (back.empty) {
         counted(steps);
         return -1;
       }
@@ -247,10 +306,14 @@ function attempt(p, s, start, counted) {
 // { index: -1 }. Its steps are handed to counted() as it goes.
 export function run(p, s, lastIndex, counted) {
   const from = p.global || p.sticky ? lastIndex : 0;
-  for (let start = from; start <= s.length; start++) {
-    const end = attempt(p, s, start, counted);
-    if (end >= 0) return { index: start, end };
-    if (p.sticky) break;
+  try {
+    for (let start = from; start <= s.length; start++) {
+      const end = attempt(p, s, start, counted);
+      if (end >= 0) return { index: start, end };
+      if (p.sticky) break;
+    }
+    return { index: -1, end: -1 };
+  } finally {
+    back.shrink();
   }
-  return { index: -1, end: -1 };
 }

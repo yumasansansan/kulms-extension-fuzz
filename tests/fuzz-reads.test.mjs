@@ -22,6 +22,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import fc from "fast-check";
 import { answer, bytes, jsonText, reading, string, value } from "../fuzz/lib.mjs";
+import { encode, repeated, string as written, value as writtenValue } from "../fuzz/encode.mjs";
 
 // What the provider is asked while `read` reads `data` on rung `m`, and what it
 // answers, in order.
@@ -46,7 +47,7 @@ function questions(read, data, m) {
 const FUZZ = path.join(import.meta.dirname, "..", "fuzz");
 // lib.mjs's values, the answers first: a value of no bounds takes what is left
 // of an input.
-const READERS = { "lib.mjs's values": (fdp) => [answer(fdp, bytes(fdp), "text/html"), answer(fdp, string(fdp), "text/plain"), jsonText(fdp, value(fdp)), value(fdp)] };
+const READERS = { "lib.mjs's values": (fdp) => [answer(fdp, bytes(fdp), "text/html"), answer(fdp, string(fdp), "text/plain"), jsonText(value(fdp)), value(fdp)] };
 for (const target of ["site-contact", "syllabus-detail", "syllabus-search", "background-message"]) {
   READERS[target] = (await import(pathToFileURL(path.join(FUZZ, "targets", `${target}.fuzz.mjs`)).href)).read;
 }
@@ -63,3 +64,24 @@ for (const [name, read] of Object.entries(READERS)) {
     fc.assert(fc.property(fc.uint8Array({ maxLength: 600 }), (data) => alike(Buffer.from(data))), { numRuns: 2000 }); // the provider reads a Buffer
   });
 }
+
+// The JSON text of a value whose keys meet only on some rungs: the key "9",
+// repeated, holds NaN, and the key "99" Infinity. On the bottom rung they are
+// two keys; from ×2 up the repeated one is "99" as well, and one value takes
+// the other's place, so the text holds one number without a JSON literal
+// fewer. jsonText() once read how to write each such number, and the rungs
+// read the input otherwise for it (the daily fuzzing of site-contact,
+// 2026-10-13); it draws the way now.
+test("every rung reads an input alike: the JSON text of a value whose keys meet on some rungs", () => {
+  const data = encode((w) => {
+    w.int(0, 15, 14);
+    w.int(0, w.remaining, 2);
+    repeated(w, "9", 1);
+    writtenValue(w, NaN);
+    written(w, "99");
+    writtenValue(w, Infinity);
+  }, { doublings: 3 });
+  const read = (fdp) => jsonText(value(fdp));
+  const bottom = questions(read, data, 1);
+  for (const m of [2, 8]) assert.deepEqual(questions(read, data, m), bottom, `rung ×${m}`);
+});

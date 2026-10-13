@@ -13,5 +13,5 @@ export { Net } from "./net.mjs";
 export { openBackground, openTab, openPopup, contentScriptsFor, settle, until } from "./contexts.mjs";
 export { watch, assertClean } from "./detectors.mjs";
 export { exposeInternals, instrument, loadedFile, loadedSource } from "./source.mjs";
-export { LINEAR, degree, idle, measure, uncounted, work } from "./work.mjs";
+export { LINEAR, aside, degree, idle, measure, uncounted, work } from "./work.mjs";
 export { EXT, ROOT, manifest, read } from "./paths.mjs";

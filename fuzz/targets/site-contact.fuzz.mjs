@@ -47,7 +47,7 @@ const bg = openBackground(browser, { net });
 export function read(fdp) {
   const siteId = string(fdp);
   const tools = fdp.consumeBoolean() ? value(fdp) : [{ tools: [{ toolId: fdp.consumeBoolean() ? "sakai.siteinfo" : value(fdp), placementId: fdp.consumeBoolean() ? string(fdp) : value(fdp) }] }];
-  return { siteId, pages: answer(fdp, jsonText(fdp, tools), "application/json"), page: answer(fdp, bytes(fdp), "text/html") };
+  return { siteId, pages: answer(fdp, jsonText(tools), "application/json"), page: answer(fdp, bytes(fdp), "text/html") };
 }
 
 async function run(data) {

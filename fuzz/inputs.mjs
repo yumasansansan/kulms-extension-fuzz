@@ -26,13 +26,13 @@
 // that the seeds pass, and that each known input sets off its finding and
 // nothing else.
 //
-// jsonText() of lib.mjs reads nothing for a value that holds no NaN,
-// ±Infinity, -0 or BigInt, which no plan here hands it.
+// jsonText() of lib.mjs reads nothing from the input: a plan writes nothing
+// for it.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { read } from "../harness/index.mjs";
-import { answer, bytes, encode, repeatedBytes, string, value } from "./encode.mjs";
+import { answer, bytes, encode, repeated, repeatedBytes, string, value } from "./encode.mjs";
 
 const FUZZ = path.dirname(fileURLToPath(import.meta.url));
 const utf8 = (s) => new TextEncoder().encode(s);
@@ -200,6 +200,7 @@ export const INPUTS = [
       message: { action: "fetchTextbooks", courseName: "線形代数学Ａ", lectureCode: "", siteId: "S1" },
       body: utf8(SEARCH + BOOKS),
       replies: Array.from({ length: 5 }, () => ok("text/html; charset=utf-8", utf8(SEARCH + BOOKS))),
+      stored: null,
     },
   },
   {
@@ -221,6 +222,7 @@ export const INPUTS = [
       message: { action: "fetchTextbooks", courseName: "線形代数学Ａ", lectureCode: "", siteId: "S1" },
       body: utf8((ROW + BOOK).repeat(8)),
       replies: Array.from({ length: 5 }, () => ok("text/html; charset=utf-8", utf8((ROW + BOOK).repeat(8)))),
+      stored: null,
     },
   },
   {
@@ -322,6 +324,26 @@ export const INPUTS = [
       message: { action: "fetchTextbooks", courseName: "評定済", lectureCode: undefined, siteId: undefined },
       body: utf8(""),
       replies: Array.from({ length: 5 }, () => ok("text/html", utf8(""))),
+      stored: null,
+    },
+  },
+  {
+    // The popup saves a TOTP secret of 64 "A"s repeated 64 times, 4,096
+    // units, and on its rungs up to 2^5 times as many: encrypted, more bytes
+    // than the engine takes as arguments of String.fromCharCode().
+    file: "known/background-message/B22-long-secret",
+    doublings: 5,
+    plan: (w) => {
+      w.int(0, 2, 2);
+      w.int(0, 3, 1); w.int(0, 4, 0);
+      w.bool(true); w.bool(true); repeated(w, "A".repeat(64), 64);
+    },
+    expect: {
+      from: "popup",
+      message: { type: "kulms-totp-save", secret: "A".repeat(4096) },
+      body: utf8(""),
+      replies: Array.from({ length: 5 }, () => ok("text/html", utf8(""))),
+      stored: null,
     },
   },
   {

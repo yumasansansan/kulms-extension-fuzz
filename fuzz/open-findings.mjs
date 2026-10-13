@@ -33,6 +33,7 @@ export const OPEN = new Set([
   "B19", // one malformed item of Sakai's answer takes out all of a course's assignments
   "B20", // one malformed page of pages.json ends the search for the site's contact
   "B21", // t() puts nothing in a placeholder whose value, given alone, is empty
+  "B22", // the background cannot save a TOTP secret of more than about 125,000 bytes
   "P6", // the background builds its Shift_JIS table on its first search, about 156,000 steps
 ]);
 for (const id of (process.env.KULMS_FUZZ_LOOK_FOR || "").split(",")) OPEN.delete(id.trim());

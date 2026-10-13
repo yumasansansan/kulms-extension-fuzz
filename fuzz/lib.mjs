@@ -172,6 +172,7 @@ let judged = null; // the work of the rung last judged (judge())
 let questions = []; // what the bottom rung asked the provider, in order (provider())
 let asking = 0; // how many of them the rung being run has asked
 let browser = null; // the browser of the target whose input is being run (ladder())
+let chance = 0; // the state of the draws of jsonText() for the input being read (drawn())
 const bases = new WeakMap(); // the work of each target's input of no bytes, by its browser (calibrate())
 
 // How much more a rung may add over the rung below than that one added over
@@ -222,6 +223,17 @@ function heldToBottom(fdp) {
   });
 }
 
+// A number in [0, 1) drawn for the input being read, from its bytes (the
+// same draws on every rung): mulberry32, its state begun by provider() and
+// reading() from the seed of the input's bytes.
+function drawn() {
+  chance = (chance + 0x6d2b79f5) | 0;
+  let t = chance;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 2 ** 32;
+}
+
 // The seed that the extension's draws of chance begin from for `data`
 // (harness/work.mjs): its bytes, hashed (FNV-1a), the same on every rung, and
 // another for another input.
@@ -240,6 +252,7 @@ export function provider(data) {
   if (rung === 1) questions = [];
   asking = 0;
   const fdp = heldToBottom(new FuzzedDataProvider(data));
+  chance = seedOf(data) ^ 0x2545f491;
   top = 2 ** doublings(fdp);
   leftBottom = BOTTOM;
   leftTop = MAX_UNITS;
@@ -256,6 +269,7 @@ export function provider(data) {
 // one unless told), and nothing judged.
 export function reading(data, m = 1) {
   const fdp = new FuzzedDataProvider(data);
+  chance = seedOf(data) ^ 0x2545f491;
   rung = m;
   top = 2 ** doublings(fdp);
   leftBottom = BOTTOM;
@@ -687,19 +701,28 @@ export function clone(v) {
 }
 
 // The JSON text a server could send for v: what JSON.stringify writes, except
-// that the input picks how a number without a JSON literal is written (1e400
-// parses to Infinity, -1e400 to -Infinity, -0 stays -0), and a BigInt is
-// written as its digits, which JSON reads as a number that may lose precision.
-// Those numbers are put in v itself first, in the order JSON.stringify goes
-// through v, so that the plain JSON.stringify, which goes any depth, writes
-// the text (one with a replacer stops at about ten thousand levels). v is
-// made for the text alone, so changing it changes nothing else.
-export function jsonText(fdp, v) {
+// that a number without a JSON literal is written as a server might (NaN as
+// null, 1e400 or -1e400, Infinity as 1e400 or 1e999999, -Infinity as -1e400,
+// -0 as -0), and a BigInt as its digits, which JSON reads as a number that may
+// lose precision. Which way NaN and Infinity are written is drawn by chance
+// from the input's bytes (drawn()), not read from the input: how many of them
+// v holds can differ from rung to rung (a typed array over repeated bytes
+// holds the more NaNs, the more they repeat), and a read for each one made
+// the rungs read the input otherwise (provider()). The draws begin the same
+// on every rung, so that the k-th of them is written alike on each. Those
+// numbers are put in v itself first, in the order JSON.stringify goes through
+// v, so that the plain JSON.stringify, which goes any depth, writes the text
+// (one with a replacer stops at about ten thousand levels). v is made for the
+// text alone, so changing it changes nothing else.
+export function jsonText(v) {
   const literal = (x) => {
     if (typeof x === "bigint") return MARK + x.toString();
     if (typeof x !== "number") return x;
-    if (Number.isNaN(x)) return fdp.consumeBoolean() ? null : MARK + fdp.pickValue(["1e400", "-1e400"]);
-    if (x === Infinity) return MARK + (fdp.consumeBoolean() ? "1e400" : "1e999999");
+    if (Number.isNaN(x)) {
+      const d = drawn();
+      return d < 0.5 ? null : MARK + (d < 0.75 ? "1e400" : "-1e400");
+    }
+    if (x === Infinity) return MARK + (drawn() < 0.5 ? "1e400" : "1e999999");
     if (x === -Infinity) return MARK + "-1e400";
     if (Object.is(x, -0)) return MARK + "-0";
     return x;

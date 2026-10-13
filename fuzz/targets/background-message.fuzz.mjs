@@ -18,10 +18,18 @@
 // lecture code and by the name, reads the site's contact in two fetches,
 // pages.json and the Site Info page, and the syllabus in one). A message that
 // makes more fails the input, as the count above would then be out of date.
-// The background keeps its state between inputs, the TOTP store in IndexedDB
-// among it, as a service worker does between messages; but for the Shift_JIS
-// table it builds on its first search (P6, below), which each input finds as
-// every other input does.
+// Last, the input gives what the TOTP store held as the message came: the
+// secret an earlier session saved (any string), or none.
+//
+// One background serves every input, as a service worker serves message after
+// message, but what it keeps for later is each input's own. Its TOTP store in
+// IndexedDB is emptied before each input, and holds the secret the input
+// says, saved by the extension's own saveTotpSecret() apart from the input's
+// work (aside() of harness/work.mjs): kept from input to input, an earlier
+// input's secret made the work of a later load follow its size, a load of six
+// units decrypting a secret of millions. The Shift_JIS table that the
+// background builds on its first search is there for every input alike (P6,
+// below).
 //
 // It fails when a listener throws, when a promise of the background is
 // rejected with nothing to handle it, when the message gets no answer though
@@ -43,7 +51,7 @@
 // (warnings() of fuzz/lib.mjs), not on an HTTP error, a network that fails
 // or an answer that is not JSON, which the catching is there for.
 import vm from "node:vm";
-import { Browser, Net, idle, openBackground, openPopup, openTab, uncounted, watch } from "../../harness/index.mjs";
+import { Browser, Net, aside, idle, openBackground, openPopup, openTab, uncounted, watch } from "../../harness/index.mjs";
 import { answer, brief, bytes, calibrate, fail, json, judge, ladder, open, provider, string, value, warnings } from "../lib.mjs";
 
 const LMS = "https://lms.gakusei.kyoto-u.ac.jp";
@@ -97,7 +105,47 @@ export function read(fdp) {
   const from = fdp.pickValue(Object.keys(senders));
   const m = message(fdp);
   const b = bytes(fdp);
-  return { from, message: m, body: b, replies: Array.from({ length: FETCHES }, () => answer(fdp, b, "text/html")) };
+  const replies = Array.from({ length: FETCHES }, () => answer(fdp, b, "text/html"));
+  const stored = fdp.consumeBoolean() ? string(fdp) : null;
+  return { from, message: m, body: b, replies, stored };
+}
+
+// Known: B22 (docs/findings.md). background.js writes a secret's ciphertext
+// out by spreading its bytes into String.fromCharCode(), and the engine throws
+// a RangeError past so many arguments: about 125,000 bytes in V8, some 60,000
+// in the harness, whose wrappers of the built-ins pass the arguments on once
+// more. While B22 is open, no secret of more than 32 KiB in UTF-8 is saved; a
+// TOTP secret is some 32 characters. What the message's secret comes to as
+// text is what TextEncoder makes of it (nothing for none).
+const LONG_SECRET = 2 ** 15;
+function utf8Length(v) {
+  let text;
+  try {
+    text = String(v);
+  } catch {
+    return 0; // TextEncoder throws on it as well, before anything is encrypted
+  }
+  return new TextEncoder().encode(text).length;
+}
+const savesLongSecret = (m) => m !== null && typeof m === "object" && m.type === "kulms-totp-save" &&
+  m.secret !== undefined && utf8Length(m.secret) > LONG_SECRET;
+
+// Where background.js keeps the TOTP secret: its IndexedDB database, and the
+// key of chrome.storage.local an older version kept the ciphertext in.
+const TOTP_DB = "kulms-totp-db";
+const TOTP_LEGACY = "kulms-totp-encrypted";
+
+// The TOTP store as `stored` says an earlier session left it (the head of
+// this file).
+async function totpStore(stored) {
+  await new Promise((resolve, reject) => {
+    const req = bg.indexedDB.deleteDatabase(TOTP_DB);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => reject(new Error(`${TOTP_DB} is still open`));
+  });
+  browser.storage.local.unload([TOTP_LEGACY]);
+  if (stored !== null) await bg.global.saveTotpSecret(stored);
 }
 
 async function run(data) {
@@ -123,6 +171,11 @@ async function run(data) {
   // Known: S7. While it is open, the messages it throws on are left out, so
   // that the fuzzing goes on to what is not known yet.
   if (open("S7") && knownToThrowS7(sent.value)) return;
+  // Known: B22 (docs/findings.md). While it is open, no secret longer than
+  // LONG_SECRET is saved, by the message or as the store the input begins
+  // with: the input is left out.
+  if (open("B22") && (savesLongSecret(sent.value) || (input.stored !== null && utf8Length(input.stored) > LONG_SECRET))) return;
+  await aside(() => totpStore(input.stored));
   const w = watch(bg);
   const log = warnings(bg);
   let settled = false;

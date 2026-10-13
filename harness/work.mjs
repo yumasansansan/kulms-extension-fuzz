@@ -210,6 +210,16 @@ export function uncounted(f) {
 
 export const isPaused = () => paused;
 
+// Runs `f`, synchronous or not, apart from every input: in an asynchronous
+// context of its own, so that nothing it does or sets going counts toward the
+// input under way. A target puts in place so, through the extension's own
+// code, what an input says the extension had kept from before it (the TOTP
+// store of fuzz/targets/background-message.fuzz.mjs). Live inputs are
+// numbered from 1 (beginInput()), and 0 is none of them.
+export function aside(f) {
+  return inputs.run(0, f);
+}
+
 // --- The syntax that goes through a value, as each context calls it.
 
 const COMPARISONS = new Set(["===", "!==", "==", "!=", "<", "<=", ">", ">="]);

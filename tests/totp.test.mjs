@@ -195,3 +195,16 @@ test("the settings panel on the LMS saves a secret written with spaces and lower
   t.after(() => ext.browser.close());
   assert.deepEqual(await enterInSettingsPanel(ext, ["jbsw y3dp ehpk 3pxp"]), ["JBSWY3DPEHPK3PXP"]);
 });
+
+// B22: a secret whose ciphertext, spread into String.fromCharCode(), passes
+// what the engine takes as arguments (about 125,000 in V8). A TOTP secret is
+// some 32 characters; the background saves what it is given all the same.
+test("B22: the background saves a secret of 200,000 characters, and loads it", { todo: "B22: encryptSecret() spreads the ciphertext into String.fromCharCode(), which throws a RangeError" }, async (t) => {
+  const ext = await extension();
+  t.after(() => ext.browser.close());
+  const secret = "A".repeat(200000);
+  const saved = await ext.browser.deliver(ext.popup, [ext.bg], { type: "kulms-totp-save", secret });
+  assert.ok(saved.ok === true, `the save answered ${JSON.stringify(saved)}`);
+  const loaded = await ext.browser.deliver(ext.popup, [ext.bg], { type: "kulms-totp-load" });
+  assert.ok(loaded.secret === secret, "the secret loaded is not the one saved");
+});
