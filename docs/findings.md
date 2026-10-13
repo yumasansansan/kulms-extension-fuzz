@@ -565,9 +565,15 @@ JS はメモリ安全なので，ASan や MSan が見る種類の不具合は起
   - 拡張が自分で捕まえて警告だけ出すエラーのうち，プログラムの誤りを示すもの（TypeError などの文言）も失敗とする．B19 と B20 はこれで見つかった．
   - シードと既知の問題の入力は，`fuzz/inputs.mjs` が，対象の読む値の並びから書く（`fuzz/encode.mjs` が FuzzedDataProvider の逆をたどる）．入力の読み方を変えたときに，これらが黙って別の入力になるのを防ぐためで，テストは，既知の入力がその問題だけを起こすことも確かめる．
   - 修正ブランチは，`KULMS_EXTENSION_DIR` でその拡張を指し，`KULMS_FUZZ_LOOK_FOR` で直した問題を避けずに探して，ファジングで確かめる（下の「ファジングで避けている既知の問題」）．
+- **カバレッジ**（[harness/coverage.mjs](../harness/coverage.mjs)，[ci/coverage.sh](../ci/coverage.sh)）: テストとファズのコーパスが，拡張自身のコードのどこまで届くかを測る．拡張自身のコードは，manifest.json と popup のページが読み込むスクリプトの 17 本で，同梱のライブラリ（vendor/）は除く．
+  - 計装は足さず，V8 が数える（`NODE_V8_COVERAGE`）．vm で動く background も，jsdom の窓で動く content script と popup も数えられる．
+  - ハーネスが書き換えたコードで数えた範囲は，拡張のコードの元の位置に戻す（harness/source.mjs の `sourcePlaces()`）．ハーネスが足した部分（仕事を数える呼び出しと，内部を公開する getter と setter）は，範囲が空になって落ちる．
+  - プロセスごとの数をスクリプトごとにまとめ，ast-v8-to-istanbul で拡張のコードの構文木に当てて，istanbul-lib-instrument と同じ単位（文，分岐，関数）で数える．1 度も動かなかったスクリプトは，どこにも届いていないものとして入れる．
+  - 数字は判定に使わない．次のテストやファズ対象をどこに向けるかを読むためのもので，結果は，スクリプトごとの表と，届いていない関数の一覧と，1 行ずつ示すページ（istanbul の HTML）にする．V8 は，入ったブロックを最後まで動いたと数えるので，途中で例外を投げた呼び出しの後ろも届いたことになる．
+  - [tests/coverage.test.mjs](../tests/coverage.test.mjs) が，すべてのスクリプトで位置の戻し方を確かめ，別のプロセスで実際に数えた回数が，background と窓のどちらでも拡張の関数と文に出ることを確かめる．
 - **CI**（[yumasansansan/ADLplug-Next](https://github.com/yumasansansan/ADLplug-Next) にならう）:
   - 素の git でチェックアウトし，submodule も含める．Node と pnpm は，どちらも最新版を（pnpm は npm のレジストリが `latest` とする版を），`ci/setup.sh` が SHA-256 を確かめて入れる．外部の action は，commit で固定した `actions/upload-artifact` だけ．
-  - `ci.yml`（push ごと）: Ubuntu と Windows でのテスト，lint（このリポジトリには ESLint のすべての指摘で失敗し，submodule の拡張には DOM XSS と ReDoS のルールを掛けて報告だけする），REUSE，canary と各対象 1 分のファジング．落ちた入力は artifact に残す．
+  - `ci.yml`（push ごと）: Ubuntu と Windows でのテスト，lint（このリポジトリには ESLint のすべての指摘で失敗し，submodule の拡張には DOM XSS と ReDoS のルールを掛けて報告だけする），REUSE，canary と各対象 1 分のファジング，カバレッジの計測．落ちた入力は artifact に残す．カバレッジの計測は，テストと，次の毎日のファジングが引き継ぐコーパス（[ci/carry-over.sh](../ci/carry-over.sh)）を流し，1 行ずつ示すページを artifact に残す．数字では失敗にしないが，コーパスの入力がそのコミットで落ちれば失敗にする（次の毎日のファジングより先に分かる）．
   - `fuzz.yml`（毎日）: 各対象 20 分のファジング．コーパスを artifact で引き継ぎ，前回落ちた入力を最初に再生する．
   - どちらのジョブも，始めに，ファジングが終わるべき時刻（GitHub がジョブを止める 6 時間から，残したものを保存する 30 分を引いた時刻．`fuzz.yml` はジョブ自身の上限 330 分の 5 分前）を記録して `ci/fuzz.sh --until` に渡す．
 
@@ -657,6 +663,34 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 - 同じ日に，上流が v1.21.1（[`20d7da3`](https://github.com/Radian0523/kulms-extension/commit/20d7da3b9193960a2a1b38f1281e2e12c8155817)）を出した．B1 と B2 の PR を取り込み，B5 と B6 を同じ形で自ら直し，教科書パネルを今の学期の科目に絞った（[`f2cdec2`](https://github.com/Radian0523/kulms-extension/commit/f2cdec20f04a3ebdcc636a14d26aa8637101edd6)．教科書のキャッシュに学期を記録し，学期を持たないキャッシュや学期の違うキャッシュは取り直す）．submodule をこの版に進めた．
   - B1，B2，B5，B6 のテストは todo を外した．名前をキーにした教科書のキャッシュを描くテストは，学期を持たないキャッシュが使われなくなって失敗したので，今の学期を記録したキャッシュで確かめるようにした．
   - 同じ日に手動で各対象 20 分回したファジングのコーパス（7 対象の 737 入力）と，遅かった入力（8 件）は，v1.21.1 でも CI の設定ですべて通る．CI の設定で 7 対象を各 3 分回しても失敗はなく，canary も見つかった．拡張の DOM XSS と ReDoS の報告は，`087452e` と同じ規則と件数のままである．
+
+## カバレッジ
+
+2026-10-13 に，v1.21.1 で初めて測った．テストと，その日のファジングのコーパスとシード（7 対象の 749 入力）を流すと，拡張自身のコードのうち，文の 51.7%，分岐の 42.3%，関数の 54.5% に届く．テストだけでは文の 48.9%，コーパスだけでは 31.5% である．次の表は，文がテスト，コーパス，その両方で届く割合と，両方で届く分岐と関数の割合で，届く割合の低い順に並べた．
+
+| スクリプト | テスト | コーパス | 合わせて | 分岐 | 関数 |
+|---|---:|---:|---:|---:|---:|
+| `src/grading-ta-page.js` | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| `src/auth-totp-register.js` | 5.4% | 0.0% | 5.4% | 7.0% | 16.7% |
+| `src/sidebar-resize.js` | 10.2% | 10.2% | 10.2% | 9.4% | 33.3% |
+| `src/top-favbar.js` | 14.2% | 14.2% | 14.2% | 8.2% | 22.4% |
+| `src/file-drop.js` | 14.9% | 14.9% | 14.9% | 17.9% | 40.0% |
+| `src/grading-ta.js` | 13.2% | 17.5% | 17.5% | 21.3% | 20.8% |
+| `src/course-name.js` | 19.8% | 15.9% | 19.8% | 13.1% | 18.2% |
+| `src/course-click.js` | 25.0% | 25.0% | 25.0% | 16.7% | 66.7% |
+| `src/submit-detect.js` | 27.1% | 27.1% | 27.1% | 13.9% | 66.7% |
+| `src/tree-view.js` | 28.5% | 1.9% | 28.5% | 18.9% | 37.5% |
+| `popup.js` | 43.4% | 16.5% | 43.4% | 35.5% | 50.6% |
+| `src/settings.js` | 50.6% | 50.6% | 50.6% | 66.0% | 68.8% |
+| `src/textbooks.js` | 70.7% | 4.5% | 70.7% | 46.8% | 84.2% |
+| `src/tool-visibility.js` | 71.4% | 8.0% | 71.4% | 67.3% | 69.6% |
+| `src/assignments.js` | 68.5% | 45.0% | 72.4% | 62.3% | 71.6% |
+| `background.js` | 81.6% | 90.2% | 90.7% | 89.6% | 84.6% |
+| `src/auth-totp.js` | 94.3% | 0.0% | 94.3% | 80.0% | 85.7% |
+
+- どこからも動いていないのは `src/grading-ta-page.js` である．これは，TA 採点支援がページの世界に入れるブリッジで，Sakai の採点画面から提出の一覧や評点を読む．ハーネスの窓はページに入れた `<script>` を動かさず，`grading-status` の対象はブリッジの答えを自分で作るので，テストにもファジングにも入っていない．
+- テストとコーパスのどちらもほとんど届かないのは，LMS のページを整える content script（`top-favbar.js`，`sidebar-resize.js`，`file-drop.js`，`course-name.js`，`course-click.js`，`tree-view.js`），提出の検知（`submit-detect.js`），TOTP の登録補助（`auth-totp-register.js`），TA 採点支援（`grading-ta.js`）である．ファズ対象は 7 つとも，Sakai と KULASIS の応答，runtime のメッセージ，i18n の置換値，採点の応答から入るので，ページの DOM そのものを入力にする対象が無い．
+- `popup.js` はテストで 43.4%，コーパスで 16.5% に届く．`textbooks.js` と `tool-visibility.js` は，テストではそれぞれ 70.7% と 71.4% に届くが，コーパスでは 4.5% と 8.0% にとどまる．どれも，それを入口にするファズ対象が無い．
 
 ## 進める順序
 

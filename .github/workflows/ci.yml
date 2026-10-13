@@ -39,6 +39,16 @@
 # is not looked at on a runner, whose noise was not. The longer fuzzing, which
 # carries its corpus over from one run to the next, is fuzz.yml's, once a day.
 #
+# The coverage job measures what the tests reach of the extension's own code,
+# and what the corpus that the next run of fuzz.yml will carry on from reaches
+# of it (ci/carry-over.sh, ci/coverage.sh), and keeps the page that shows it
+# line by line as an artifact; the run's summary says it too. The number is
+# not a gate: nothing here fails for a figure being low. It is read to know
+# where the next test or fuzz target belongs. Each target's corpus is
+# replayed in a process of its own, as the next daily run starts from it, so
+# an input of it that fails on this commit fails the job, before that run
+# would.
+#
 # Each job checks the commit out with plain git, the submodule at its commit,
 # and ci/setup.sh installs the newest Node and the newest pnpm. The one
 # action, actions/upload-artifact, keeps the failing inputs; it is pinned to
@@ -191,5 +201,48 @@ jobs:
         with:
           name: fuzz-crashes
           path: fuzz-run/crashes/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  coverage:
+    name: coverage of the tests and the corpus
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    # The corpus is an artifact of a run of fuzz.yml, which gh reads with this
+    # run's token.
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Check out
+        run: |
+          git config --global core.autocrlf false
+          git -c init.defaultBranch=main init --quiet
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --quiet origin "$GITHUB_SHA"
+          git checkout --quiet --detach "$GITHUB_SHA"
+          git submodule update --init --depth 1
+          git log -1 --format='%H %s'
+
+      - name: Set up Node and pnpm
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/setup.sh
+
+      - name: Fetch the corpus the next fuzzing carries on from
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/carry-over.sh fuzz-run/corpora
+
+      - name: Count what the tests and the corpus reach
+        run: bash ci/coverage.sh fuzz-run/corpora
+
+      - name: Keep the page it leaves
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: coverage/html/
           if-no-files-found: ignore
           retention-days: 30

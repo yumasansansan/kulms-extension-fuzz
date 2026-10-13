@@ -174,6 +174,12 @@ KULMS_FUZZ_RUNGS=1 node fuzz/replay.mjs syllabus-detail fuzz-run/crashes/syllabu
 KULMS_EXTENSION_DIR=<チェックアウト> KULMS_FUZZ_LOOK_FOR=B10,B15 bash ci/fuzz.sh --only i18n 60 fuzz-run/fix/corpora fuzz-run/fix/crashes
 ```
 
+コーパスが拡張のコードのどこまで届くかは，テストと一緒に測ります（[../ci/coverage.sh](../ci/coverage.sh)）．各対象のコーパスとシードを，対象ごとに別のプロセスで流し，テストだけ，コーパスだけ，その両方で届く割合と，どこからも届かない関数を挙げます．届かない関数が，次のファズ対象やシードを向ける先です．
+
+```bash
+bash ci/coverage.sh fuzz-run/corpora
+```
+
 ## 失敗が見つかったら
 
 1. `node fuzz/replay.mjs` で再現し，原因を確かめます．仕事量の伸びで失敗した入力は，失敗の文言が，どの段で，どの段からの伸びを超えたかを述べます．

@@ -99,23 +99,7 @@ jobs:
       - name: Carry over the corpus and the inputs that failed
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p fuzz-run/corpora fuzz-run/earlier
-          # Only a run that fuzzed counts: one the schedule or a hand started,
-          # that passed or failed.
-          last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow fuzz.yml --branch main \
-            --status completed --limit 20 --json conclusion,databaseId,event \
-            --jq '[.[] | select(.event == "schedule" or .event == "workflow_dispatch")
-                       | select(.conclusion == "success" or .conclusion == "failure")][0].databaseId // empty')
-          if [ -z "$last" ]; then
-            echo "No earlier run: the corpus starts from the seed inputs."
-            exit 0
-          fi
-          echo "Carrying over from run $last."
-          gh run download "$last" --repo "$GITHUB_REPOSITORY" --name fuzz-corpora --dir fuzz-run/corpora \
-            || echo "Run $last kept no corpus: the corpus starts from the seed inputs."
-          gh run download "$last" --repo "$GITHUB_REPOSITORY" --name fuzz-crashes --dir fuzz-run/earlier \
-            || echo "Run $last kept no inputs that failed."
+        run: bash ci/carry-over.sh fuzz-run/corpora fuzz-run/earlier
 
       - name: Check that the fuzzer is looking
         run: bash ci/fuzz.sh --until "$FUZZ_UNTIL" --canary 60 fuzz-run/canary-corpora fuzz-run/canary-crashes

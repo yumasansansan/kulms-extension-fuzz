@@ -11,16 +11,21 @@
     "lint": "bash ci/lint.sh"
   },
   "devDependencies": {
+    "@bcoe/v8-coverage": "^1.0.2",
     "@eslint-community/regexpp": "^4.12.2",
     "@eslint/js": "^10.0.1",
     "@jazzer.js/core": "^4.0.0",
     "acorn": "^8.18.0",
+    "ast-v8-to-istanbul": "^1.0.7",
     "eslint": "^10.12.0",
     "eslint-plugin-no-unsanitized": "^4.1.5",
     "eslint-plugin-regexp": "^3.3.1",
     "fake-indexeddb": "^6.2.5",
     "fast-check": "^4.10.2",
     "globals": "^17.13.0",
+    "istanbul-lib-coverage": "^3.2.2",
+    "istanbul-lib-report": "^3.0.1",
+    "istanbul-reports": "^3.2.0",
     "jsdom": "30.1.2",
     "recheck": "^4.5.0"
   }

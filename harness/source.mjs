@@ -29,6 +29,11 @@
 // Jazzer.js runs, that is its instrumentation: the extension's code gives the
 // fuzzer coverage although the harness runs it in vm contexts and jsdom
 // windows, not as a module. Elsewhere the code comes back as it went in.
+//
+// sourcePlaces() says where in the extension's own code each place of the
+// code the harness runs comes from, so that what V8 counts of the code the
+// harness runs can be read as counts of the extension's code
+// (harness/coverage.mjs).
 import fs from "node:fs";
 import path from "node:path";
 import Module from "node:module";
@@ -74,14 +79,36 @@ export function exposeInternals(code, file) {
 // replacement is made first; then what opens a wrapping, the inner first, so
 // that the outer lands outside; then what closes one, the outer first, so
 // that the inner closes inside it and before anything that opens there.
+const editEnd = (e) => (e.end === undefined ? e.at : e.end);
+const editRank = (e) => (editEnd(e) > e.at ? 0 : e.side === "close" ? 2 : 1);
+const editDepth = (e) => e.depth || 0;
+const editOrder = (a, b) => b.at - a.at || editRank(a) - editRank(b) ||
+  (a.side === "close" ? editDepth(a) - editDepth(b) : editDepth(b) - editDepth(a));
+
 function apply(code, edits) {
   let out = code;
-  const end = (e) => (e.end === undefined ? e.at : e.end);
-  const rank = (e) => (end(e) > e.at ? 0 : e.side === "close" ? 2 : 1);
-  const depth = (e) => e.depth || 0;
-  const order = (a, b) => b.at - a.at || rank(a) - rank(b) || (a.side === "close" ? depth(a) - depth(b) : depth(b) - depth(a));
-  for (const e of [...edits].sort(order)) out = out.slice(0, e.at) + e.text + out.slice(end(e));
+  for (const e of [...edits].sort(editOrder)) out = out.slice(0, e.at) + e.text + out.slice(editEnd(e));
   return out;
+}
+
+// What `code` with `edits` made (apply()) is made of, in its order: pieces of
+// `length` characters, each standing for the code from `from` to `to`. A
+// piece no edit touched (`kept`) is that code itself; the text an edit puts
+// in stands for the place it is put at (from === to), or for the code it is
+// put in place of. The pieces are found as apply() makes the edits, from the
+// end back, each edit taking what is still the code as it was.
+function pieces(code, edits) {
+  const made = [];
+  let rest = code.length; // the code before this place is still as it was
+  for (const e of [...edits].sort(editOrder)) {
+    const to = editEnd(e);
+    if (to > rest) throw new Error(`the edit at ${e.at} overlaps one after it`);
+    if (rest > to) made.push({ length: rest - to, from: to, to: rest, kept: true });
+    made.push({ length: e.text.length, from: e.at, to, text: e.text });
+    rest = e.at;
+  }
+  if (rest > 0) made.push({ length: rest, from: 0, to: rest, kept: true });
+  return made.reverse();
 }
 
 // The edits that hand each regular expression literal of `ast` (the code of
@@ -150,6 +177,20 @@ function prepareCache() {
 
 const loaded = new Map();
 
+// The edits that make `code`, named `name`, the code prepare() runs, and its
+// counting sites.
+function editsOf(name, code, { expose, extension }) {
+  const { ast, tokens } = parse(code);
+  const edits = expose ? exposing(ast, name) : [];
+  let sites = 0;
+  if (extension) {
+    const counting = counters(ast, tokens);
+    edits.push(...counting.inserts, ...backtrackingRegExps(ast, name, code));
+    sites = counting.sites;
+  }
+  return { edits, sites };
+}
+
 // `code`, named `name` (a path under the cache), its internals exposed if
 // `expose`, and, if it is the extension's (`extension`), its work counted and
 // its regular expressions of a finding handed to __kulmsBacktracking(); written
@@ -159,14 +200,7 @@ const loaded = new Map();
 // (harness/chrome.mjs).
 function prepare(name, code, { expose, extension }) {
   if (loaded.has(name)) return loaded.get(name);
-  const { ast, tokens } = parse(code);
-  const edits = expose ? exposing(ast, name) : [];
-  let sites = 0;
-  if (extension) {
-    const counting = counters(ast, tokens);
-    edits.push(...counting.inserts, ...backtrackingRegExps(ast, name, code));
-    sites = counting.sites;
-  }
+  const { edits, sites } = editsOf(name, code, { expose, extension });
   const exposed = apply(code, edits);
   const file = path.join(prepareCache(), name);
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -188,6 +222,50 @@ function prepare(name, code, { expose, extension }) {
 // extension's all the same.
 export function loadedSource(rel) {
   return prepare(rel, read(rel), { expose: !rel.startsWith("vendor/"), extension: true });
+}
+
+// The extension's script at `rel`: its own code (`code`), the code the
+// harness runs (`runs`, as loadedSource() writes it to the cache and runs it
+// where no require hook changes it), and place(offset), the place of its own
+// code that a place of the code the harness runs stands for. A place in what
+// the harness put in stands for where it was put in, and one at or past the
+// end (a window runs the code with a line naming it after it) for the end.
+// Places keep their order, so a range of the code the harness runs stands
+// for a range of the extension's code, which is empty where the range holds
+// only what the harness put in.
+export function sourcePlaces(rel) {
+  const code = read(rel);
+  const { edits } = editsOf(rel, code, { expose: !rel.startsWith("vendor/"), extension: true });
+  const parts = pieces(code, edits);
+  const starts = [];
+  let length = 0;
+  for (const p of parts) {
+    starts.push(length);
+    length += p.length;
+  }
+  const place = (offset) => {
+    if (offset >= length) return code.length;
+    let lo = 0;
+    let hi = parts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (starts[mid] <= offset) lo = mid;
+      else hi = mid - 1;
+    }
+    const p = parts[lo];
+    const into = offset - starts[lo];
+    if (p.kept) return p.from + into;
+    if (p.from === p.to) return p.from;
+    // What an edit put in place of code: where that code is still within it
+    // (a regular expression handed to __kulmsBacktracking()), its places.
+    const replaced = code.slice(p.from, p.to);
+    const kept = p.text.indexOf(replaced);
+    if (kept < 0) return into === 0 ? p.from : p.to;
+    if (into < kept) return p.from;
+    if (into < kept + replaced.length) return p.from + (into - kept);
+    return p.to;
+  };
+  return { code, runs: apply(code, edits), parts, place };
 }
 
 // A script of this repository at `abs` (the fuzzing's canary), cached as `name`.

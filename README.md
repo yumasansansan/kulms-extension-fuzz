@@ -16,7 +16,7 @@ specification: the GNU General Public License, version 3 or any later version
 - [harness/](harness/)：拡張を Node の上で動かす部品です．偽の chrome API（複数タブで共有するストレージ，メッセージ，拡張自身のファイル），jsdom のタブと popup，vm の background，IIFE の内部の公開，DOM XSS などの検出器があります．
 - [tests/](tests/)：node:test のテスト．見つかった問題は，あるべき振る舞いを確かめるテストに todo を付けて置いてあります．問題が残っている間は失敗しますが，テスト全体は失敗にしません．
 - [fuzz/](fuzz/)：Jazzer.js のファズ対象，シード，辞書，回帰入力．
-- [ci/](ci/) と [.github/workflows/](.github/workflows/)：CI．push ごとにテスト，lint，REUSE，1 分ずつのファジングを行い，毎日長時間のファジングを行います．
+- [ci/](ci/) と [.github/workflows/](.github/workflows/)：CI．push ごとにテスト，lint，REUSE，1 分ずつのファジングと，テストとファズのコーパスが拡張のコードのどこまで届くか（カバレッジ）の計測を行い，毎日長時間のファジングを行います．
 
 ## 使い方
 
@@ -40,6 +40,12 @@ bash ci/lint.sh
 
 ```bash
 bash ci/fuzz.sh 60 fuzz-run/corpora fuzz-run/crashes
+```
+
+カバレッジは，テストと，与えればファズのコーパスについて，拡張自身のコードのどこまで届くかを測ります．結果は `coverage/report.txt` と，1 行ずつ示すページ `coverage/html/index.html` に書きます．毎日のファジングのコーパスは，`gh` で `bash ci/carry-over.sh fuzz-run/corpora` として取ってこられます．
+
+```bash
+bash ci/coverage.sh fuzz-run/corpora
 ```
 
 ## ライセンス
