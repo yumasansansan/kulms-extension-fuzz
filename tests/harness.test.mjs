@@ -16,7 +16,7 @@ import v8 from "node:v8";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { Browser, Clock, EXT, Net, contentScriptsFor, exposeInternals, idle, measure, openBackground, openBareTab, openPopup, openTab, read, watch } from "../harness/index.mjs";
+import { Browser, Clock, EXT, Net, contentScriptsFor, exposeInternals, idle, installCanvas, measure, openBackground, openBareTab, openPopup, openTab, read, watch } from "../harness/index.mjs";
 import { beginInput, endInput } from "../harness/work.mjs";
 import { LMS } from "./lms.mjs";
 
@@ -504,4 +504,114 @@ test("a message to a tab reaches the listeners of its content scripts, and one t
   }));
   assert.deepEqual(await send(answering.tabId), { response: { ok: true }, error: undefined });
   assert.deepEqual(await send(none.tabId), { response: undefined, error: "Could not establish connection. Receiving end does not exist." });
+});
+
+// chrome.scripting.executeScript as Chrome's documentation has it
+// (https://developer.chrome.com/docs/extensions/reference/api/scripting).
+// `run(injection)` from the popup: its results, plain, and its error.
+function injector(popup) {
+  return (injection) => new Promise((resolve) => popup.window.chrome.scripting.executeScript(injection, (results) => {
+    const error = popup.window.chrome.runtime.lastError;
+    resolve({ results: results === undefined ? undefined : JSON.parse(JSON.stringify(results)), error: error && error.message });
+  }));
+}
+
+test("a function injected into a tab runs in its page, with its arguments copied as JSON, and gives back what it returns, a promise settled", async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const tab = openTab(browser, { url: `${LMS}/portal`, html: '<body><p id="x">本文</p></body>', scripts: [] });
+  const popup = openPopup(browser);
+  const run = injector(popup);
+  const func = popup.window.eval("(function (a, b) { return document.getElementById('x').textContent + a.n + b; })");
+  assert.deepEqual(await run({ target: { tabId: tab.tabId }, func, args: [{ n: 1 }, "!"] }), { results: [{ frameId: 0, result: "本文1!" }], error: undefined });
+  const later = popup.window.eval("(function () { return new Promise((resolve) => setTimeout(() => resolve(location.pathname), 0)); })");
+  assert.deepEqual(await run({ target: { tabId: tab.tabId }, func: later }), { results: [{ frameId: 0, result: "/portal" }], error: undefined });
+  // The function is serialized: what it closed over in the popup does not come along.
+  const closing = popup.window.eval("(function () { var kept = 1; return function () { return typeof kept; }; })()");
+  assert.deepEqual((await run({ target: { tabId: tab.tabId }, func: closing })).results, [{ frameId: 0, result: "undefined" }]);
+  assert.deepEqual(browser.errors, []);
+});
+
+test("files injected into a tab run in its page in turn, and a library the extension bundles is stood in for as the test says", async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const tab = openTab(browser, { url: `${LMS}/portal`, scripts: [] });
+  browser.standIns["vendor/jsqr.min.js"] = (w) => {
+    w.jsQR = () => "stood in";
+  };
+  const popup = openPopup(browser);
+  const { results, error } = await injector(popup)({ target: { tabId: tab.tabId }, files: ["vendor/jsqr.min.js", "src/settings.js"] });
+  assert.equal(error, undefined);
+  assert.deepEqual(results.map((r) => r.frameId), [0]);
+  assert.equal(tab.window.jsQR(), "stood in");
+  assert.equal(typeof tab.window.__kulmsAlive, "function", "src/settings.js did not run in the page");
+});
+
+test("a page the extension may not script is refused: one it has no host permission for and no activeTab, and Chrome's own pages", async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const elsewhere = openTab(browser, { url: "https://example.com/", scripts: [] });
+  const newTab = openTab(browser, { url: "chrome://newtab/", scripts: [] }); // in front: the popup has activeTab for it
+  const popup = openPopup(browser);
+  const run = injector(popup);
+  const func = popup.window.eval("(function () { return 1; })");
+  assert.deepEqual(await run({ target: { tabId: elsewhere.tabId }, func }), { results: undefined, error: "Cannot access contents of the page. Extension manifest must request permission to access the respective host." });
+  assert.deepEqual(await run({ target: { tabId: newTab.tabId }, func }), { results: undefined, error: "Cannot access a chrome:// URL" });
+  assert.deepEqual(await run({ target: { tabId: 999 }, func }), { results: undefined, error: "No tab with id: 999." });
+  assert.deepEqual(await run({ target: { tabId: elsewhere.tabId } }), { results: undefined, error: "Exactly one of 'func' and 'files' must be specified" });
+  // A page of elsewhere in front when the popup opens is one activeTab gives it.
+  const front = openTab(browser, { url: "https://example.org/a", scripts: [] });
+  const popup2 = openPopup(browser);
+  assert.deepEqual(await injector(popup2)({ target: { tabId: front.tabId }, func: popup2.window.eval("(function () { return location.host; })") }), { results: [{ frameId: 0, result: "example.org" }], error: undefined });
+});
+
+test("a function injected that throws is the extension's error, and its frame is left out of the results", async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const tab = openTab(browser, { url: `${LMS}/portal`, scripts: [] });
+  const popup = openPopup(browser);
+  const func = popup.window.eval("(function () { throw new TypeError('broken'); })");
+  assert.deepEqual(await injector(popup)({ target: { tabId: tab.tabId }, func }), { results: [], error: undefined });
+  assert.deepEqual(browser.errors.map((e) => [e.where, String(e.error)]), [[`injected script in tab ${LMS}/portal`, "TypeError: broken"]]);
+});
+
+test("the canvas draws an image and gives its pixels back as the HTML Standard says, and counts each pixel", async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const pixels = Uint8ClampedArray.from({ length: 2 * 2 * 4 }, (_, i) => i);
+  const tab = openTab(browser, {
+    url: `${LMS}/portal`,
+    html: '<body><img id="here" src="/a.png"><img id="elsewhere" src="https://elsewhere.example/b.png"><img id="broken" src="/c.png"></body>',
+    scripts: [],
+    prepare: (w) => installCanvas(w, { pixelsOf: (img) => (img.id === "broken" ? null : { width: 2, height: 2, data: pixels }), foreign: (img) => img.id === "elsewhere" }),
+  });
+  const d = tab.document;
+  const canvas = d.createElement("canvas");
+  canvas.width = 3;
+  canvas.height = 3;
+  const ctx = canvas.getContext("2d");
+  assert.equal(canvas.getContext("2d"), ctx);
+  assert.equal(canvas.getContext("webgl"), null);
+  ctx.drawImage(d.getElementById("here"), 1, 1);
+  const data = ctx.getImageData(0, 0, 3, 3).data;
+  assert.deepEqual([...data.slice(0, 4)], [0, 0, 0, 0], "a pixel not drawn is transparent black");
+  assert.deepEqual([...data.slice(16, 20)], [0, 1, 2, 3], "the image is drawn at (1, 1)");
+  // A rectangle of a negative width and height has its corners at (sx, sy) and (sx + sw, sy + sh).
+  assert.deepEqual([...ctx.getImageData(2, 2, -1, -1).data], [0, 1, 2, 3]);
+  assert.deepEqual([...ctx.getImageData(-1, 0, 1, 1).data], [0, 0, 0, 0], "outside the bitmap is transparent black");
+  assert.throws(() => ctx.getImageData(0, 0, 0, 1), (e) => e.name === "IndexSizeError");
+  // An image that is not usable draws nothing; setting the width, even to what it was, clears the bitmap.
+  ctx.drawImage(d.getElementById("broken"), 0, 0);
+  canvas.width = 3;
+  assert.deepEqual([...ctx.getImageData(1, 1, 1, 1).data], [0, 0, 0, 0]);
+  // An image of another origin leaves the context not origin-clean.
+  ctx.drawImage(d.getElementById("elsewhere"), 0, 0);
+  assert.throws(() => ctx.getImageData(0, 0, 1, 1), (e) => e.name === "SecurityError");
+  // The work: a bitmap made anew and an ImageData read, a step a pixel; an image drawn, each of its pixels.
+  const fresh = d.createElement("canvas");
+  fresh.width = 10;
+  fresh.height = 10;
+  const here = d.getElementById("here");
+  assert.equal(await measure(() => fresh.getContext("2d").getImageData(0, 0, 10, 10)), (1 + 100) + (1 + 100));
+  assert.equal(await measure(() => fresh.getContext("2d").drawImage(here, 0, 0)), 1 + 4);
 });

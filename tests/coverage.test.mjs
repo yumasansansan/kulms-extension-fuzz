@@ -87,3 +87,46 @@ test("what V8 counts of a run comes out at the extension's own functions, in the
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a function that the extension injects into a page is counted for its own script, and nothing else of that script with it", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kulms-coverage-"));
+  try {
+    // The popup scans the page of the active tab for a QR code: scanPageForQR()
+    // of popup.js, which chrome.scripting compiles anew in the page
+    // (injectedText() of harness/contexts.mjs).
+    const harness = pathToFileURL(path.join(ROOT, "harness/index.mjs")).href;
+    execFileSync(process.execPath, ["--input-type=module", "-e", `
+      import { Browser, idle, installCanvas, openBackground, openPopup, openTab } from ${JSON.stringify(harness)};
+      const browser = new Browser();
+      openBackground(browser);
+      let sourceOf;
+      openTab(browser, {
+        url: "https://auth.iimc.kyoto-u.ac.jp/user/index.php?app=qrsecret",
+        html: '<body><canvas width="20" height="20"></canvas></body>',
+        scripts: [],
+        prepare: (w) => {
+          ({ sourceOf } = installCanvas(w, { pixelsOf: () => null, drawn: () => ({ data: new Uint8ClampedArray(20 * 20 * 4), foreign: false }) }));
+        },
+      });
+      browser.standIns["vendor/jsqr.min.js"] = (w) => {
+        w.jsQR = (data) => (sourceOf(data) ? { data: "otpauth://totp/KULMS?secret=JBSWY3DPEHPK3PXP" } : null);
+      };
+      const popup = openPopup(browser);
+      await idle();
+      popup.document.getElementById("totp-qr-btn").click();
+      await idle();
+      if (popup.document.getElementById("totp-input").value !== "JBSWY3DPEHPK3PXP") throw new Error("the scan did not read the secret");
+      browser.close();
+    `], { cwd: ROOT, env: { ...process.env, NODE_V8_COVERAGE: dir }, stdio: "pipe", timeout: 60_000 });
+    const map = await coverageOf(countsIn(dir));
+    const lineOf = (text) => fs.readFileSync(path.join(EXT, "popup.js"), "utf8").split("\n").findIndex((l) => l.includes(text)) + 1;
+    assert.deepEqual(callsAt(map, "popup.js", lineOf("function scanPageForQR(")), [1]);
+    assert.deepEqual(callsAt(map, "popup.js", lineOf("function tryDecodeImageData(")), [1]);
+    assert.deepEqual(callsAt(map, "popup.js", lineOf("function extractSecret(")), [1]);
+    // What the page compiled around the function is blank and counts nothing:
+    // a function of the popup's that did not run is reached by nothing still.
+    assert.deepEqual(callsAt(map, "popup.js", lineOf("function trySendRefresh(")), [0]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

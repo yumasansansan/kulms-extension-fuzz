@@ -682,7 +682,6 @@ export const INPUTS = [
       w.bool(true); w.bool(true);
       w.bool(true); w.bool(true); w.int(-60 * DAY, 60 * DAY, -DAY);
       w.bool(true); string(w, "JBSWY3DPEHPK3PXP");
-      w.int(0, 3, 0);
       w.int(0, w.remaining, 0);
       w.int(0, w.remaining, 3);
       w.int(0, 12, 4); w.int(0, 65535, 1);
@@ -699,7 +698,6 @@ export const INPUTS = [
       w.bool(false); value(w, "課題");
       w.int(0, 2, 0); w.int(0, 2, 0); w.int(0, 2, 0);
       w.bool(false);
-      w.int(0, 3, 0);
       w.int(0, w.remaining, 0);
       w.int(0, w.remaining, 0);
     },
@@ -708,18 +706,21 @@ export const INPUTS = [
     // The popup opens with nothing stored and no secret kept, in a window of
     // two tabs: a course page of the LMS, whose content script answers a
     // request to refresh with {ok: true}, and the authentication server's
-    // page that registers a TOTP secret, which is active. The user refreshes,
-    // opens the TOTP section, scans the page, which gives a secret, and saves
-    // it.
+    // page that registers a TOTP secret, which is active. That page has an
+    // image of 20 by 20 pixels in which jsQR finds nothing, and a canvas of
+    // that size in which it finds an otpauth URI. The user refreshes, opens
+    // the TOTP section, scans the page, which gives the secret of the URI,
+    // and saves it.
     file: "seeds/popup/tabs",
     plan: (w) => {
       for (let i = 0; i < 5; i++) w.int(0, 2, 0);
       w.bool(false);
-      w.int(0, 3, 3); string(w, "JBSWY3DPEHPK3PXP");
       w.int(0, w.remaining, 2);
-      w.int(0, 3, 0); string(w, "2026-110-1001-000"); string(w, "a1b2c3"); w.int(0, 5, 3);
-      w.int(0, 3, 2); w.int(0, 5, 0);
+      w.int(0, 4, 0); string(w, "2026-110-1001-000"); string(w, "a1b2c3"); w.int(0, 5, 3);
+      w.int(0, 4, 2); w.int(0, 5, 0);
       w.bool(true); w.int(0, 1, 1);
+      w.int(0, w.remaining, 1); w.int(1, 4096, 20); bytes(w, new Array(20 * 20 * 4).fill(0)); w.bool(false); w.int(0, 2, 0);
+      w.int(0, w.remaining, 1); w.int(1, 4096, 20); bytes(w, new Array(20 * 20 * 4).fill(255)); w.bool(false); w.int(0, 2, 1); string(w, "JBSWY3DPEHPK3PXP");
       w.int(0, w.remaining, 4);
       w.int(0, 12, 2); w.int(0, 65535, 0);
       w.int(0, 12, 4); w.int(0, 65535, 0);
@@ -792,7 +793,6 @@ export const INPUTS = [
     plan: (w) => {
       for (let i = 0; i < 5; i++) w.int(0, 2, 0);
       w.bool(true); string(w, "\uffff".repeat(150));
-      w.int(0, 3, 0);
       w.int(0, w.remaining, 0);
       w.int(0, w.remaining, 1); w.int(0, 12, 9); w.int(0, 65535, 1);
     },

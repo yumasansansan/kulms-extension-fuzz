@@ -11,6 +11,7 @@
 export { Browser, EXTENSION_ID, matchesPattern } from "./chrome.mjs";
 export { Net } from "./net.mjs";
 export { Clock } from "./clock.mjs";
+export { installCanvas } from "./canvas.mjs";
 export { openBackground, openBareTab, openTab, openPopup, contentScriptsFor, until } from "./contexts.mjs";
 export { watch, assertClean } from "./detectors.mjs";
 export { exposeInternals, instrument, loadedFile, loadedSource } from "./source.mjs";

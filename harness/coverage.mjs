@@ -115,7 +115,13 @@ export function countsIn(dir) {
       const rel = scriptAt(script.url, own);
       if (!rel) continue;
       if (!byScript.has(rel)) byScript.set(rel, []);
-      byScript.get(rel).push(script);
+      // A function that chrome.scripting.executeScript compiled anew in a
+      // page, at its place in the script (injectedText() of
+      // harness/contexts.mjs): its counts and those of what it holds, not
+      // those of the compile around it, which is blank.
+      const injected = /#injected-(\d+)$/.exec(script.url);
+      const at = injected ? Number(injected[1]) : 0;
+      byScript.get(rel).push(injected ? { ...script, functions: script.functions.filter((fn) => fn.ranges[0].startOffset >= at) } : script);
     }
   }
   const counts = new Map();

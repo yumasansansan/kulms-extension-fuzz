@@ -505,11 +505,32 @@ function quietConsole(context) {
   return { log: keep("log"), info: keep("info"), warn: keep("warn"), error: keep("error"), debug: keep("debug") };
 }
 
+// Runs the extension's script `rel` in `context`, which keeps that it ran it
+// (injectedText()), and gives what its last statement came to: what
+// chrome.scripting.executeScript gives for a file.
 function run(context, rel) {
   const { code, file, sites } = loadedSource(rel);
   context.browser.loaded(rel, sites);
-  if (context.kind === "background") vm.runInContext(code, context.global, { filename: file });
-  else context.evaluate(code + "\n//# sourceURL=" + pathToFileURL(file).href);
+  (context.ran || (context.ran = [])).push(rel);
+  if (context.kind === "background") return vm.runInContext(code, context.global, { filename: file });
+  return context.evaluate(code + "\n//# sourceURL=" + pathToFileURL(file).href);
+}
+
+// The text to compile `source` from in a page: the code of a function that
+// the context `from` hands chrome.scripting.executeScript, which Chrome
+// serializes and compiles anew in the page. Where a script that `from` ran
+// holds the function, its code stands at the place it has there, the rest of
+// that script blanked (its line ends kept), under the script's URL marked
+// with the place: what V8 counts of it is counted for that script
+// (countsIn() of harness/coverage.mjs), and a stack names its lines.
+function injectedText(source, from) {
+  for (const rel of from.ran || []) {
+    const { code, file } = loadedSource(rel);
+    const at = code.indexOf(source);
+    if (at < 1 || code.indexOf(source, at + 1) !== -1) continue;
+    return `${code.slice(0, at - 1).replace(/[^\r\n]/g, " ")}(${source})\n//# sourceURL=${pathToFileURL(file).href}#injected-${at}`;
+  }
+  return `(${source})`;
 }
 
 // Whether `url` matches `glob` of a content script's include_globs or
@@ -747,6 +768,14 @@ export function openTab(browser, { url, html = EMPTY_PAGE, net = new Net(), scri
     frameOf: top,
   });
   const w = openWindow(browser, context, html, url, clock);
+  // What chrome.scripting.executeScript runs in the page (inject() of
+  // harness/chrome.mjs): a file of the extension's, or what a test or a fuzz
+  // target stands in for it (browser.standIns); a function's code, compiled
+  // as the page's.
+  context.inject = {
+    file: (rel) => (Object.hasOwn(browser.standIns, rel) ? browser.standIns[rel](w) : run(context, rel)),
+    func: (source, from) => context.evaluate(injectedText(source, from)),
+  };
   if (prepare) prepare(w);
   for (const rel of scripts || contentScriptsFor(url, !top)) run(context, rel);
   return context;

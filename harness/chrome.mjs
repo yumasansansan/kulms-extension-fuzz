@@ -18,10 +18,25 @@
 // kept in browser.errors rather than lost, and so is a promise of any
 // context that is rejected with nothing to handle it.
 import { record } from "./log.mjs";
-import { codeGrew, finished, started, step } from "./work.mjs";
+import { codeGrew, finished, started, step, tracked } from "./work.mjs";
 import { manifest, read } from "./paths.mjs";
 
 export const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
+
+// Whether the URLs `a` and `b` are of the same origin: an opaque origin (a
+// chrome:, data: or about: page) is the same as no other
+// (https://html.spec.whatwg.org/multipage/browsers.html#same-origin).
+function sameOrigin(a, b) {
+  let x;
+  let y;
+  try {
+    x = new URL(a).origin;
+    y = new URL(b).origin;
+  } catch {
+    return false;
+  }
+  return x !== "null" && x === y;
+}
 const later = (f) => {
   started();
   setTimeout(() => {
@@ -157,7 +172,7 @@ export class Browser {
     this.scripts = new Set(); // the extension's scripts its contexts have run
     this.sites = 0; // their counting sites (harness/work.mjs)
     this.nextTabId = 1;
-    this.scripted = null; // what chrome.scripting.executeScript gives (apiFor())
+    this.standIns = {}; // the libraries the extension bundles that a test or a fuzz target stands in for, by path: f(window) puts one in a page (inject())
     this.activeTabId = null; // the tab in front in the window (tabOf())
     this.granted = new Set(); // the tabs that activeTab gives the extension (openPopup() of contexts.mjs)
     this.forgotten = 0; // how many times the logs were forgotten (forget())
@@ -198,9 +213,65 @@ export class Browser {
   }
 
   // Whether the extension may see the page at `url` of tab `tabId`: one its
-  // host permissions name, or the page of a tab that activeTab gave it.
+  // host permissions name, or one of the origin of the tab that activeTab
+  // gave it.
   sees(tabId, url) {
-    return this.granted.has(tabId) || (this.manifest.host_permissions || []).some((p) => matchesPattern(p, url));
+    if ((this.manifest.host_permissions || []).some((p) => matchesPattern(p, url))) return true;
+    const top = this.contexts.find((c) => c.kind === "tab" && c.tabId === tabId && c.frameId === 0);
+    return this.granted.has(tabId) && Boolean(top) && sameOrigin(url, top.url);
+  }
+
+  // chrome.scripting.executeScript() of the context `from`, as Chrome does it
+  // (https://developer.chrome.com/docs/extensions/reference/api/scripting):
+  // the files or the function of `injection` run, a turn later, in the frames
+  // of its target (the main frame, those of `frameIds`, or all of them with
+  // `allFrames`), main frame first, each a page the extension may script
+  // (host permissions, or activeTab: sees()). A function is serialized and
+  // compiled anew in the page, so nothing it closed over comes along; its
+  // `args` are copied as JSON. What it gives, a promise settled, is the
+  // frame's result, and for files what the last one came to; results come
+  // back as JSON does. The harness has one world to a page, so ISOLATED and
+  // MAIN are one. What a function that throws gives, the documentation
+  // leaves open: the throw is the extension's error, and the frame is left
+  // out of the results, which hold the frames "where the injection
+  // succeeded".
+  inject(from, injection, cb) {
+    record(this.injected, injection);
+    const { target, files, func, args = [] } = injection || {};
+    const fail = (message) => this.answer(from, cb, undefined, message);
+    if (!target || !Number.isInteger(target.tabId)) return fail("Error in invocation of scripting.executeScript(): the target needs a tabId.");
+    if ((files === undefined) === (func === undefined)) return fail("Exactly one of 'func' and 'files' must be specified");
+    const tab = this.contexts.filter((c) => c.kind === "tab" && c.tabId === target.tabId);
+    if (!tab.some((c) => c.frameId === 0)) return fail(`No tab with id: ${target.tabId}.`);
+    const ids = Array.isArray(target.frameIds) ? target.frameIds : null;
+    for (const id of ids || []) if (!tab.some((c) => c.frameId === id)) return fail(`No frame with id ${id} in tab with id ${target.tabId}.`);
+    const frames = tab.filter((c) => (target.allFrames ? true : ids ? ids.includes(c.frameId) : c.frameId === 0)).sort((a, b) => a.frameId - b.frameId);
+    for (const frame of frames) {
+      if (!frame.inject) throw new Error(`tab ${target.tabId} has no page in the harness (openBareTab()): nothing can run in it`);
+      if (new URL(frame.url).protocol === "chrome:") return fail("Cannot access a chrome:// URL");
+      if (!this.sees(frame.tabId, frame.url)) return fail("Cannot access contents of the page. Extension manifest must request permission to access the respective host.");
+    }
+    const source = func === undefined ? null : Function.prototype.toString.call(func);
+    const runAll = async () => {
+      const results = [];
+      for (const frame of frames) {
+        try {
+          let result;
+          if (source === null) for (const rel of [].concat(files)) result = frame.inject.file(String(rel));
+          else result = frame.inject.func(source, from)(...copyInto(frame.realm, args));
+          results.push({ frameId: frame.frameId, result: await result });
+        } catch (e) {
+          this.report(frame, e, "injected script");
+        }
+      }
+      return copyInto(from.realm, results);
+    };
+    const done = tracked(new Promise((resolve) => setTimeout(resolve, 0)).then(runAll));
+    if (typeof cb === "function") {
+      done.then((results) => this.answer(from, cb, results));
+      return undefined;
+    }
+    return done.then((results) => this.answer(from, undefined, results));
   }
 
   // A context of this browser runs the extension's script `rel`, of `sites`
@@ -387,14 +458,7 @@ export class Browser {
       },
     };
     const scripting = {
-      executeScript(injection, cb) {
-        record(browser.injected, injection);
-        // What the injection gives: what a test or a fuzz target says
-        // (browser.scripted(injection) → { results } or { error }), or the
-        // error Chrome gives on a page it cannot reach.
-        const said = browser.scripted ? browser.scripted(injection) : { error: "Cannot access contents of the page." };
-        return browser.answer(context, cb, copyInto(context.realm, said.results ?? []), said.error);
-      },
+      executeScript: (injection, cb) => browser.inject(context, injection, cb),
     };
     const i18n = {
       // Finding the message hashes its key; formatting it goes through it and

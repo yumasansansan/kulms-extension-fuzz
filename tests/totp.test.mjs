@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import vm from "node:vm";
 import fc from "fast-check";
-import { Browser, contentScriptsFor, idle, openBackground, openPopup, openTab, until } from "../harness/index.mjs";
+import { Browser, contentScriptsFor, idle, installCanvas, openBackground, openPopup, openTab, until } from "../harness/index.mjs";
 import { cached, openCoursePage, openPanel } from "./lms.mjs";
 
 const OTP_PAGE = '<!doctype html><html><head></head><body><form id="login"><input id="password_input"></form></body></html>';
@@ -259,4 +259,50 @@ test("S6: an update does not move a secret no code can be made from into the enc
     assert.equal(await bg.global.loadTotpSecret(), null, JSON.stringify(legacy));
     assert.equal("kulms-totp-secret" in browser.storage.local.dump(), false, `${JSON.stringify(legacy)}: the plain text was left`);
   }
+});
+
+// The popup's scan for a QR code: chrome.scripting runs scanPageForQR() of
+// popup.js in the page of the active tab, which reads the page's images and
+// canvases with jsQR (which the extension bundles; it is stood in for by what
+// the test says it finds) and keeps the secret of an otpauth URI.
+test("the popup's scan reads the secret of a QR code on the page of the active tab", async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  openBackground(browser);
+  let sourceOf;
+  const tab = openTab(browser, {
+    url: "https://auth.iimc.kyoto-u.ac.jp/user/index.php?app=qrsecret",
+    html: '<body><img id="small" src="/s.png"><canvas id="qr" width="20" height="20"></canvas></body>',
+    scripts: [],
+    prepare: (w) => {
+      ({ sourceOf } = installCanvas(w, { pixelsOf: () => null, drawn: (c) => (c.id === "qr" ? { data: new Uint8ClampedArray(20 * 20 * 4), foreign: false } : null) }));
+    },
+  });
+  browser.standIns["vendor/jsqr.min.js"] = (w) => {
+    w.jsQR = (data) => (sourceOf(data) === tab.document.getElementById("qr") ? { data: "otpauth://totp/KULMS?secret=jbsw y3dp-ehpk3pxp&issuer=KULMS" } : null);
+  };
+  const popup = openPopup(browser);
+  await idle();
+  popup.document.getElementById("totp-qr-btn").click();
+  await idle();
+  assert.equal(popup.document.getElementById("totp-input").value, "JBSWY3DPEHPK3PXP");
+  assert.deepEqual(browser.injected.map((i) => (i.files ? i.files.join() : typeof i.func)), ["vendor/jsqr.min.js", "function"]);
+  assert.deepEqual(browser.errors, []);
+});
+
+test("the popup's scan of a page the extension may not script finds nothing, and runs nothing in it", async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  openBackground(browser);
+  const tab = openTab(browser, { url: "chrome://newtab/", scripts: [] });
+  browser.standIns["vendor/jsqr.min.js"] = (w) => {
+    w.jsQR = () => ({ data: "otpauth://totp/KULMS?secret=JBSWY3DPEHPK3PXP" });
+  };
+  const popup = openPopup(browser);
+  await idle();
+  popup.document.getElementById("totp-qr-btn").click();
+  await idle();
+  assert.equal(popup.document.getElementById("totp-input").value, "");
+  assert.equal(tab.window.jsQR, undefined);
+  assert.deepEqual(browser.errors, []);
 });

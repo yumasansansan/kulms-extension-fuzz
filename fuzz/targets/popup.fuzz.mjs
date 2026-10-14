@@ -17,14 +17,20 @@
 //   value JSON carries; a check or a dismissal names an assignment or a memo
 //   of the input, or any key;
 // - the TOTP secret the background keeps: none, or any string;
-// - what a scan of the page gives (chrome.scripting.executeScript): an error,
-//   no result, or any value; the function the popup injects is not run in
-//   the page (docs/findings.md, カバレッジ);
 // - the tabs open in the popup's window, each at a page of the LMS, of the
-//   authentication server or of elsewhere, with what the content script of
-//   the page answers the popup's request to refresh (no content script, no
-//   answer, {ok: true}, {ok: false}, or any value), and which of them is
-//   active (none, if the active tab is another page);
+//   authentication server, of elsewhere, or Chrome's new tab page, with what
+//   the content script of the page answers the popup's request to refresh
+//   (no content script, no answer, {ok: true}, {ok: false}, or any value),
+//   and which of them is active (none, if the active tab is another page);
+// - the page of the active tab, in which a scan for a QR code runs a function
+//   of the popup's (chrome.scripting.executeScript, which the harness runs as
+//   Chrome does): its images and canvases, each its width and its pixels
+//   (bytes, as many rows as they fill), whether its data comes from another
+//   origin (which makes a canvas that has it not origin-clean), and what jsQR
+//   finds in its pixels (nothing, an otpauth URI with any secret, or any
+//   string). jsQR, which the extension bundles (vendor/) and which is not its
+//   own code, is stood in for by that; the canvas is the harness's
+//   (harness/canvas.mjs).
 // - what the user does: a click on a section's header, on a card's link, on
 //   refresh, on the link to the LMS, on the TOTP section's header and its
 //   buttons (save, show, delete, QR, scan), typing in its input, time going
@@ -39,8 +45,8 @@
 // grows faster than n log n from rung to rung of the input, or passes what
 // linear code does with an input of its size (ladder() and judge() of
 // fuzz/lib.mjs, harness/work.mjs).
-import { Browser, Clock, Net, allow, aside, idle, measure, openBackground, openBareTab, openPopup, uncounted, watch } from "../../harness/index.mjs";
-import { calibrate, fail, json, judge, ladder, number, open, provider, seen, string, value, warnings } from "../lib.mjs";
+import { Browser, Clock, Net, allow, aside, idle, installCanvas, measure, openBackground, openBareTab, openPopup, openTab, uncounted, watch } from "../../harness/index.mjs";
+import { bytes, calibrate, fail, json, judge, ladder, number, open, provider, seen, string, value, warnings } from "../lib.mjs";
 
 const KEYS = {
   settings: "kulms-settings",
@@ -154,10 +160,21 @@ function tab(fdp) {
     () => `${LMS}/portal`,
     () => `${AUTH}/user/index.php?app=qrsecret`,
     () => at("https://example.com/", string(fdp)),
+    () => "chrome://newtab/",
   ])();
   const answers = fdp.pickValue([() => ({ none: true }), () => ({ silent: true }), () => ({ hangs: true }),
     () => ({ value: { ok: true } }), () => ({ value: { ok: false } }), () => ({ value: json(value(fdp)).value })])();
   return { url, answers };
+}
+
+// An image or a canvas of the active tab's page (openPage()).
+function picture(fdp) {
+  return {
+    width: fdp.consumeIntegralInRange(1, 4096),
+    pixels: bytes(fdp),
+    foreign: fdp.consumeBoolean(),
+    found: fdp.pickValue([() => null, () => `otpauth://totp/KULMS?secret=${string(fdp)}&issuer=KULMS`, () => string(fdp)])(),
+  };
 }
 
 function action(fdp) {
@@ -176,12 +193,11 @@ export function read(fdp) {
   const stored = {};
   for (const key of Object.keys(KEYS)) stored[key] = held(fdp, key);
   const secret = fdp.consumeBoolean() ? string(fdp) : null;
-  const scan = fdp.pickValue([() => ({ error: "Cannot access contents of the page." }), () => ({ results: [] }),
-    () => ({ results: [{ result: json(value(fdp)).value }] }), () => ({ results: [{ result: string(fdp) }] })])();
   const tabs = list(fdp, tab);
   const active = tabs.length > 0 && fdp.consumeBoolean() ? fdp.consumeIntegralInRange(0, tabs.length - 1) : null;
+  const page = active === null ? null : { images: list(fdp, picture), canvases: list(fdp, picture) };
   const actions = list(fdp, action);
-  return { stored, secret, scan, tabs, active, actions };
+  return { stored, secret, tabs, active, page, actions };
 }
 
 // The key a check or a dismissal of the popup has for an assignment or a memo
@@ -245,8 +261,64 @@ const bg = openBackground(browser, { net });
 await idle();
 let popup = null;
 let tabs = [];
-let scan = null;
-browser.scripted = () => scan;
+let current = null; // the canvas of the active tab's page, and what jsQR finds in each of its pictures
+
+// jsQR in the page of the active tab: it finds in pixels what the input says
+// it finds in the image or the canvas they are of.
+browser.standIns["vendor/jsqr.min.js"] = (w) => {
+  w.jsQR = (data) => {
+    const source = current ? current.sourceOf(data) : null;
+    const found = source ? current.found.get(source) : null;
+    return found === null || found === undefined ? null : { data: found, binaryData: [], chunks: [], version: 1, location: {} };
+  };
+};
+
+// The page of the active tab at `url`, as the input has it (read()): its
+// images and canvases, each of the size its pixels make (its width, and as
+// many rows as the bytes fill), its data of this origin or of another. The
+// content scripts the manifest gives the page do not run in it: the targets
+// of the content scripts fuzz them.
+function openPage(url, { images, canvases }) {
+  const sized = (list) => list.map((p) => {
+    const height = Math.max(1, Math.ceil(p.pixels.length / 4 / p.width));
+    const data = new Uint8ClampedArray(p.width * height * 4);
+    data.set(p.pixels.subarray(0, data.length));
+    return { ...p, height, data };
+  });
+  const imgs = sized(images);
+  const cvs = sized(canvases);
+  const html = "<!doctype html><html><head></head><body>" +
+    imgs.map((p, i) => `<img id="image-${i}" src="${p.foreign ? `https://images.example.org/qr-${i}.png` : `/qr-${i}.png`}" alt="">`).join("") +
+    cvs.map((p, i) => `<canvas id="canvas-${i}" width="${p.width}" height="${p.height}"></canvas>`).join("") +
+    "</body></html>";
+  const prepare = (w) => {
+    const found = new WeakMap();
+    const byImage = new WeakMap();
+    imgs.forEach((p, i) => {
+      const el = w.document.getElementById(`image-${i}`);
+      byImage.set(el, p);
+      found.set(el, p.found);
+      Object.defineProperty(el, "naturalWidth", { value: p.width, configurable: true });
+      Object.defineProperty(el, "naturalHeight", { value: p.height, configurable: true });
+    });
+    const byCanvas = new WeakMap();
+    cvs.forEach((p, i) => {
+      const el = w.document.getElementById(`canvas-${i}`);
+      byCanvas.set(el, p);
+      found.set(el, p.found);
+    });
+    const { sourceOf } = installCanvas(w, {
+      pixelsOf: (img) => byImage.get(img) || null,
+      foreign: (img) => Boolean(byImage.get(img) && byImage.get(img).foreign),
+      drawn: (canvas) => {
+        const p = byCanvas.get(canvas);
+        return p ? { data: p.data, foreign: p.foreign } : null;
+      },
+    });
+    current = { sourceOf, found };
+  };
+  return openTab(browser, { url, html, scripts: [], net, prepare });
+}
 
 // Where background.js keeps the TOTP secret (fuzz/targets/background-message.fuzz.mjs).
 const TOTP_DB = "kulms-totp-db";
@@ -326,8 +398,8 @@ async function run(data) {
     popup = null;
     for (const t of tabs) t.close();
     tabs = [];
+    current = null;
   });
-  scan = input.scan;
   await aside(() => totpStore(input.secret));
   uncounted(() => {
     browser.storage.local.unload(Object.values(KEYS));
@@ -336,12 +408,13 @@ async function run(data) {
     browser.storage.local.load(items);
   });
   // The tabs of the window, opened before the popup, as the user had them, and
-  // the active one. Their pages are not made: the content scripts that run in
-  // them, which the targets of the content scripts fuzz, are stood in for by
-  // what the input says they answer.
+  // the active one. The page of the active tab is made (openPage()), those of
+  // the others are not: the content scripts that run in them, which the
+  // targets of the content scripts fuzz, are stood in for by what the input
+  // says they answer.
   uncounted(() => {
-    for (const t of input.tabs) {
-      const tab = openBareTab(browser, { url: t.url, net });
+    for (const [i, t] of input.tabs.entries()) {
+      const tab = i === input.active ? openPage(t.url, input.page) : openBareTab(browser, { url: t.url, net });
       if (!t.answers.none) {
         tab.events.onMessage.addListener((message, sender, sendResponse) => {
           if (!message || message.type !== "kulms-refresh-assignments" || t.answers.silent) return undefined;

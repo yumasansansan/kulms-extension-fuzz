@@ -27,14 +27,11 @@
 //   string), and how much of it the page's own data leaves free (the quota is
 //   jsdom's 5,000,000 code units; the Storage Standard recommends 5 MiB).
 // jsQR, which the extension bundles (vendor/) and which is not its own code,
-// is stood in for by what the input says it finds. The background is the
-// extension's own, and saves what the helper asks it to; it begins each
-// input with no secret saved. The page's canvas is a 2D
-// context as the HTML Standard defines drawImage() and getImageData() for what
-// the helper does with them (jsdom has none): drawImage() copies an image's
-// pixels onto the canvas's bitmap, and getImageData() gives a copy of a
-// rectangle of it, an IndexSizeError for a rectangle of no width or height
-// (https://html.spec.whatwg.org/multipage/canvas.html#dom-context-2d-getimagedata).
+// is stood in for by what the input says it finds in each image. The
+// background is the extension's own, and saves what the helper asks it to; it
+// begins each input with no secret saved. The page's canvas is the harness's
+// (harness/canvas.mjs: the HTML Standard's drawImage() and getImageData(),
+// their work counted).
 //
 // It fails when the scripts throw, when a promise is rejected with nothing to
 // handle it, when a detector of the harness sees something
@@ -44,7 +41,7 @@
 // fails when the extension's work grows faster than n log n from rung to rung
 // of the input, or passes what linear code does with an input of its size
 // (ladder() and judge() of fuzz/lib.mjs, harness/work.mjs).
-import { Browser, aside, idle, openBackground, openTab, uncounted, watch } from "../../harness/index.mjs";
+import { Browser, aside, idle, installCanvas, openBackground, openTab, uncounted, watch } from "../../harness/index.mjs";
 import { bytes, calibrate, fail, judge, ladder, open, provider, seen, string, warnings } from "../lib.mjs";
 
 const AUTH = "https://auth.iimc.kyoto-u.ac.jp";
@@ -107,64 +104,6 @@ function page({ paragraphs, links, images, field }) {
     "</body></html>";
 }
 
-// The canvas of window `w`, as the head of this file says: a 2D context per
-// canvas, its bitmap transparent black until drawn on. `pixelsOf(img)` gives
-// an image's { width, height, data } (RGBA, 4 bytes a pixel).
-function installCanvas(w, pixelsOf) {
-  const contexts = new WeakMap();
-  w.HTMLCanvasElement.prototype.getContext = function (kind) {
-    if (String(kind) !== "2d") return null;
-    if (contexts.has(this)) return contexts.get(this);
-    const canvas = this;
-    let bitmap = null;
-    const ensure = () => {
-      const width = canvas.width;
-      const height = canvas.height;
-      if (!bitmap || bitmap.width !== width || bitmap.height !== height) bitmap = { width, height, data: new Uint8ClampedArray(width * height * 4) };
-      return bitmap;
-    };
-    const context = {
-      canvas,
-      drawImage(img, dx, dy) {
-        const b = ensure();
-        const src = pixelsOf(img);
-        if (!src) return;
-        const x0 = Math.trunc(Number(dx) || 0);
-        const y0 = Math.trunc(Number(dy) || 0);
-        for (let y = 0; y < src.height; y++) {
-          const ty = y + y0;
-          if (ty < 0 || ty >= b.height) continue;
-          for (let x = 0; x < src.width; x++) {
-            const tx = x + x0;
-            if (tx < 0 || tx >= b.width) continue;
-            for (let k = 0; k < 4; k++) b.data[(ty * b.width + tx) * 4 + k] = src.data[(y * src.width + x) * 4 + k] ?? 0;
-          }
-        }
-      },
-      getImageData(sx, sy, sw, sh) {
-        const width = Math.abs(Math.trunc(Number(sw) || 0));
-        const height = Math.abs(Math.trunc(Number(sh) || 0));
-        if (width === 0 || height === 0) throw new w.DOMException("The source width or height is 0.", "IndexSizeError");
-        const b = ensure();
-        const data = new w.Uint8ClampedArray(width * height * 4);
-        const x0 = Math.trunc(Number(sx) || 0);
-        const y0 = Math.trunc(Number(sy) || 0);
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            const fx = x + x0;
-            const fy = y + y0;
-            if (fx < 0 || fy < 0 || fx >= b.width || fy >= b.height) continue;
-            for (let k = 0; k < 4; k++) data[(y * width + x) * 4 + k] = b.data[(fy * b.width + fx) * 4 + k];
-          }
-        }
-        return { data, width, height, colorSpace: "srgb" };
-      },
-    };
-    contexts.set(this, context);
-    return context;
-  };
-}
-
 const browser = new Browser();
 const bg = openBackground(browser);
 await idle();
@@ -197,7 +136,6 @@ async function run(data) {
     pixels.set(im.pixels.subarray(0, pixels.length));
     return { width: im.width, height, data: pixels, found: im.found };
   });
-  let scans = 0;
   const prepare = (w) => uncounted(() => {
     // jsdom does not follow links: a click that the extension leaves to the
     // browser goes nowhere, as one that is not followed. What a link shows,
@@ -218,9 +156,12 @@ async function run(data) {
       Object.defineProperty(el, "naturalWidth", { value: im.width, configurable: true });
       Object.defineProperty(el, "naturalHeight", { value: im.height, configurable: true });
     });
-    installCanvas(w, (img) => byElement.get(img) || null);
-    w.jsQR = () => {
-      const found = images[scans++] ? images[scans - 1].found : null;
+    const { sourceOf } = installCanvas(w, { pixelsOf: (img) => byElement.get(img) || null });
+    // What jsQR finds in pixels: what the input says it finds in the image
+    // they are of.
+    w.jsQR = (data) => {
+      const image = byElement.get(sourceOf(data));
+      const found = image ? image.found : null;
       return found === null ? null : { data: found, binaryData: [], chunks: [], version: 1, location: {} };
     };
     if (input.pending !== null) {
