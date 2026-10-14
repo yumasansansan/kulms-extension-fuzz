@@ -124,7 +124,7 @@ KULMS+ のコードに，外から入ってくる値（シラバスの HTML，Sa
 | `sidebar` | B12 | ページの localStorage のツールの設定が，オブジェクトでない値か，オブジェクトでない項目や `hasOwnProperty` というキーを持つ項目を含むなら，置かない（途中で書くときも） |
 | `sidebar`，`submission`，`totp-register` | B23 | 拡張のコードが投げた QuotaExceededError を数えない |
 | `totp-register` | S6 | 鍵にできないほど短いシークレットによる `DataError: Zero-length key is not supported` の未処理の拒否を数えない |
-| `popup` | S6 | base32 でない文字を含むシークレットを保存したまま「QR」を押す入力は，流さない |
+| `popup` | S6 | base32 でない文字を含むシークレットを保存したまま「QR」を押す入力は，流さない．8 ビットに満たないシークレットのコードの表示で起きる `DataError: Zero-length key is not supported` の未処理の拒否を数えない |
 | `submission` | B12 | ページの sessionStorage の提出の ID が，JSON で配列でない値なら，置かない（途中で書くときも） |
 | `site-contact` | B20 | 関数が捕まえたプログラムの誤り（警告に書いたものも，catch が受けたものも）を数えない |
 | `syllabus-detail` | S8 | 正規表現を V8 の線形エンジンで動かす（同上） |

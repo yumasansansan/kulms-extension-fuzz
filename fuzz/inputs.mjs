@@ -852,6 +852,20 @@ export const INPUTS = [
     },
   },
   {
+    // The background keeps a secret of one base32 character, J, five bits
+    // that decode to no byte, and the user shows its code: the popup hands
+    // Web Crypto an HMAC key of no bytes, which it rejects with nothing to
+    // handle it (the daily fuzzing of 2026-10-14, 38474299674, found such an
+    // input).
+    file: "known/popup/S6-short-secret-shown",
+    plan: (w) => {
+      for (let i = 0; i < 5; i++) w.int(0, 2, 0);
+      w.bool(true); string(w, "J");
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 1); w.int(0, 12, 7); w.int(0, 65535, 0);
+    },
+  },
+  {
     // The background keeps a secret of 150 characters U+FFFF, which no
     // base32 has, and the user shows its QR code: popup.js percent-encodes
     // it into nine bytes a character, and qrcode-gen makes a large code.

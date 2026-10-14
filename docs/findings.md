@@ -153,13 +153,13 @@ specification: the GNU General Public License, version 3 or any later version
 - 場所: [popup.js:624](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L624)，[:713-714](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L713-L714)，[src/assignments.js:2252](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2252)，[:2443-2444](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2443-L2444)，[src/auth-totp-register.js:114-117](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/auth-totp-register.js#L114-L117)，[:134-137](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/auth-totp-register.js#L134-L137)，[background.js:13-16](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L13-L16)
 - 根拠:
   - `^[A-Z2-7=\s-]+$` は `=` を途中に許し，長さも見ない．
-  - `A` は保存され，コード表示中は毎秒 `DataError: Zero-length key` の未処理 Promise 拒否が出る（[popup.js:744](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L744)，[src/assignments.js:2366](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2366)）．
+  - `A` は保存され，コード表示中は毎秒 `DataError: Zero-length key` の未処理 Promise 拒否が出る（[popup.js:744](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L744)，[src/assignments.js:2366](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2366)）．8 ビットに満たないシークレット（Base32 の 1 文字）はデコードすると 1 バイトにもならず，Web Crypto は長さ 0 の HMAC の鍵を DataError で拒む [[WebCrypto]](#参考文献)．保存の前の検証を直しても，検証の前の版が保存したシークレットは残るので，表示する側でも防ぐ必要がある．2026-10-14 の毎日のファジング（38474299674）も，`popup` で，保存された `J` のコードを表示する入力としてこれを見つけた．
   - `AB=CD2345` と `========` は保存されるが，デコード結果が null になり，自動入力は何も言わずに動かない．
   - popup の「QR」は，保存されたシークレットを `encodeURIComponent()` で URI に入れて QR を作る．base32 でない文字を含むシークレットは 1 文字が最大 9 バイトに広がり，同梱の qrcode-gen が大きな QR を作る仕事が，入力の大きさに対して線形のコードの上限を超える（2026-10-14．ファズ対象 `popup` で確かめた）．QR の生成は，シークレットによらず，1 回に約 78 万歩（最短のシークレット `A` で版 4 の QR）の固定の仕事をする．対象はこの固定の仕事を入力の上限に加える（「fuzz リポジトリの仕組み」）が，9 バイトに広がる分は加えないので，その場合はなお上限を超える．
   - TOTP の登録補助（auth-totp-register.js）は，ページの文から `[A-Za-z2-7=]+` に当たる文字列を確かめずにシークレットとして読み，sessionStorage に置いて，登録の完了後に保存させる．`A` のような短い文字列では，コードの計算で `DataError: Zero-length key is not supported` の未処理の拒否が起きる（2026-10-14．ファズ対象 `totp-register` で確かめた）．
   - background は，拡張の更新時（`runtime.onInstalled`）に，旧版が chrome.storage.local に平文で残したシークレット（`kulms-totp-secret`）を，形を確かめずに暗号化して保存する．`A` や `========` もそのまま保存され，文字列でない値は文字列にされる（`[object Object]`，`12345`）（2026-10-14．カバレッジで届いていなかった移行のテストを書く際に確かめた）．
 - 直し方: 実際にデコードして確かめる．末尾以外の `=` を拒み，最低長を決める（80 ビット = 16 文字）．拒んだときはエラーを表示する．
-- 対応: popup と LMS の設定パネルの両方で，空白とハイフンを除いて大文字にしたシークレットを `^[A-Z2-7]{16,}=*$` で確かめる（[fix/validate-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/validate-totp-secret)）．登録補助は，同じブランチの続く修正で，QR と本文からの読み取りと完了後の保存の前に同じ形を確かめるようにした．更新時の移行も，同じ続く修正で，同じ形に合うものだけを移し，合わないものは移さずに平文だけを消すようにした（いずれも 2026-10-14）．
+- 対応: popup と LMS の設定パネルの両方で，空白とハイフンを除いて大文字にしたシークレットを `^[A-Z2-7]{16,}=*$` で確かめる（[fix/validate-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/validate-totp-secret)）．登録補助は，同じブランチの続く修正で，QR と本文からの読み取りと完了後の保存の前に同じ形を確かめるようにした．更新時の移行も，同じ続く修正で，同じ形に合うものだけを移し，合わないものは移さずに平文だけを消すようにした（いずれも 2026-10-14）．さらに続く修正で，保存済みのシークレットにも備えた．4 か所の Base32 のデコードは 1 バイトにもならない入力をデコードできないものとし，popup と LMS の設定パネルの「QR」は保存のときと同じ形でないシークレットを QR にしない（2026-10-14）．このうち src/auth-totp.js の変更は，コードの計算を background に移す fix/totp-code-from-background と衝突する．そのブランチの background での計算も 1 バイトにもならない鍵を null とするので，後に取り込む方でそのブランチの形を取ればよい．
 - テスト: `tests/totp.test.mjs` の「S6」の 3 件（popup，設定パネル，更新時の移行）と，`fuzz/known/totp-register/S6-short-secret` と `fuzz/known/popup/S6-qr-of-non-base32`（`tests/fuzz-inputs.test.mjs` が todo として流す）．空白，ハイフン，小文字，末尾の `=` を含む正しいシークレットが，今までどおり保存されることも確かめる．
 
 ### S7
@@ -684,7 +684,7 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
   - 大きさは段で作る．入力そのもの（libFuzzer [[libFuzzer]](#参考文献) に作らせるバイト列）と，その下の段で作る値は 4,096 単位まで．入力は最初に段数を選び，段を上がるたびに，入力が繰り返す片を 2 倍の回数繰り返す．最上段で作る値は，Chrome の runtime メッセージ 1 通が運べる量（JSON の UTF-8 で 64MiB．1 単位は 6 バイト以内であるため 11,184,810 単位）まで．
   - 段から段へ，仕事の増えが前の段の増えの 2^1.5 倍（n log n の仕事が増える量）を超えたら，速い伸びとみなす．伸びを読むのは，コードが段の足した分をたどった（1 単位に 1 歩以上を使った）ときだけで，繰り返す部分が入力の残り以上の長さになった段から．それまでは，繰り返す部分と残りとの掛け合わせ（繰り返す文字列の中で残りの文字列を探すなど）が，段ごとに伸びの割合を変える．一度だけの速い伸びは，繰り返しが初めて行を閉じたときなどに生じる段差であるため，速い伸びがあった段の上の段にだけ，下の段の仕事量から外挿した上限を走らせる前に与え，超えたら止めて失敗とする．線形でない入力は，速い伸びが 2 段続いた所で止まり，何時間も走らない．ほかの段は，線形のコードがするはずの上限（対象のブラウザが読み込んだコードの，数える場所の数 × (U+1) × ⌈log₂(U+2)⌉ ＋ その対象の，入力が空のときの仕事量）で判定する．
   - 時間は，数え方を確かめるために見る．2 段離れた段どうしで，時間の伸びの次数が仕事量の伸びの次数を 0.5 より多く上回ったら，数えていない仕事があるとして失敗とする（下の「時計の揺れ」）．CI では見ない．
-  - 時計で止めるのは，何も数えない所で終わらないものだけ．CI はジョブの終わるべき時刻を `ci/fuzz.sh --until` に渡し，各対象は残りの時間を残りの対象で等しく分けたものを使う．ファジングそのものの時間は，その持ち時間に，前の実行で最も遅かった入力（最初に再生して時間を測る）と同じだけ遅い入力をもう 1 つ流す余裕が残るように短くする．余裕は少なくとも 5 分とする．毎日のファジングで遅かった入力は，`submission` の 466 秒の 1 件を除いて 5 分以内に終わったため，測った値から定めた．libFuzzer は，ファジングの時間が過ぎた後に新しい入力を始めないが，途中の入力は最後まで流す．そのため，それまでは最後に遅い入力を始めた対象が持ち時間を超え，失敗として止められていた（2026-10-14 の毎日のファジング 38462363590 の `submission`）．
+  - 時計で止めるのは，何も数えない所で終わらないものだけ．CI はジョブの終わるべき時刻を `ci/fuzz.sh --until` に渡し，各対象は残りの時間を残りの対象で等しく分けたものを使う．毎日のファジングは対象ごとにジョブを分けたので，各対象がジョブの時間をまるごと使う（2026-10-14 に分けた．下の CI）．ファジングそのものの時間は，その持ち時間に，前の実行で最も遅かった入力（最初に再生して時間を測る）と同じだけ遅い入力をもう 1 つ流す余裕が残るように短くする．余裕は少なくとも 5 分とする．毎日のファジングで遅かった入力は，`submission` の 466 秒の 1 件を除いて 5 分以内に終わったため，測った値から定めた．libFuzzer は，ファジングの時間が過ぎた後に新しい入力を始めないが，途中の入力は最後まで流す．そのため，それまでは最後に遅い入力を始めた対象が持ち時間を超え，失敗として止められていた（2026-10-14 の毎日のファジング 38462363590 の `submission`）．
   - 拡張が自分で捕まえて警告だけ出すエラーのうち，プログラムの誤りを示すもの（TypeError などの文言）も失敗とする．B19 と B20 はこれで見つかった．
   - シードと既知の問題の入力は，`fuzz/inputs.mjs` が，対象の読む値の並びから書く（`fuzz/encode.mjs` が FuzzedDataProvider の逆をたどる）．入力の読み方を変えたときに，これらが黙って別の入力になるのを防ぐためで，テストは，既知の入力がその問題だけを起こすことも確かめる．
   - 修正ブランチは，`KULMS_EXTENSION_DIR` でその拡張を指し，`KULMS_FUZZ_LOOK_FOR` で直した問題を避けずに探して，ファジングで確かめる（下の「ファジングで避けている既知の問題」）．
@@ -697,7 +697,7 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
 - **CI**（[yumasansansan/ADLplug-Next](https://github.com/yumasansansan/ADLplug-Next) にならう）:
   - 素の git でチェックアウトし，submodule も含める．Node と pnpm は，どちらも最新版を（pnpm は npm のレジストリが `latest` とする版を），`ci/setup.sh` が SHA-256 を確かめて入れる．外部の action は，commit で固定した `actions/upload-artifact` だけ．
   - `ci.yml`（push ごと）: Ubuntu と Windows でのテスト，lint（このリポジトリには ESLint のすべての指摘で失敗し，submodule の拡張には DOM XSS と ReDoS のルールを掛けて報告だけする），REUSE，canary と各対象 1 分のファジング，カバレッジの計測．落ちた入力は artifact に残す．カバレッジの計測は，テストと，次の毎日のファジングが引き継ぐコーパス（[ci/carry-over.sh](../ci/carry-over.sh)）を流し，1 行ずつ示すページを artifact に残す．数字では失敗にしないが，コーパスの入力がそのコミットで落ちれば失敗にする（次の毎日のファジングより先に判明する）．
-  - `fuzz.yml`（毎日）: 各対象 20 分のファジング．コーパスを artifact で引き継ぎ，前回落ちた入力を最初に再生する．
+  - `fuzz.yml`（毎日）: 各対象 20 分のファジング．対象ごとに 1 つのジョブとし，すべてのジョブを並べて走らせる．ADLplug-Next は重い対象をそれぞれ別のパートにするが，このリポジトリにはパートごとのビルドが無く，どのコーパスが重くなるかは日によって変わるので，すべての対象をそれぞれのジョブにした（2026-10-14）．コーパスと落ちた入力は対象ごとの artifact で引き継ぎ（分ける前の 1 つの artifact からも取る．[ci/carry-over.sh](../ci/carry-over.sh)），前回落ちた入力を最初に再生する．
   - どちらのジョブも，始めに，ファジングが終わるべき時刻（GitHub がジョブを止める 6 時間から，残したものを保存する 30 分を引いた時刻．`fuzz.yml` はジョブ自身の上限 330 分の 5 分前）を記録して `ci/fuzz.sh --until` に渡す．
 
 ## 時計の揺れ
@@ -745,7 +745,7 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
 | B12 | `sidebar` | ページの localStorage のツールの設定が，オブジェクトでない値か，オブジェクトでない項目や `hasOwnProperty` というキーを持つ項目を含むなら，置かない（途中で書くときも） |
 | B23 | `sidebar`，`submission`，`totp-register` | 拡張のコードが投げた QuotaExceededError を数えない（これらの対象で Web Storage に書くのは tool-visibility.js，sidebar-resize.js，submit-detect.js，auth-totp-register.js のみ） |
 | S6 | `totp-register` | 鍵にできないほど短いシークレットによる `DataError: Zero-length key is not supported` の未処理の拒否を数えない |
-| S6 | `popup` | base32 でない文字を含むシークレットを保存したまま「QR」を押す入力は，流さない |
+| S6 | `popup` | base32 でない文字を含むシークレットを保存したまま「QR」を押す入力は，流さない．8 ビットに満たないシークレットのコードの表示で起きる `DataError: Zero-length key is not supported` の未処理の拒否を数えない |
 | B12 | `submission` | ページの sessionStorage の提出の ID が，JSON で配列でない値なら，置かない（途中で書くときも） |
 | P6 | `background-message` | Shift_JIS の表を最初の入力の前に作っておき，どの入力にも数えない（探すときは，入力ごとに表を消し，Service Worker が起動した直後の状態から始める） |
 | B25 | `popup` | 保存された課題のキャッシュのうち，一覧が配列でないもの，オブジェクトでない項目を持つもの，文字列でない状態を持つ項目を含むものは，置かない（途中で書くときも） |
@@ -789,6 +789,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 | fix/totp-key-once（2026-10-14） | `popup` | P8 | 150 秒（1,687 入力）で失敗なし．`tests/large.test.mjs` の P8 の 2 件が通り，テスト全体も失敗 0．ほかの修正ブランチと衝突なく合わさる（上流が v1.21.1 で自ら直した B5 と B6 の fix/build-contents は，v1.21.1 を基にしたどのブランチとも build.sh で衝突するため除く） |
 | fix/grading-list-short-rows（2026-10-14） | `grading-pages` | B26 | 既知の入力とシードとコーパスの 84 入力が通る．`tests/grading-ta.test.mjs` の B26 のテストが通り，テスト全体も失敗 0．ほかの修正ブランチと衝突なく合わさる（fix/build-contents を除く．上と同じ理由） |
 | fix/validate-totp-secret の続く修正（2026-10-14） | `totp-register` | S6 | 既知の入力とシードを含む 55 入力が通る．同日に加えた更新時の移行の修正は，`tests/totp.test.mjs` の S6 のテスト（更新時の移行）が通り，ほかの 29 本と衝突なく合わさる（`git merge-tree`） |
+| fix/validate-totp-secret の 2 つめの続く修正（2026-10-14） | `popup`，`totp-register` | S6 | `popup` の S6 の既知の入力 2 件と，毎日のファジング（38474299674）が `popup` で止まった入力と，`totp-register` の既知の入力が通る．`tests/totp.test.mjs` の S6 のテスト 5 件が通る．ほかの修正ブランチとは，fix/totp-code-from-background とだけ src/auth-totp.js で衝突する（上の S6 の「対応」） |
 | 27 本すべて（2026-10-14） | — | — | 上の 5 本と 2 本の続く修正を含む修正ブランチ 27 本の 351 組は，どれも衝突なく合わさる（`git merge-tree`）．v1.21.1 を基にした 5 本では，テストは失敗 0 で，それぞれの問題の todo が通る |
 
 段で判定するようにした後のファジング（2026-10-07）:
@@ -830,6 +831,8 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
   - 同日，TA 採点支援（grading-ta.js）の採点画面と提出一覧のページを入力にする対象 `grading-pages` を加えた（「fuzz リポジトリの仕組み」）．あわせて，ハーネスは，拡張がページに入れる拡張自身のスクリプト（grading-ta.js の橋渡し）をページで実行し，スクリプトが求めるページの移動を記録するようにした．`grading-pages` は最初の 1 分で B26 を見つけた．B26 を避けた後の 10 分の実行は失敗なく終わった．その前の実行は時間の確認で止まったが，同時に動かしたテストの負荷によるものであり，その入力を単独で流すと，時間は数えた仕事量に比例して伸びた．
   - 同日の毎日のファジング（38462363590，`cef8229`）は 2 対象で失敗した．`grading-bridge` は，ページが組み込みの型の prototype を継いだだけのオブジェクトを置くと，橋渡しがエンジンの TypeError（`Method get TypedArray.prototype.length called on incompatible receiver`）で止まることを見つけた．B24 と同じ原因であり（fix/grading-bridge-values はこれも直す），B24 の回避に加えた．`submission` は，ファジングの時間の終わり近くに始めた遅い入力（466 秒）のため持ち時間を超え，止められた．`ci/fuzz.sh` は，ファジングそのものの時間を，持ち時間にその対象の最も遅い入力をもう 1 つ流す余裕が残るように短くするようにした（「fuzz リポジトリの仕組み」）．遅い入力は，最上段（数百万単位）で 1 単位あたり約 54 歩を数え，ハーネスの正規表現のエンジン（数えるために V8 とは別に 1 歩ずつ動かす）が 1 歩に約 0.5〜0.6 マイクロ秒かかるため，1 つの入力が数分に及ぶ（`submission` と `grading-pages` で測った）．
   - 同日に push した `1c51506` と `a56db05` の CI は，2 つのジョブで失敗した．`a56db05` の 1 分のファジングでは，`resources` の 16 バイトの入力が線形のコードの上限を超えた．すべての設定を有効にし，フォームの無いページに，Sakai のリンクで開くフォルダの行を 1 つ（376 文字．うち onclick が 173 文字）置くだけの入力である．上限の入力の大きさに，対象が入力から組み立てたページの大きさが入っていなかったため，線形の仕事が上限を超えた．この入力は `1c51506` のハーネスでも失敗し，この日のファジングが初めて作ったものであった．上限の入力の大きさは，入力が拡張に渡したもの（ページの HTML と，拡張が読んだ答えの本文）がより大きければ，その大きさとした（「fuzz リポジトリの仕組み」の仕事量）．同じ形の入力をシード `seeds/resources/no-form` とした．カバレッジのジョブは 2 回とも終わらなかった（「カバレッジ」）．
+  - 同日の予定実行の毎日のファジング（38474299674，`cef8229`）は 4 対象で失敗した．`grading-bridge` は，前の回に止まった入力（B24）を最初に流し直して止まった．`a56db05` で避けるようにした入力であり，現在のコードでは通る．`popup` は，保存された `J`（Base32 の 1 文字）のコードを表示すると，毎秒，誰も受けない拒否が出ることを見つけた．これは S6 の帰結であり，対象は S6 の回避をこれにも広げた（既知の入力 `S6-short-secret-shown`）．修正ブランチ fix/validate-totp-secret は保存の前の検証しか直していなかったので，保存済みのシークレットにも備える続く修正を加えた（S6）．`sidebar` と `submission` は，コーパスの再生だけで持ち時間（34 分と 38 分）を使い切り，止められた．最上段まで上がる入力を含むコーパスは再生に時間がかかり，どのコーパスがそうなるかは日によって変わる．毎日のファジングは，対象ごとにジョブを分け，各対象がジョブの時間をまるごと使えるようにした（下の CI）．
+  - 同日に push した `0c893e9` の CI はすべて通った．カバレッジのジョブは 53 分で終わった．`submission` の重い入力を含む組だけがメモリを使い切り，最後に単独で流し直されて通った．流しきれなかった入力は無かった．`sidebar` の重い入力は，数えながら単独で流すと 32 分 39 秒かかり（一部は別の測定と並行），最大の常駐メモリは 3.9 GiB であった．
 
 ## カバレッジ
 
@@ -910,4 +913,5 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 - [Storage] WHATWG, "Storage Standard," Living Standard（§4.1 Storage endpoints）. https://storage.spec.whatwg.org/
 - [TT] W3C, "Trusted Types," Editor's Draft. https://w3c.github.io/trusted-types/dist/spec/
 - [URL] WHATWG, "URL Standard," Living Standard. https://url.spec.whatwg.org/
+- [WebCrypto] W3C, "Web Cryptography Level 2," Editor's Draft（§31.6.4 HMAC の Import Key：鍵のデータの長さが 0 ビットなら DataError を投げる）. https://w3c.github.io/webcrypto/
 - [WebIDL] WHATWG, "Web IDL Standard," Living Standard（反復可能なインターフェースの forEach，keys，values，entries）. https://webidl.spec.whatwg.org/

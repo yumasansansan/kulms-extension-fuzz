@@ -489,10 +489,19 @@ async function run(data) {
   await clock.advance(RUN_ON);
   if (!(await clock.settle(RUN_ON))) fail(`the popup's scripts still set timeouts ${(2 * RUN_ON) / MINUTE} minutes on: work that never ends`);
   for (const line of log.slips()) fail(`a slip of the code: ${line}`);
-  const problems = seen(watcher);
+  // Known: S6 (docs/findings.md). While it is open, the rejection of a key of
+  // no bytes is not counted: the popup shows the code of a kept secret of
+  // fewer than eight bits (one base32 character, which its form lets be
+  // saved), and generateTOTPPopup() hands Web Crypto an HMAC key of no bytes
+  // each second, which it rejects with nothing to handle it, as the finding
+  // says.
+  const problems = seen(watcher).filter((p) => !(open("S6") && ZERO_KEY.test(p)));
   if (problems.length) fail(problems.join("\n"));
   judge();
 }
+
+// Known: S6. The rejection of the code of a secret that decodes to no bytes.
+const ZERO_KEY = /^unhandled rejection: DataError: Zero-length key is not supported\n[\s\S]*\bat generateTOTPPopup /;
 
 // The target's work for an input, on each of its rungs (fuzz/lib.mjs).
 export async function fuzz(data) {

@@ -8,10 +8,22 @@
 #
 # The long fuzzing. Once a day, and whenever it is started by hand, every fuzz
 # target runs for twenty minutes, or as long as the run started by hand asks,
-# after the canary has shown that the fuzzer is looking (ci/fuzz.sh --canary).
+# each in a job of its own, after the canary has shown in that job that the
+# fuzzer is looking (ci/fuzz.sh --canary).
+#
+# Each target has a job of its own, side by side, as ADLplug-Next fuzzes its
+# heavy targets each in a part of its own. A target replays its corpus before
+# it fuzzes, and a corpus that holds inputs climbing to the top rungs takes
+# long to replay: in the daily run of 2026-10-14 (38474299674), which ran the
+# targets one after another in one job, each with an equal share of the time
+# left, sidebar and submission were still replaying their corpora when their
+# shares of 34 and 38 minutes ran out, and were stopped. Which corpora grow
+# slow changes from day to day, and with no build to share, a job of its own
+# costs a target a minute or two: so every target, not a list of heavy ones,
+# has the whole of a job's time.
 #
 # A run carries on from the corpus that the last decided run grew and kept as
-# an artifact — the last one that fuzzed at all, which is one the schedule or a
+# artifacts — the last one that fuzzed at all, which is one the schedule or a
 # hand started, and that passed or failed; when there is none, it starts from
 # the seed inputs. The inputs that failed are kept as well, and the next run
 # replays them before anything else (ci/fuzz.sh), so that a failure lasts until
@@ -45,7 +57,7 @@ permissions:
   contents: read
   actions: read
 
-# Two runs at once would carry over from the same corpus and race to keep it.
+# Two runs at once would carry over from the same corpora and race to keep them.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
@@ -55,18 +67,49 @@ defaults:
     shell: bash
 
 jobs:
-  fuzz:
-    name: fuzzing, ${{ github.event.inputs.minutes || '20' }} minutes a target
+  # The targets of fuzz/targets/ at this commit, the canary aside, as the
+  # matrix of the job below reads them: a target added is fuzzed without a word
+  # here, and one renamed keeps no job under its old name.
+  targets:
+    name: the fuzz targets
     runs-on: ubuntu-26.04
-    # Fourteen targets one after another, each allowed an equal share of the
-    # time left (ci/fuzz.sh --until). The job may run as long as GitHub lets a
-    # job run, six hours, less half an hour in which the steps below keep what
-    # it found, as they do whatever became of the job; ci/fuzz.sh ends five
-    # minutes before that, so that it, not the limit, stops what does not end.
-    # At the longest choice, the daily run's, the fuzzing itself would take 280
-    # minutes of it, which leaves each target about three minutes of its share
-    # for its replays and its merge; ci/fuzz.sh cuts a target's fuzzing where
-    # its share would not then hold one more of its slowest inputs.
+    timeout-minutes: 10
+    outputs:
+      targets: ${{ steps.targets.outputs.targets }}
+    steps:
+      - name: Check out
+        run: |
+          git config --global core.autocrlf false
+          git -c init.defaultBranch=main init --quiet
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --quiet --depth 1 origin "$GITHUB_SHA"
+          git checkout --quiet --detach "$GITHUB_SHA"
+          git log -1 --format='%H %s'
+
+      - name: List the targets
+        id: targets
+        run: |
+          list=
+          while IFS= read -r target; do
+            list+="${list:+,}\"$target\""
+          done < <(find fuzz/targets -name '*.fuzz.mjs' ! -name 'canary.fuzz.mjs' -printf '%f\n' | sed 's/\.fuzz\.mjs$//' | LC_ALL=C sort)
+          echo "targets=[$list]" | tee -a "$GITHUB_OUTPUT"
+
+  fuzz:
+    name: ${{ matrix.target }}, ${{ github.event.inputs.minutes || '20' }} minutes
+    needs: targets
+    runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.targets) }}
+    # The job may run as long as GitHub lets a job run, six hours, less half an
+    # hour in which the steps below keep what it found, as they do whatever
+    # became of the job; ci/fuzz.sh ends five minutes before that, so that it,
+    # not the limit, stops what does not end. Its one target replays the
+    # inputs that failed last time, replays its corpus, fuzzes, and merges the
+    # corpus down within that time; ci/fuzz.sh cuts its fuzzing where the time
+    # left would not then hold one more of its slowest inputs.
     timeout-minutes: 330
     # The time of the rungs is not looked at (fuzz/lib.mjs, NOISE): the noise of
     # the clock was measured on a machine kept quiet for it (docs/findings.md),
@@ -75,6 +118,7 @@ jobs:
     env:
       MINUTES: ${{ github.event.inputs.minutes || '20' }}
       KULMS_FUZZ_NOISE: Infinity
+      TARGET: ${{ matrix.target }}
 
     steps:
       - name: Note when the fuzzing must end
@@ -102,22 +146,23 @@ jobs:
       - name: Carry over the corpus and the inputs that failed
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash ci/carry-over.sh fuzz-run/corpora fuzz-run/earlier
+        run: bash ci/carry-over.sh --only "$TARGET" fuzz-run/corpora fuzz-run/earlier
 
       - name: Check that the fuzzer is looking
         run: bash ci/fuzz.sh --until "$FUZZ_UNTIL" --canary 60 fuzz-run/canary-corpora fuzz-run/canary-crashes
 
-      - name: Fuzz each target
-        run: bash ci/fuzz.sh --until "$FUZZ_UNTIL" --merge "$((MINUTES * 60))" fuzz-run/corpora fuzz-run/crashes fuzz-run/earlier
+      - name: Fuzz the target
+        run: bash ci/fuzz.sh --until "$FUZZ_UNTIL" --merge --only "$TARGET" "$((MINUTES * 60))" fuzz-run/corpora fuzz-run/crashes fuzz-run/earlier
 
       # What a run found is kept whatever became of the job, its own time limit
       # included: a job that the limit stops counts as cancelled, and that is
-      # the very run whose corpus and failing inputs are worth having.
+      # the very run whose corpus and failing inputs are worth having. Each
+      # target's are artifacts of their own, which ci/carry-over.sh gathers.
       - name: Keep the corpus
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: fuzz-corpora
+          name: fuzz-corpora-${{ matrix.target }}
           path: fuzz-run/corpora/
           if-no-files-found: ignore
           retention-days: 30
@@ -126,7 +171,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: fuzz-crashes
+          name: fuzz-crashes-${{ matrix.target }}
           path: fuzz-run/crashes/
           if-no-files-found: ignore
           retention-days: 90

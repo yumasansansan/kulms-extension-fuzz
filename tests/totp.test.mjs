@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import vm from "node:vm";
 import fc from "fast-check";
-import { Browser, contentScriptsFor, idle, installCanvas, openBackground, openPopup, openTab, until } from "../harness/index.mjs";
+import { Browser, Clock, contentScriptsFor, idle, installCanvas, openBackground, openPopup, openTab, until } from "../harness/index.mjs";
 import { cached, openCoursePage, openPanel } from "./lms.mjs";
 
 const OTP_PAGE = '<!doctype html><html><head></head><body><form id="login"><input id="password_input"></form></body></html>';
@@ -181,6 +181,43 @@ test("S6: the settings panel on the LMS refuses a secret no code can be made fro
   const ext = await extension();
   t.after(() => ext.browser.close());
   assert.deepEqual(await enterInSettingsPanel(ext, MALFORMED), []);
+});
+
+// A secret kept before the forms checked it, or by a version without the
+// check: one base32 character, five bits, which decodes to no byte. The popup
+// and the settings panel on the LMS show its code all the same, and the code
+// of each second asks Web Crypto for an HMAC key of no bytes, which it
+// refuses (WebCrypto, HMAC's import key: a length of zero is a DataError).
+// The first code, worked out as the code is shown, is enough: the page's
+// clock is not moved, so that no second's code comes after the test, which
+// node:test ends at the first rejection that nothing handles.
+const S6_SHOWN = "S6: the code of a kept secret of no byte is worked out every second, and Web Crypto's refusal of the key goes unhandled";
+
+test("S6: the popup shows the code of a kept secret no code can be made from, and nothing goes unhandled", { todo: S6_SHOWN }, async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const clock = new Clock(Date.UTC(2026, 9, 14, 1, 0));
+  const bg = openBackground(browser);
+  const popup = openPopup(browser, { clock });
+  await idle();
+  await browser.deliver(popup, [bg], { type: "kulms-totp-save", secret: "J" });
+  popup.document.getElementById("totp-show-btn").click();
+  await idle();
+  assert.deepEqual(browser.errors, []);
+});
+
+test("S6: the settings panel on the LMS shows the code of a kept secret no code can be made from, and nothing goes unhandled", { todo: S6_SHOWN }, async (t) => {
+  const { browser, bg, popup } = await extension();
+  t.after(() => browser.close());
+  await browser.deliver(popup, [bg], { type: "kulms-totp-save", secret: "J" });
+  browser.storage.local.load(cached([]));
+  const clock = new Clock(Date.UTC(2026, 9, 14, 1, 0));
+  const panel = await openPanel(openCoursePage(browser, { clock }));
+  [...panel.querySelectorAll(".kulms-panel-tab")].at(-1).click();
+  assert.ok(await until(() => panel.querySelector(".kulms-totp-actions .kulms-totp-btn")), "the panel says a secret is set");
+  panel.querySelector(".kulms-totp-actions .kulms-totp-btn").click();
+  await idle();
+  assert.deepEqual(browser.errors, []);
 });
 
 test("the popup saves a secret written with spaces, hyphens, lower case or padding", async (t) => {
