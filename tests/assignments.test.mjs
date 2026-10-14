@@ -10,7 +10,7 @@
 // manifest has them, drawn from a fresh cache so that nothing is fetched.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Browser, Net, idle, openPopup, until } from "../harness/index.mjs";
+import { Browser, Net, idle, openBackground, openPopup, until } from "../harness/index.mjs";
 import { COURSE_PAGE, D, H, LMS, assignment, cached, card, openCoursePage, openPanel } from "./lms.mjs";
 
 function browserWith(stored) {
@@ -343,6 +343,43 @@ test("B11: two courses of the same name each have their own entry in the textboo
   tab.window.__kulmsTextbookAPI.loadInto(list, true);
   await until(() => list.querySelector(".kulms-textbook-course"), { timeout: 5000 });
   assert.equal(list.querySelectorAll(".kulms-textbook-course").length, 2);
+});
+
+// P5: the textbook list asks the background about the courses three at a
+// time (each course costs two to four requests to KULASIS). The background's
+// searches of the syllabus are held until the test lets them go one by one, so
+// that how many courses are asked about at once can be counted.
+test("P5: the textbook list asks about three courses at once and lists every course", { todo: "P5: the courses are asked about one after another" }, async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const json = (body) => ({ headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const courses = Array.from({ length: 7 }, (_, i) => ({ id: `2026-110-${1001 + i}-000`, title: `科目${i + 1}`, type: "course" }));
+  const held = [];
+  let asking = 0;
+  let most = 0;
+  const syllabus = new Net().on("https://www.k.kyoto-u.ac.jp/external/open_syllabus/search", () => new Promise((resolve) => {
+    asking++;
+    most = Math.max(most, asking);
+    held.push(() => {
+      asking--;
+      resolve({ headers: { "content-type": "text/html; charset=utf-8" }, body: "<table></table>" });
+    });
+  }));
+  openBackground(browser, { net: syllabus });
+  const tab = openCoursePage(browser, { net: new Net().on(`${LMS}/direct/site.json`, json({ site_collection: courses })) });
+  await until(() => tab.window.__kulmsTextbookAPI);
+  const list = tab.document.createElement("div");
+  tab.document.body.append(list);
+  tab.window.__kulmsTextbookAPI.loadInto(list, true);
+  // Three courses are asked about before any search is answered.
+  await until(() => held.length === 3);
+  // Then the searches are answered one at a time, as they come.
+  while (!list.querySelector(".kulms-textbook-course")) {
+    await until(() => held.length > 0 || list.querySelector(".kulms-textbook-course"));
+    if (held.length > 0) held.shift()();
+  }
+  assert.equal(most, 3);
+  assert.deepEqual([...list.querySelectorAll(".kulms-textbook-course-name")].map((n) => n.textContent).sort(), courses.map((c) => c.title).sort());
 });
 
 // A course page whose fetch reaches Sakai's API: the course's assignments and

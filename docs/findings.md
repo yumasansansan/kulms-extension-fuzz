@@ -11,14 +11,14 @@ specification: the GNU General Public License, version 3 or any later version
 # KULMS+ 拡張機能 レビューの記録
 
 - **対象**: [Radian0523/kulms-extension](https://github.com/Radian0523/kulms-extension) の [`087452e`](https://github.com/Radian0523/kulms-extension/commit/087452e33d14c117e6fa584fe3dd4b19f8f9a76c)（v1.21.0 と提出検知の修正）．テストとファジングは，2026-10-13 から v1.21.1 の [`20d7da3`](https://github.com/Radian0523/kulms-extension/commit/20d7da3b9193960a2a1b38f1281e2e12c8155817) に対して行う（B1，B2，B5，B6 が直った版）
-- **日付**: 2026-10-06（B19〜B21 と S9 は 2026-10-07，B22 は 2026-10-13）
+- **日付**: 2026-10-06（B19〜B21 と S9 は 2026-10-07，B22 は 2026-10-13，S13，M6，D2〜D9 は 2026-10-14）
 - **方法**: 全ソースを通読した．そのうえで，実コードを Node 26.10.0 と jsdom 30.1.2 の上で動かして確かめた．その後，拡張を Node の上で動かすハーネス（[harness/](../harness/)）を作り，確かめたことをテスト（[tests/](../tests/)）にした．また，Jazzer.js [[Jazzer.js]](#参考文献) でファジング（[fuzz/](../fuzz/)）を行い，B15〜B22 と，S7 の新しい例を見つけた．拡張のすべての正規表現を，受理するオートマトンで調べ，S9 を見つけた
-- 行番号は `087452e` の時点のもの．リンクはそのコミットへの固定リンク
+- 行番号は `087452e` の時点のもの（S13，M6，D2〜D9 は `20d7da3` の時点のもの）．リンクはそのコミットへの固定リンク
 
 ## 凡例
 
 - **重さ**: 高（利用者のデータが消える，広く効く）／中／低
-- **確認**: 再現（tests/ のテストで再現した）／計測（時間を測った）／ビルド（build.sh を実行した）／ファズ（ファジングで見つかった）／解析（正規表現が受理するオートマトンを調べた）／読解（コードを読んで判断した）
+- **確認**: 再現（tests/ のテストで再現した）／計測（時間を測った）／ビルド（build.sh を実行した）／ファズ（ファジングで見つかった）／解析（正規表現が受理するオートマトンを調べた）／読解（コードを読んで判断した）／ブラウザ（ヘッドレスの Microsoft Edge 155 と Firefox 158 でページを開いて確かめた）／取得（応答ヘッダーやリンク先を実際に取得して確かめた）／CI（上流の GitHub Actions の記録で確かめた）
 - **状態**: 未着手／対応中（直したブランチへのリンクを書く）／PR 中（PR へのリンクを書く）／修正済（上流に取り込まれた）．上流に取り込まれたら，tests/ の該当テストから `todo` を外し，ID を `fuzz/open-findings.mjs` から外し，`fuzz/inputs.mjs` での既知の入力の書き出し先を `fuzz/regressions/` に移す
 
 ## 一覧
@@ -37,6 +37,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [S10](#s10) | 低 | ページに `<script>` と `<style>` を入れる | 読解・再現 | 未着手 | |
 | [S11](#s11) | 低 | Trusted Types を求めるページで，innerHTML などに文字列を渡す | 読解・再現 | 未着手 | |
 | [S12](#s12) | 低 | 取得したデータを，リダイレクトの行き先を確かめずに使用する | 読解・ファズ | 対応中（[fix/redirect-origin](https://github.com/yumasansansan/kulms-extension/tree/fix/redirect-origin)） | |
+| [S13](#s13) | 低 | ランディングページに CSP などの守りが無く，GitHub Pages ではヘッダーを付けられない | 取得・ブラウザ | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)．埋め込みの禁止などはヘッダーが要る） | |
 | [B1](#b1) | **高** | 複数タブを開いていると，メモ・完了チェック・非表示が消える | 再現 | 修正済（[#75](https://github.com/Radian0523/kulms-extension/pull/75)，v1.21.1） | |
 | [B2](#b2) | 中 | 非表示にした課題が 30 日後に一覧へ戻る | 再現 | 修正済（[#76](https://github.com/Radian0523/kulms-extension/pull/76)，v1.21.1） | [#74](https://github.com/Radian0523/kulms-extension/issues/74) |
 | [B3](#b3) | 中 | サイドバーの色分けで，期限切れが最も弱く扱われる | 再現 | 対応中（[fix/sidebar-overdue-color](https://github.com/yumasansansan/kulms-extension/tree/fix/sidebar-overdue-color)） | |
@@ -67,7 +68,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [P2](#p2) | 中 | フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行い，開かないフォルダを何度も要求し直す | 読解・ファズ | 対応中（一部：[fix/expand-folders-once](https://github.com/yumasansansan/kulms-extension/tree/fix/expand-folders-once)） | [#62](https://github.com/Radian0523/kulms-extension/issues/62) |
 | [P3](#p3) | 中 | `document.body` 全体を監視する MutationObserver が多く，重い | 読解 | 未着手 | |
 | [P4](#p4) | 低 | jsQR（256KB）と qrcode-gen（56KB）を広すぎる範囲に注入する | 読解 | 対応中（jsQR：[fix/jsqr-where-read](https://github.com/yumasansansan/kulms-extension/tree/fix/jsqr-where-read)） | |
-| [P5](#p5) | 低 | 教科書の取得が科目ごとの直列処理 | 読解 | 未着手 | |
+| [P5](#p5) | 低 | 教科書の取得が科目ごとの直列処理 | 読解・再現 | 対応中（[fix/textbooks-parallel](https://github.com/yumasansansan/kulms-extension/tree/fix/textbooks-parallel)） | |
 | [P6](#p6) | 低 | Service Worker の起動ごとに Shift_JIS 変換表を作り直す | 計測 | 未着手 | |
 | [P7](#p7) | 低 | TA 採点支援のページ側の橋渡しが，配列もどきの `length` が示す回数だけ反復する | ファズ | 対応中（[fix/grading-bridge-values](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-bridge-values)） | |
 | [P8](#p8) | 低 | 表示中の TOTP コードを毎秒作り直すたびに，シークレットをデコードし，HMAC の鍵を作り直す | 再現・ファズ | 対応中（[fix/totp-key-once](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-key-once)） | |
@@ -75,8 +76,17 @@ specification: the GNU General Public License, version 3 or any later version
 | [M2](#保守性) | — | popup.js と assignments.js，textbooks.js と assignments.js の重複 | 読解 | 未着手 | |
 | [M3](#保守性) | — | テストが無く，CI は PR 時の ESLint のみ．IIFE 構造でテストしにくい | 読解 | 未着手 | |
 | [M4](#保守性) | — | Safari の Resources がコミットされた複製で，本体から遅れる | 読解 | 未着手 | |
-| [M5](#保守性) | — | 動かないコード（textbooks.js の設定確認，popup.js の SVG 走査，assignments.js の状態のバッジ） | 読解 | 未着手 | |
+| [M5](#保守性) | — | 動かないコード（textbooks.js の設定確認，popup.js の SVG 走査，assignments.js の状態のバッジ） | 読解 | 対応中（[fix/dead-code](https://github.com/yumasansansan/kulms-extension/tree/fix/dead-code)） | |
+| [M6](#保守性) | — | 上流の CI の Auto Assign が，フォークからの PR で必ず失敗する | CI | 対応中（[fix/auto-assign-forks](https://github.com/yumasansansan/kulms-extension/tree/fix/auto-assign-forks)） | |
 | [D1](#d1) | 低 | プライバシーポリシーの TOTP の記述が実装と合わない | 読解 | 対応中（[fix/privacy-storage](https://github.com/yumasansansan/kulms-extension/tree/fix/privacy-storage)） | |
+| [D2](#d2) | 低 | ランディングページが画面の大きさに合わせて伸び縮みせず，狭い画面で内容がはみ出す | ブラウザ | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)） | |
+| [D3](#d3) | 低 | 高さの低い画面で，スクロールで現れる節が透明のまま残る | ブラウザ | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)） | |
+| [D4](#d4) | 低 | 文字と背景のコントラスト比が WCAG 2.2 の AA に届かない（応援のボタンは 1.07:1） | ブラウザ | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)） | |
+| [D5](#d5) | 低 | 機能のカルーセルで「次へ」「前へ」を続けて押すと，押した回数だけ進まない | ブラウザ | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)） | |
+| [D6](#d6) | 低 | スクリーンショットが PNG だけで重い（9 枚で 947,698 バイト） | ブラウザ | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)） | |
+| [D7](#d7) | 低 | ヘッダーの飾りの円が，ヘッダーの下端で切れる | ブラウザ | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)） | |
+| [D8](#d8) | 低 | 多要素認証の案内と設定手順の PDF へのリンクが切れている | 取得 | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)） | |
+| [D9](#d9) | 低 | ダウンロードボタンのアイコンが，各ブラウザとストアのものと違う | ブラウザ | 未着手（上流の作者と相談する） | |
 
 ## 問題ではないもの：TOTP の HMAC-SHA-1
 
@@ -239,6 +249,22 @@ specification: the GNU General Public License, version 3 or any later version
 - 直し方: リダイレクトを想定しない取得には `redirect: "error"` を指定する．ログアウトの検知のためにリダイレクトを扱う `sakaiGet()` は，`redirect: "manual"` を指定して opaque-redirect の応答 [[Fetch]](#参考文献) をログアウトとみなすか，`res.url` のオリジンが `https://lms.gakusei.kyoto-u.ac.jp` であることを確かめてから使用する．
 - 対応: 応答を使う前に，最終的な取得元のオリジン（スキームとホスト）が求めた先と同じであることを確かめ，違えば取得の失敗として扱う（7 か所．[fix/redirect-origin](https://github.com/yumasansansan/kulms-extension/tree/fix/redirect-origin)）．
 - テスト: `fuzz/known/site-contact/S12-redirect-elsewhere`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
+
+### S13
+**ランディングページに CSP などの守りが無く，GitHub Pages ではヘッダーを付けられない**（低・取得・ブラウザ）
+
+- 場所: `docs/` の 4 ページ．[docs/index.html:9-412](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/index.html#L9-L412) の style 要素，[:1415-1501](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/index.html#L1415-L1501) のインラインのスクリプト，style 属性 11 か所とイベントハンドラーの属性 3 か所．[docs/2fa/index.html](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/2fa/index.html) にも style 要素，style 属性，インラインのスクリプトがあり，[docs/security/index.html](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/security/index.html) と [docs/privacy.html](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/privacy.html) にも style 要素がある．
+- 何が起きるか:
+  - どのページも CSP [[CSP3]](#参考文献) を持たず，インラインのスクリプトとスタイル，イベントハンドラーの属性を使っている．そのため，差し込まれたマークアップやスクリプトを止める仕組みが無い．
+  - GitHub Pages では，レスポンスヘッダーを設定できない．公開中のサイトが返すのは，Content-Type，`Access-Control-Allow-Origin: *`，`Strict-Transport-Security: max-age=31556952`，`Cache-Control: max-age=600` のみであり，Content-Security-Policy，X-Frame-Options，X-Content-Type-Options，Permissions-Policy などは返らない．
+  - HTML の `http-equiv` が受け付ける値は 7 つであり，そのうちセキュリティに関わるのは Content-Security-Policy のみである [[HTML]](#参考文献)．meta 要素で与えた CSP では，frame-ancestors と sandbox が無視される [[CSP3]](#参考文献)．Referrer-Policy は `<meta name="referrer">` で与えられる [[ReferrerPolicy]](#参考文献)．したがって，埋め込みの禁止（frame-ancestors，X-Frame-Options），MIME の推測の禁止，機能の制限，オリジンの分離は，サイトの側からは与えられない．
+  - CSP の `'self'` は `https://radian0523.github.io` を指す．このオリジンは，同じ作者の kulms-android と kulms-ios の Pages と共有されている．
+  - `github.io` は，Chromium と Firefox の HSTS のプリロードの一覧に無い（`github.com` はサブドメインを含めて載っている）[[HSTSPreloadChromium]](#参考文献) [[HSTSPreloadFirefox]](#参考文献)．そのため，初めて http でアクセスしたときに限り，https への転送の前に通信を改ざんされうる．
+- 前提: ページは入力を表示せず，ログインやフォームのような，利用者を欺いて操作させる価値のあるものを持たない．そのため，直ちに害が及ぶ経路は見つかっていない．
+- 根拠: 公開中のサイトの応答ヘッダーを取得して確かめた（2026-10-14）．ヘッドレスの Edge 155 と Firefox 158 で，別のオリジンのページから iframe で埋め込んだ．meta 要素で与えた frame-ancestors と X-Frame-Options は無視され（ページは表示され，Edge はコンソールにエラーを出す），レスポンスヘッダーで与えたものだけが埋め込みを止めた．
+- 直し方: インラインのスクリプトとスタイルを外部のファイルに移し，meta 要素で CSP と Referrer-Policy を与える．meta 要素で与えられないものは，ヘッダーを付けられる層（独自ドメインと CDN，または `_headers` などを読むホスティング）を前に置かない限り与えられない．その場合はサイトの URL が変わるので，拡張の `manifest.json` の `homepage_url`，`src/assignments.js`，`popup.html`，README，ストアの掲載情報も変える必要がある．埋め込みを JavaScript で検知して隠す方法は，埋め込む側がそのフレームのスクリプトを止めれば働かない [[OWASP-Clickjacking]](#参考文献)．
+- 対応: 4 ページのスタイルとスクリプトを `docs/assets/site.css` と `site.js` に移した．meta 要素では，CSP（`default-src 'none'`，自身のスクリプト，スタイル，画像のみを許可，`base-uri` と `form-action` は `'none'`，`upgrade-insecure-requests`，Trusted Types を必須とする．スクリプトの無い 2 ページは `script-src 'none'`）と Referrer-Policy を与えた（[#77](https://github.com/Radian0523/kulms-extension/pull/77)）．SRI [[SRI]](#参考文献) とハッシュによるスクリプトの許可は導入していない．CSS や JS を変えるたびにハッシュの更新が必要であり，Pages のキャッシュ（10 分）の間に HTML と食い違うと，ファイルが読み込まれなくなるためである．
+- テスト: ブラウザで，文字列の innerHTML への代入，差し込んだインラインのスクリプト，style 属性，ほかのオリジンの画像が拒まれることを確かめた．
 
 ## 不具合
 
@@ -575,10 +601,13 @@ specification: the GNU General Public License, version 3 or any later version
 - テスト: `tests/totp.test.mjs` の「P4」（ハーネスは manifest の `include_globs`，`exclude_globs`，`exclude_matches` を Chrome と同じに読む）．
 
 ### P5
-**教科書の取得が科目ごとの直列処理**（低・読解）
+**教科書の取得が科目ごとの直列処理**（低・読解・再現）
 
 - 場所: [src/textbooks.js:355-375](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L355-L375)．1 科目につき，background で 2〜4 本の HTTP を使う．
 - 直し方: 並列数 2〜3 程度で並行させる（KULASIS への負荷に配慮する）．
+- 根拠: `tests/assignments.test.mjs` の「P5」が，background の KULASIS の検索を保留させ，同時に問い合わせる科目の数を数える．`20d7da3` では 1 科目である．
+- 対応: 問い合わせを同時に 3 科目までにして並行させ，これまでの繰り返しが，科目の順にその結果を待つようにした（一覧の組み立てと取得中の表示は変えない）．KULASIS の検索とシラバスの取得は，クエリーだけで決まる GET であり，サーバー側の状態に頼らないので，並行させても互いに影響しない（[fix/textbooks-parallel](https://github.com/yumasansansan/kulms-extension/tree/fix/textbooks-parallel)．2026-10-14）．B11 の [fix/textbooks-by-site](https://github.com/yumasansansan/kulms-extension/tree/fix/textbooks-by-site) と衝突しないよう，繰り返しの中では結果を受け取る行だけを変えた．両方を合わせた版で，B11 と P5 のテストがどちらも通る．
+- テスト: `tests/assignments.test.mjs` の「P5」（todo）．
 
 ### P6
 **Service Worker の起動ごとに Shift_JIS 変換表を作り直す**（低・計測）
@@ -613,7 +642,8 @@ specification: the GNU General Public License, version 3 or any later version
 - **M2**: 緊急度・表示形式・提出判定が popup.js と assignments.js に，コース一覧の取得が textbooks.js と assignments.js に重複している．
 - **M3**: テストが無く，CI は PR 時の ESLint だけ．関数が IIFE に閉じており，chrome API と DOM に依存するため，単体ではテストしにくい．
 - **M4**: `safari/KULMS+ Extension/Resources/` がコミットされた複製で，本体から遅れる．`087452e` では `src/assignments.js` と `src/submit-detect.js` が古いままだった．v1.21.1 では，上流が src に揃え（[`97a8746`](https://github.com/Radian0523/kulms-extension/commit/97a87462f3ab2950867ef53c2171713a77a7b3a8)），CONTRIBUTING.md に，`./build.sh safari` で生成される複製であるため直接編集しないよう記した．複製をコミットする形は変わらない．
-- **M5**: 動かないコードがある．[src/textbooks.js:7](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L7) は，設定を読み込む前に設定を確かめている．[popup.js:901-917](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L901-L917) の SVG 走査は，作った画像を使っていない．[src/assignments.js:478-496](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L478-L496) の `getStatusBadgeClass()` と `getStatusLabel()` はどこからも呼ばれず，`isGraded()` はこの 2 つからのみ呼ばれる（2026-10-14．カバレッジで見つけ，呼び出しが無いことをコードで確かめた）．
+- **M5**: 動かないコードがある．[src/textbooks.js:7](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L7) は，設定を読み込む前に設定を確かめている．[popup.js:901-917](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L901-L917) の SVG 走査は，作った画像を使っていない．[src/assignments.js:478-496](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L478-L496) の `getStatusBadgeClass()` と `getStatusLabel()` はどこからも呼ばれず，`isGraded()` はこの 2 つからのみ呼ばれる（2026-10-14．カバレッジで見つけ，呼び出しが無いことをコードで確かめた）． 対応: 3 か所を取り除き，`getStatusLabel()` からのみ使われていた翻訳のキー 3 つ（`statusSubmitted`，`statusGraded`，`statusNotSubmitted`）も en と ja から取り除いた．textbooks.js には，教科書を出すかどうかは設定を読み込んでから assignments.js が決めることを，コメントで残した（[fix/dead-code](https://github.com/yumasansansan/kulms-extension/tree/fix/dead-code)．2026-10-14）．上流の ESLint の警告は 46 件から 42 件に減った．減ったのは，取り除いたコードに対する no-unused-vars の 4 件である．
+- **M6**: 上流の CI の Auto Assign（[.github/workflows/ci.yml:17-31](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/.github/workflows/ci.yml#L17-L31)）は，PR が開かれたときに，上流の所有者を担当者として付ける．しかし，フォークからの PR では，`permissions` に `pull-requests: write` を書いても GITHUB_TOKEN は読み取りの権限しか持たない [[GitHubActionsEvents]](#参考文献)．そのため，403（Resource not accessible by integration）で必ず失敗する（[#75](https://github.com/Radian0523/kulms-extension/pull/75)，[#76](https://github.com/Radian0523/kulms-extension/pull/76)，[#77](https://github.com/Radian0523/kulms-extension/pull/77) の記録で確かめた）．PR の内容の検査（ESLint）とは関係しない．直し方は，フォークからの PR ではこのジョブを飛ばすか，担当者を付ける処理を，PR のコードを取り出さない `pull_request_target` のワークフローに分けることである． 対応: 担当者を付ける処理を，`pull_request_target` で動く `auto-assign.yml` に移した．このジョブは PR のコードを取り出さず，実行もせず，PR から届く値をスクリプトに埋め込まないので，信頼できないコードを `pull_request_target` で動かす危険 [[GitHubActionsEvents]](#参考文献) には当たらない．`ci.yml` に残る ESLint のジョブには，読み取りの権限だけを与えた（[fix/auto-assign-forks](https://github.com/yumasansansan/kulms-extension/tree/fix/auto-assign-forks)．2026-10-14）．`pull_request_target` は既定のブランチにあるワークフローで動くため，実際の動作は，取り込まれた後に開かれる PR で確かめる．
 
 ## ドキュメント
 
@@ -625,6 +655,70 @@ specification: the GNU General Public License, version 3 or any later version
   - 鍵が暗号文の隣にあるので，ディスクを読める攻撃者には平文とほぼ同じである．「AES-256-GCM で暗号化」という記述は，実際より強い保護であるかのように読める．
   - 扱うデータはすべて chrome.storage.local にあると書いているが，サイドバーのツール表示設定と幅は LMS のページの localStorage に，パネルの開閉や提出の目印，登録途中の TOTP シークレット（S3）は sessionStorage にある．2段階認証の設定ガイドとセキュリティのページも同じ書き方である．
 - 対応: 3 つのページの保存先の記述を実装に合わせ，鍵が同じ端末にあるので端末のデータを読める人からは守れないことを書いた（[fix/privacy-storage](https://github.com/yumasansansan/kulms-extension/tree/fix/privacy-storage)）．
+- ほかの修正との関係: ランディングページの修正（S13，D2〜D8．[#77](https://github.com/Radian0523/kulms-extension/pull/77)）も同じ 3 ページを変えるが，変える行が重ならないため，どちらを先に取り込んでも衝突しない（git merge-tree で確かめた）．両方を合わせた版でも，D2〜D5 と S13 のブラウザでの確認がすべて通った（2026-10-14）．
+
+### D2
+**ランディングページが画面の大きさに合わせて伸び縮みせず，狭い画面で内容がはみ出す**（低・ブラウザ）
+
+- 場所: [docs/index.html:69](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/index.html#L69)，[:107](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/index.html#L107)，[:380](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/index.html#L380)（列の幅 740px），[:404-411](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/index.html#L404-L411)（区切りは幅 640px の 1 か所のみ）．大きさはほぼ px で固定されている．
+- 何が起きるか: 狭い画面では，内容が画面の幅からはみ出し（幅 100px の画面で 204px），文字が箱からはみ出す．大きな画面では，幅 740px の列が小さく取り残される．読み込み直さずに画面の大きさを変えると，カルーセルの位置が見ていたスライドからずれる．
+- 対応: 長さをすべて rem，em，割合で表し，基準の文字の大きさを `clamp(56.25%, 5vw, max(100%, 1.6vmin))` で画面から決めるようにした．長い語は箱の中で折り返す．カルーセルは，大きさが変わると，見ていたスライドに位置を合わせ直す（[#77](https://github.com/Radian0523/kulms-extension/pull/77)）．
+- テスト: ブラウザで，4 ページを 100×100 から 15360×8640 まで 22 通りの大きさで開き，読み込み直さずに大きさを変えた場合も含めて，画面や箱からはみ出す要素が無いことを確かめた．
+
+### D3
+**高さの低い画面で，スクロールで現れる節が透明のまま残る**（低・ブラウザ）
+
+- 場所: [docs/index.html:1490-1500](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/index.html#L1490-L1500)
+- 何が起きるか: 節は，IntersectionObserver が，節の 10% 以上が画面（下端の 40px を除く）に入ったと伝えたときに現れる（`threshold: 0.1`，`rootMargin: '0px 0px -40px 0px'`）．画面の高さから 40px を除いた値が，節の高さの 10% に満たないと，どこまでスクロールしても閾値に届かず，その節は透明のまま表示されない．
+- 対応: 読み込んだ時点で画面の外にある節だけを隠し，閾値を 0 にした（少しでも画面に入れば現す）（[#77](https://github.com/Radian0523/kulms-extension/pull/77)）．
+- テスト: ブラウザで，高さ 100px の画面を含む 22 通りの大きさで，隠した節がスクロールするとすべて現れることを確かめた．
+
+### D4
+**文字と背景のコントラスト比が WCAG 2.2 の AA に届かない**（低・ブラウザ）
+
+- 場所: [docs/index.html:299](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/index.html#L299)（`.footer a` の色），[:1407](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/index.html#L1407)（開発を応援するボタン）
+- 何が起きるか: フッターの「開発を応援する」ボタンでは，`.footer a` の色がボタンの文字の色より優先され，文字が背景に同化する（コントラスト比 1.07:1，ホバー時 1.20:1）．このほかにも，補足の文字，リンク，各ボタンの文字が，WCAG 2.2 の達成基準 1.4.3 の 4.5:1 [[WCAG22]](#参考文献) に届かない．
+- 対応: 色相を保ったまま明るさだけを変え，文字と背景の組み合わせをすべて 4.5:1（大きな文字は 3:1）以上にした（[#77](https://github.com/Radian0523/kulms-extension/pull/77)）．
+- テスト: ブラウザで，22 通りの大きさにおいて，表示されているすべての文字のコントラスト比を背景の色から計算し，基準に届かないものが無いことを確かめた．
+
+### D5
+**機能のカルーセルで「次へ」「前へ」を続けて押すと，押した回数だけ進まない**（低・ブラウザ）
+
+- 場所: [docs/index.html:1447-1454](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/index.html#L1447-L1454)
+- 何が起きるか: ボタンを押すたびに，現在のスライドをスクロール位置から求める．スムーズスクロールの途中で続けて押すと，途中の位置から求めたスライドの次を指すため，押した回数だけ進まない．Edge 155 と Firefox 158 のいずれでも，50 ms 間隔で 2 回押すと 2 枚目で，30 ms 間隔で 8 回押すと 3 枚目で止まった．
+- 対応: ボタンや点で選んだスライドを記録し，そこへのスクロールが止まるまで（`scrollend`．これが無いブラウザでは `scroll` が 150 ms 途絶えるまで），途中の位置で現在のスライドを決め直さない．利用者がホイールやキーで動かした場合は，記録したスライドを捨てる（[#77](https://github.com/Radian0523/kulms-extension/pull/77)）．
+- テスト: ブラウザで，ボタンと点を 0〜400 ms の間隔で続けて押す操作など 21 通りを，prefers-reduced-motion の両方の設定で確かめた．
+
+### D6
+**スクリーンショットが PNG だけで重い**（低・ブラウザ）
+
+- 場所: [docs/images/](https://github.com/Radian0523/kulms-extension/tree/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/images)（9 枚で 947,698 バイト）
+- 何が起きるか: 機能を紹介する 9 枚のスクリーンショットが PNG であり，合わせて 947,698 バイトある．
+- 対応: AVIF [[AVIF]](#参考文献)（4:4:4）に変換し（187,122 バイト），AVIF を表示できないブラウザには，picture 要素で PNG を出す．最初の 1 枚のほかは遅延して読み込む．AVIF の色空間は，colr と AV1 のシーケンスヘッダーの両方に明示した（原色 BT.709，伝達特性 sRGB，行列係数 BT.601，全範囲．[[H273]](#参考文献) の符号で 1/13/6）．行列係数を未指定（2）とした場合，Chromium は BT.601 とみなすが，Firefox は原色から推し量り，原色が BT.709 であれば BT.709 とみなす [[FirefoxCICP]](#参考文献)．原色だけを sRGB と明示した版では，Firefox においてのみ色がずれた（色のある画素で平均 5.25 段階）．Display P3 で撮られた 1 枚は sRGB に変換した（[#77](https://github.com/Radian0523/kulms-extension/pull/77)）．
+- テスト: ブラウザで，次のことを確かめた．いずれのブラウザでも AVIF が選ばれ，PNG は取得されない．AVIF を無効にした Edge と，source の type を未対応のものに替えた Firefox では，PNG に切り替わる．表示される画素は両方のブラウザで等しく，元の PNG との PSNR は 46.5〜52.1 dB である．
+
+### D7
+**ヘッダーの飾りの円が，ヘッダーの下端で切れる**（低・ブラウザ）
+
+- 場所: [docs/index.html:317-332](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/index.html#L317-L332)
+- 何が起きるか: ヘッダーは `overflow: hidden` であり，右下の円はヘッダーの下に 40px はみ出しているので，円の下側が水平に切れる．狭い画面ではヘッダーが低くなるため，左上の円も切れる．
+- 対応: ヘッダーは横方向のみを切り取り（`overflow: clip visible`），円は `z-index: -1` で，ページの背景のすぐ上，どの内容よりも後ろに描く（[#77](https://github.com/Radian0523/kulms-extension/pull/77)）．
+- テスト: ブラウザで，1891×899 と 375×812 の画面を撮影し，円の中心を通る縦の列の明るさが，ヘッダーの下端をまたぐ範囲で，隣り合う行の間で最大 1.0 段階（255 段階中）しか変わらないことを確かめた．
+
+### D8
+**多要素認証の案内と設定手順の PDF へのリンクが切れている**（低・取得）
+
+- 場所: [docs/index.html:585](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/index.html#L585)，[:589](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/index.html#L589)，[docs/2fa/index.html:271](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/2fa/index.html#L271)
+- 何が起きるか: 京都大学情報環境機構の多要素認証の案内（`https://www.iimc.kyoto-u.ac.jp/ja/services/cert/mfa/`）は 404 を返す．設定手順の PDF（`https://iimc.kyoto-u.ac.jp/sites/default/files/2025-03/info31_0.pdf`）は，`www` の無いホスト名には接続できない．
+- 対応: 現在の案内のページ（`https://www.iimc.kyoto-u.ac.jp/ja/services/account/mfa`）と，`www` の付いた PDF の URL に替えた（[#77](https://github.com/Radian0523/kulms-extension/pull/77)）．
+- テスト: 4 ページのページ内のリンク 45 個と外部のリンク 20 個を取得し，すべて有効であることを確かめた（2026-10-14）．
+
+### D9
+**ダウンロードボタンのアイコンが，各ブラウザとストアのものと違う**（低・ブラウザ）
+
+- 場所: [docs/index.html:424-454](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/docs/index.html#L424-L454)
+- 何が起きるか: ボタンのアイコンは，いずれも各社のロゴやストアのバッジではない．Chrome は 3 つに分けた円による近似であり，欠けがある．Edge は旧いロゴの部品がずれた形，Firefox は地球儀，Safari は方位磁針，iOS はスマートフォンの輪郭であり，Android はロボットの頭の触角が下に出た形である．また，Edge のボタンは Chrome ウェブストアを指している．
+- 直し方: 各社のロゴは商標であり，使用の指針がある．たとえば Apple は，Apple のロゴを単独で使うことを認めず，App Store のバッジについて最小の大きさや周囲の余白を定める [[AppStoreMarketing]](#参考文献)．ストアのバッジ（App Store [[AppStoreMarketing]](#参考文献)，Google Play [[GooglePlayBadges]](#参考文献)，Chrome ウェブストア [[CWSBranding]](#参考文献)，Firefox Add-ons [[AMOPromote]](#参考文献)）を，それぞれの指針に従って使うのがよい．どれをどのように使うかは，上流の作者と相談して決める．
 
 ## 上流 Issue との対応
 
@@ -884,6 +978,9 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 
 本文中の [ ] は次の文献を指す．Web の標準と文書は，いずれも 2026-10-14 に参照した版による．
 
+- [AMOPromote] Mozilla, "Promoting your extension or theme," Firefox Extension Workshop. https://extensionworkshop.com/documentation/publish/promoting-your-extension/
+- [AppStoreMarketing] Apple, "App Store Marketing Guidelines." https://developer.apple.com/app-store/marketing/guidelines/
+- [AVIF] Alliance for Open Media, "AV1 Image File Format (AVIF)." https://aomediacodec.github.io/av1-avif/
 - [ChromeActiveTab] Google, "The 'activeTab' permission," Chrome for Developers. https://developer.chrome.com/docs/extensions/develop/concepts/activeTab
 - [ChromeContentScripts] Google, "Content scripts," Chrome for Developers（manifest の `content_scripts` と `world`）. https://developer.chrome.com/docs/extensions/reference/manifest/content-scripts
 - [ChromeNetwork] Google, "Cross-origin network requests," Chrome for Developers. https://developer.chrome.com/docs/extensions/develop/concepts/network-requests
@@ -891,10 +988,17 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 - [ChromeStorage] Google, "chrome.storage," Chrome for Developers. https://developer.chrome.com/docs/extensions/reference/api/storage
 - [ChromeTabs] Google, "chrome.tabs," Chrome for Developers（`tabs.query()` と `tabs.Tab`）. https://developer.chrome.com/docs/extensions/reference/api/tabs
 - [CSP3] W3C, "Content Security Policy Level 3," Working Draft. https://www.w3.org/TR/CSP3/
+- [CWSBranding] Google, "Branding guidelines," Chrome Web Store, Chrome for Developers. https://developer.chrome.com/docs/webstore/branding
 - [DOM] WHATWG, "DOM Standard," Living Standard. https://dom.spec.whatwg.org/
 - [ECMA-262] Ecma International, "ECMAScript Language Specification," ECMA-262. https://tc39.es/ecma262/
+- [FirefoxCICP] Mozilla, "gfx/thebes/gfxUtils.cpp," Firefox（`gfxUtils::CicpToColorSpace`：行列係数が未指定のとき，原色から行列を推し量る）. https://github.com/mozilla-firefox/firefox/blob/main/gfx/thebes/gfxUtils.cpp
 - [Fetch] WHATWG, "Fetch Standard," Living Standard（§2.2.5 の redirect-taint と要求のオリジンの直列化，§4.4 HTTP fetch，§4.5 HTTP-redirect fetch，§4.10 CORS check）. https://fetch.spec.whatwg.org/
-- [HTML] WHATWG, "HTML Standard," Living Standard（§3.2.7 The innerText and outerText properties，§4.6.3 API for hyperlink elements，§4.12.1 The script element，§4.12.5 The canvas element，§7.2.4 The Location interface，§8.7 Timers，§12 Web storage，§13.2.3.5 Preprocessing the input stream）. https://html.spec.whatwg.org/
+- [GitHubActionsEvents] GitHub, "Events that trigger workflows," GitHub Docs（フォークからの pull_request では，GITHUB_TOKEN は読み取りの権限のみを持つ）. https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
+- [GooglePlayBadges] Google, "Google Play badges." https://play.google.com/intl/en_us/badges/
+- [H273] ITU-T, "Coding-independent code points for video signal type identification," Recommendation H.273. https://www.itu.int/rec/T-REC-H.273
+- [HSTSPreloadChromium] Chromium, "net/http/transport_security_state_static.json." https://github.com/chromium/chromium/blob/main/net/http/transport_security_state_static.json
+- [HSTSPreloadFirefox] Mozilla, "security/manager/ssl/nsSTSPreloadList.inc," Firefox. https://github.com/mozilla-firefox/firefox/blob/main/security/manager/ssl/nsSTSPreloadList.inc
+- [HTML] WHATWG, "HTML Standard," Living Standard（§3.2.7 The innerText and outerText properties，§4.2.5.3 Pragma directives，§4.6.3 API for hyperlink elements，§4.12.1 The script element，§4.12.5 The canvas element，§7.2.4 The Location interface，§8.7 Timers，§12 Web storage，§13.2.3.5 Preprocessing the input stream）. https://html.spec.whatwg.org/
 - [istanbul] istanbul.js. https://istanbul.js.org/
 - [Jazzer.js] Code Intelligence, "Jazzer.js." https://github.com/CodeIntelligenceTesting/jazzer.js
 - [libFuzzer] LLVM Project, "libFuzzer – a library for coverage-guided fuzz testing." https://llvm.org/docs/LibFuzzer.html
@@ -902,7 +1006,9 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 - [MixedContent] W3C, "Mixed Content." https://www.w3.org/TR/mixed-content/
 - [NodeCoverage] OpenJS Foundation, "Command-line API: NODE_V8_COVERAGE=dir," Node.js Documentation. https://nodejs.org/api/cli.html#node_v8_coveragedir
 - [NodeTest] OpenJS Foundation, "Test runner: Extraneous asynchronous activity," Node.js Documentation（v26.11.1）. https://nodejs.org/api/test.html#extraneous-asynchronous-activity
+- [OWASP-Clickjacking] OWASP, "Clickjacking Defense Cheat Sheet," OWASP Cheat Sheet Series. https://cheatsheetseries.owasp.org/cheatsheets/Clickjacking_Defense_Cheat_Sheet.html
 - [recheck] TSUYUSATO Kitsune, "recheck." https://makenowjust-labs.github.io/recheck/
+- [ReferrerPolicy] W3C, "Referrer Policy," Candidate Recommendation Draft（meta 要素による指定）. https://www.w3.org/TR/referrer-policy/
 - [REUSE] Free Software Foundation Europe, "REUSE Specification." https://reuse.software/spec/
 - [RFC4226] D. M'Raihi et al., "HOTP: An HMAC-Based One-Time Password Algorithm," RFC 4226, 2005. https://www.rfc-editor.org/rfc/rfc4226
 - [RFC6194] T. Polk et al., "Security Considerations for the SHA-0 and SHA-1 Message-Digest Algorithms," RFC 6194, 2011（§3.3，§4）. https://www.rfc-editor.org/rfc/rfc6194
@@ -913,5 +1019,6 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 - [Storage] WHATWG, "Storage Standard," Living Standard（§4.1 Storage endpoints）. https://storage.spec.whatwg.org/
 - [TT] W3C, "Trusted Types," Editor's Draft. https://w3c.github.io/trusted-types/dist/spec/
 - [URL] WHATWG, "URL Standard," Living Standard. https://url.spec.whatwg.org/
+- [WCAG22] W3C, "Web Content Accessibility Guidelines (WCAG) 2.2," W3C Recommendation（達成基準 1.4.3 Contrast (Minimum)）. https://www.w3.org/TR/WCAG22/
 - [WebCrypto] W3C, "Web Cryptography Level 2," Editor's Draft（§31.6.4 HMAC の Import Key：鍵のデータの長さが 0 ビットなら DataError を投げる）. https://w3c.github.io/webcrypto/
 - [WebIDL] WHATWG, "Web IDL Standard," Living Standard（反復可能なインターフェースの forEach，keys，values，entries）. https://webidl.spec.whatwg.org/
