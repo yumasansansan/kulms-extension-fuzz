@@ -141,6 +141,53 @@ function popupAssignment(w, { course, site, name, id, inMs, status }) {
   w.bool(true); w.bool(false);
 }
 
+// What fuzz/targets/grading-pages.fuzz.mjs reads (read()), written: its lists
+// of words as the target has them, an ID as Sakai gives one (`hex`, as
+// bytes), a status (`icons` the indexes of the icons before it, `words` one
+// of the target's STATUSES), a name (a status read as any string), and a
+// link to the grader.
+const GRADING_STATUSES = ["未採点 - 提出済み", "未採点 - 取組中", "未提出", "採点済み", "返却済み", "再提出済み", "Ungraded - Submitted",
+  "Ungraded - In Progress", "Awaiting Grade", "Submitted, Awaiting Grade", "No Submission", "Not Submitted", "Honor Pledge Accepted",
+  "Returned", "Graded"];
+const GRADING_HEADERS = ["状態", "Status", "提出日時", "Submitted", "受講者", "学生番号", "Student", "氏名", "Name", "成績", "Grade", "開示", "Release", "再提出"];
+const GRADING_BUTTONS = ["保存", "Save", "返却", "Return", "提出", "Submit", "保存して返却", "Release", ""];
+const GRADING_CONTROLS = ["前の提出物を表示", "次の提出物を表示", "一覧へ戻る", "設定", "previous submission", "next submission", "Back to list", "Settings"];
+const GRADING_ACTIONS = ["jump-next", "jump-prev", "select", "type", "grader-button", "page-control", "redraw", "panel", "status", "storage", "resize", "time"];
+function gradingId(w, hex) {
+  w.bool(true);
+  bytes(w, hex.match(/../g).map((h) => parseInt(h, 16)));
+}
+function gradingStatus(w, words, icons = []) {
+  w.int(0, w.remaining, icons.length);
+  for (const i of icons) { w.int(0, 4, i); w.bool(true); }
+  w.bool(true); w.pick(GRADING_STATUSES, words); w.bool(false);
+}
+function gradingName(w, name) {
+  w.int(0, w.remaining, 0);
+  w.bool(false); string(w, name);
+}
+function gradingLink(w, { site, assignment, tool, hex }) {
+  w.bool(true); string(w, site); string(w, assignment); string(w, tool); gradingId(w, hex);
+}
+// A submission of the grader: of the student `of`, named `name`, its status
+// `status`, submitted or not, graded or not; every field as Sakai gives it.
+function gradingSubmission(w, { of, name, status, submitted, graded }) {
+  w.bool(true); w.bool(true); w.int(0, 255, of);
+  w.bool(true); string(w, name);
+  w.bool(true); w.bool(true); w.pick(GRADING_STATUSES, status);
+  w.bool(true); string(w, submitted ? "2026/10/10 12:00" : "");
+  w.bool(true); w.bool(submitted);
+  w.bool(true); w.bool(false);
+  w.bool(true); w.bool(false);
+  w.bool(true); string(w, graded ? "85" : "");
+  w.bool(true); w.bool(graded);
+  w.bool(true); w.bool(false);
+}
+function gradingAction(w, kind, at = 0) {
+  w.pick(GRADING_ACTIONS, kind); w.int(0, 65535, at);
+}
+const GRADING_PAGE = { site: "2026-110-1001-000", assignment: "a1b2c3d4", tool: "sakai.assignment.grades" };
+
 const BRIDGE_FIELDS = ["id", "submissionId", "reference", "firstSubmitterName", "status", "submissionStatus", "submittedTime",
   "submitted", "draft", "hasHistory", "grade", "graded", "returned", "length"];
 
@@ -795,6 +842,169 @@ export const INPUTS = [
       w.bool(true); string(w, "\uffff".repeat(150));
       w.int(0, w.remaining, 0);
       w.int(0, w.remaining, 1); w.int(0, 12, 9); w.int(0, 65535, 1);
+    },
+  },
+  {
+    // The grader of an assignment: its panel shown, with a field and buttons
+    // to save and to return; the count of what is graded; three students, of
+    // whom the second's submission waits for a grade, as the grader's
+    // submissions say, the first selected; Sakai's button to the next one;
+    // and a link of the page back to the list. The user types a grade (the
+    // grader is unsaved), presses the jump to the next submission that waits
+    // for a grade and answers to stay, then presses it again and answers to
+    // leave.
+    file: "seeds/grading-pages/grader",
+    plan: (w) => {
+      const { site, assignment, tool } = GRADING_PAGE;
+      w.int(0, 2, 0); string(w, site); string(w, assignment); string(w, tool); gradingId(w, "0a1b2c3d");
+      w.bool(true);
+      w.int(0, 1, 0);
+      w.int(0, 2, 0); string(w, assignment);
+      w.bool(true); w.int(0, 3, 0);
+      w.int(0, w.remaining, 3);
+      w.bool(true);
+      w.bool(false); w.bool(true); w.pick(GRADING_BUTTONS, "保存"); w.bool(false);
+      w.bool(false); w.bool(true); w.pick(GRADING_BUTTONS, "返却"); w.bool(false);
+      w.int(0, 1, 1); w.bool(true); w.bool(true); w.int(0, 1, 0); w.int(0, 2 ** 16 - 1, 1); w.int(0, 2 ** 16 - 1, 3);
+      w.int(0, w.remaining, 3);
+      gradingId(w, "0a1b2c3d"); gradingName(w, "学生A");
+      gradingId(w, "1a2b3c4d"); gradingName(w, "学生B");
+      gradingId(w, "2a3b4c5d"); gradingName(w, "学生C");
+      w.bool(true);
+      w.bool(false);
+      w.bool(true); w.int(0, w.remaining, 3);
+      gradingSubmission(w, { of: 0, name: "学生A", status: "採点済み", submitted: true, graded: true });
+      gradingSubmission(w, { of: 1, name: "学生B", status: "未採点 - 提出済み", submitted: true, graded: false });
+      gradingSubmission(w, { of: 2, name: "学生C", status: "未提出", submitted: false, graded: false });
+      w.bool(true); w.int(0, 2, 0);
+      w.int(0, w.remaining, 1); w.bool(true); string(w, `/portal/site/${site}/tool/${tool}?panel=Main`); w.bool(true); w.pick(GRADING_CONTROLS, "一覧へ戻る");
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 0);
+      w.int(0, 3, 0);
+      w.int(0, w.remaining, 2); w.bool(false); w.bool(true);
+      w.bool(true);
+      w.int(0, w.remaining, 3);
+      gradingAction(w, "type"); string(w, "85");
+      gradingAction(w, "jump-next", 1);
+      gradingAction(w, "jump-next", 1);
+    },
+  },
+  {
+    // The list of submissions of an assignment: a header of Sakai's words in a
+    // thead (受講者, 状態, 提出日時, 成績), and three rows, each a student's
+    // link to the grader, a status (waiting for a grade, graded, returned),
+    // a time and a grade. Then Sakai shows the first one graded, and time
+    // goes by.
+    file: "seeds/grading-pages/list",
+    plan: (w) => {
+      const { site, assignment, tool } = GRADING_PAGE;
+      w.int(0, 2, 1); string(w, site); string(w, tool); string(w, "panel=Main");
+      w.bool(false);
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 1);
+      w.bool(true); w.bool(true);
+      w.int(0, w.remaining, 4);
+      for (const h of ["受講者", "状態", "提出日時", "成績"]) { w.bool(true); w.pick(GRADING_HEADERS, h); }
+      w.int(0, w.remaining, 3);
+      for (const [hex, name, status] of [["0a1b2c3d", "学生A", "未採点 - 提出済み"], ["1a2b3c4d", "学生B", "採点済み"], ["2a3b4c5d", "学生C", "返却済み"]]) {
+        w.int(0, w.remaining, 4);
+        w.int(0, 2, 1); gradingLink(w, { site, assignment, tool, hex }); string(w, name);
+        w.int(0, 2, 0); gradingStatus(w, status);
+        w.int(0, 2, 2); string(w, "2026/10/10 12:00");
+        w.int(0, 2, 2); string(w, "");
+      }
+      w.int(0, w.remaining, 0);
+      w.int(0, 3, 0);
+      w.int(0, w.remaining, 0);
+      w.bool(true);
+      w.int(0, w.remaining, 2);
+      gradingAction(w, "status", 1); gradingStatus(w, "採点済み");
+      gradingAction(w, "time"); w.int(0, 10 * 60e3, 2000);
+    },
+  },
+  {
+    // The list of submissions of the list seed, but for its last row, which
+    // has a student's link and a status, and no cell at the column of the
+    // submission time.
+    file: "known/grading-pages/B26-row-short-of-submit-column",
+    plan: (w) => {
+      const { site, assignment, tool } = GRADING_PAGE;
+      w.int(0, 2, 1); string(w, site); string(w, tool); string(w, "panel=Main");
+      w.bool(false);
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 1);
+      w.bool(true); w.bool(true);
+      w.int(0, w.remaining, 4);
+      for (const h of ["受講者", "状態", "提出日時", "成績"]) { w.bool(true); w.pick(GRADING_HEADERS, h); }
+      w.int(0, w.remaining, 2);
+      w.int(0, w.remaining, 4);
+      w.int(0, 2, 1); gradingLink(w, { site, assignment, tool, hex: "0a1b2c3d" }); string(w, "学生A");
+      w.int(0, 2, 0); gradingStatus(w, "未採点 - 提出済み");
+      w.int(0, 2, 2); string(w, "2026/10/10 12:00");
+      w.int(0, 2, 2); string(w, "");
+      w.int(0, w.remaining, 2);
+      w.int(0, 2, 1); gradingLink(w, { site, assignment, tool, hex: "1a2b3c4d" }); string(w, "学生B");
+      w.int(0, 2, 0); gradingStatus(w, "採点済み");
+      w.int(0, w.remaining, 0);
+      w.int(0, 3, 0);
+      w.int(0, w.remaining, 0);
+      w.bool(true);
+      w.int(0, w.remaining, 0);
+    },
+  },
+  {
+    // The grader with no submissions for the bridge to read, so the extension
+    // fetches the list of submissions: the server answers with a page of the
+    // list, whose rows hold the statuses of the grader's two students. The
+    // page's sessionStorage keeps what the extension kept of an earlier
+    // visit: the second student's submission returned a minute before. Time
+    // goes by.
+    file: "seeds/grading-pages/fetched",
+    plan: (w) => {
+      const { site, assignment, tool } = GRADING_PAGE;
+      w.int(0, 2, 0); string(w, site); string(w, assignment); string(w, tool); gradingId(w, "0a1b2c3d");
+      w.bool(true);
+      w.int(0, 1, 0);
+      w.int(0, 2, 0); string(w, assignment);
+      w.bool(false);
+      w.int(0, 1, 0);
+      w.int(0, w.remaining, 2);
+      gradingId(w, "0a1b2c3d"); gradingName(w, "学生A");
+      gradingId(w, "1a2b3c4d"); gradingName(w, "学生B");
+      w.bool(false);
+      w.bool(false);
+      w.bool(false);
+      w.bool(true); w.int(0, 1, 0);
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 1);
+      w.bool(true);
+      w.int(0, w.remaining, 1);
+      w.bool(true); w.bool(true);
+      w.int(0, w.remaining, 2);
+      for (const h of ["受講者", "状態"]) { w.bool(true); w.pick(GRADING_HEADERS, h); }
+      w.int(0, w.remaining, 2);
+      for (const [hex, name, status] of [["0a1b2c3d", "学生A", "未採点 - 提出済み"], ["1a2b3c4d", "学生B", "採点済み"]]) {
+        w.int(0, w.remaining, 2);
+        w.int(0, 2, 1); gradingLink(w, { site, assignment, tool, hex }); string(w, name);
+        w.int(0, 2, 0); gradingStatus(w, status);
+      }
+      answer(w);
+      w.int(0, 3, 1);
+      w.int(0, w.remaining, 1);
+      w.bool(true); w.int(0, 255, 1);
+      w.bool(true);
+      string(w, "学生B");
+      w.bool(true); w.pick(GRADING_STATUSES, "返却済み");
+      w.int(0, 5, 4);
+      string(w, "2026/10/10 12:00");
+      w.int(0, 2, 2);
+      w.int(0, 2, 2);
+      w.int(0, 10 * 60e3, 60e3);
+      w.int(0, w.remaining, 0);
+      w.bool(true);
+      w.int(0, w.remaining, 1);
+      gradingAction(w, "time"); w.int(0, 10 * 60e3, 1000);
     },
   },
 ];

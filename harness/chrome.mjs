@@ -169,6 +169,7 @@ export class Browser {
     this.traffic = []; // runtime messages, as deliver() keeps them
     this.created = []; // tabs the extension asked to open
     this.injected = []; // what chrome.scripting.executeScript was asked to run
+    this.navigations = []; // the navigations a page asked for, which the harness does not carry out (harness/contexts.mjs)
     this.scripts = new Set(); // the extension's scripts its contexts have run
     this.sites = 0; // their counting sites (harness/work.mjs)
     this.nextTabId = 1;
@@ -295,7 +296,7 @@ export class Browser {
   // input. A watcher made before (harness/detectors.mjs) looks through the
   // whole of each log from then on.
   forget() {
-    for (const log of [this.traffic, this.created, this.injected, this.errors, this.caught, this.untrusted, this.foreign]) log.length = 0;
+    for (const log of [this.traffic, this.created, this.injected, this.navigations, this.errors, this.caught, this.untrusted, this.foreign]) log.length = 0;
     for (const c of this.contexts) if (c.logs) c.logs.length = 0;
     this.forgotten++;
   }

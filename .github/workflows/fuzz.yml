@@ -58,14 +58,15 @@ jobs:
   fuzz:
     name: fuzzing, ${{ github.event.inputs.minutes || '20' }} minutes a target
     runs-on: ubuntu-26.04
-    # Thirteen targets one after another, each allowed an equal share of the
+    # Fourteen targets one after another, each allowed an equal share of the
     # time left (ci/fuzz.sh --until). The job may run as long as GitHub lets a
     # job run, six hours, less half an hour in which the steps below keep what
     # it found, as they do whatever became of the job; ci/fuzz.sh ends five
     # minutes before that, so that it, not the limit, stops what does not end.
-    # At the longest choice, the daily run's, the fuzzing itself takes 260
-    # minutes of it, which leaves each target about four minutes of its share
-    # for its replays and its merge.
+    # At the longest choice, the daily run's, the fuzzing itself would take 280
+    # minutes of it, which leaves each target about three minutes of its share
+    # for its replays and its merge; ci/fuzz.sh cuts a target's fuzzing where
+    # its share would not then hold one more of its slowest inputs.
     timeout-minutes: 330
     # The time of the rungs is not looked at (fuzz/lib.mjs, NOISE): the noise of
     # the clock was measured on a machine kept quiet for it (docs/findings.md),

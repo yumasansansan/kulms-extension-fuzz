@@ -49,3 +49,15 @@ test("B16: a link with a malformed %-sequence is read as it is written", { todo:
   const ids = g.parseGradeLinkIds("?assignmentId=/assignment/a/S%/A%zz&submissionId=/assignment/s/S%/A%zz/0a1b");
   assert.deepEqual({ ...ids }, { siteId: "S%", assignmentId: "A%zz", submissionId: "0a1b" });
 });
+
+// A list of submissions whose row stops at the column of the status: it has a
+// student's link and a status, and no cell at the column of the submission
+// time (as when cells are put together with colspan).
+test("B26: a row of the list of submissions with no cell at the column of the submission time is read without it", { todo: "B26: parseSubmissionListGroups() reads cells[submitColIdx] without looking whether the row has it" }, async (t) => {
+  const { tab, g } = await grader(t);
+  const link = "/portal/site/S/tool/T?assignmentId=/assignment/a/S/A&submissionId=/assignment/s/S/A/0a1b&panel=Main&sakai_action=doGrade_submission";
+  const html = `<table id="submissionList"><thead><tr><th>受講者</th><th>状態</th><th>提出日時</th></tr></thead>
+    <tbody><tr><td><a href="${link}">学生A</a></td><td>未採点 - 提出済み</td></tr></tbody></table>`;
+  const map = g.parseSubmissionList(new tab.window.DOMParser().parseFromString(html, "text/html"));
+  assert.deepEqual(JSON.parse(JSON.stringify(map)), { "0a1b": { name: "学生A", status: "未採点 - 提出済み", kind: "pendingGrade", submitTime: "", source: "submissionList" } });
+});

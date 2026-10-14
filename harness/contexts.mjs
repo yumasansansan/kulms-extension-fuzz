@@ -111,6 +111,7 @@ export function completePlatform(w) {
 
 const DocumentImpl = createRequire(import.meta.url)("jsdom/lib/jsdom/living/nodes/Document-impl.js").implementation;
 const idlUtils = createRequire(import.meta.url)("jsdom/lib/generated/idl/utils.js");
+const whatwgURL = createRequire(createRequire(import.meta.url).resolve("jsdom"))("whatwg-url");
 const FileListIDL = createRequire(import.meta.url)("jsdom/lib/generated/idl/FileList.js");
 const encodingParseAURL = DocumentImpl.prototype.encodingParseAURL;
 const KEPT_URLS = 8;
@@ -741,6 +742,25 @@ function openWindow(browser, context, html, url, clock = null) {
       this.targets.clear();
     }
   };
+  // A navigation that a script asks for (location.href and its kin,
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-location-interface):
+  // jsdom carries out one within the document (to a fragment) and reports any
+  // other as not implemented. The harness keeps such a one in
+  // browser.navigations, after asking the page whether it may be unloaded as
+  // a browser does (a beforeunload event; `prompted` says whether a listener
+  // cancelled it, which makes Chrome ask the user), and leaves the page as it
+  // is: a test or a fuzz target looks at the page that would have gone.
+  const location = idlUtils.implForWrapper(w.location);
+  const navigate = location._locationObjectNavigate.bind(location);
+  location._locationObjectNavigate = (url, flags = {}) => {
+    if (url.scheme === "javascript" || whatwgURL.serializeURL(url, true) === whatwgURL.serializeURL(idlUtils.implForWrapper(w.document)._URL, true)) {
+      return navigate(url, flags);
+    }
+    const unload = new w.Event("beforeunload", { cancelable: true });
+    w.dispatchEvent(unload);
+    record(browser.navigations, { where: context.url, url: whatwgURL.serializeURL(url), prompted: unload.defaultPrevented });
+    return undefined;
+  };
   context.clock = clock;
   context.close = () => {
     for (const t of timers) clearTimeout(t);
@@ -749,6 +769,54 @@ function openWindow(browser, context, html, url, clock = null) {
     w.close();
   };
   return w;
+}
+
+// What a browser does with a <script src> put in the page of `context` that
+// names one of the extension's files: it fetches the file, which only
+// web_accessible_resources opens to the page, runs it in the page's world, and
+// fires load at the element, or error when the file cannot be had
+// (https://html.spec.whatwg.org/multipage/scripting.html#prepare-the-script-element).
+// jsdom runs no script of a page (runScripts "outside-only"), so the harness
+// does this, on a later turn, as the fetch would end; what the script throws
+// is reported as the page's error. The extension puts such a script in the
+// page as the bridge of grading-ta.js; other scripts of a page are the page's,
+// and run nowhere in the harness.
+function loadExtensionScripts(browser, context, w) {
+  const base = `chrome-extension://${browser.id}/`;
+  const begun = new WeakSet(); // a script element runs once, though it be put in again
+  const load = (script, rel) => tracked(new Promise((resolve) => setTimeout(resolve, 0)).then(() => {
+    const file = path.join(EXT, rel);
+    if (!webAccessible(rel, context.url) || !file.startsWith(EXT + path.sep) || !fs.existsSync(file)) {
+      script.dispatchEvent(new w.Event("error"));
+      return;
+    }
+    try {
+      run(context, rel);
+    } catch (e) {
+      browser.report(context, e, "script");
+    }
+    script.dispatchEvent(new w.Event("load"));
+  }));
+  new w.MutationObserver((records) => uncounted(() => {
+    for (const r of records) {
+      for (const node of r.addedNodes) {
+        const scripts = node.nodeName === "SCRIPT" ? [node] : node.querySelectorAll ? [...node.querySelectorAll("script")] : [];
+        for (const script of scripts) {
+          const src = script.getAttribute("src");
+          if (src === null || begun.has(script)) continue;
+          let url;
+          try {
+            url = new URL(src, w.document.baseURI);
+          } catch {
+            continue;
+          }
+          if (!url.href.startsWith(base)) continue;
+          begun.add(script);
+          load(script, decodeURIComponent(url.pathname.slice(1)));
+        }
+      }
+    }
+  })).observe(w.document, { childList: true, subtree: true });
 }
 
 // A tab at `url` with the page `html`, running the content scripts the
@@ -768,6 +836,7 @@ export function openTab(browser, { url, html = EMPTY_PAGE, net = new Net(), scri
     frameOf: top,
   });
   const w = openWindow(browser, context, html, url, clock);
+  loadExtensionScripts(browser, context, w);
   // What chrome.scripting.executeScript runs in the page (inject() of
   // harness/chrome.mjs): a file of the extension's, or what a test or a fuzz
   // target stands in for it (browser.standIns); a function's code, compiled

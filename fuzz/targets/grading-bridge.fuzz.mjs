@@ -280,8 +280,11 @@ const shown = (r) => (r.kind === "extension" ? `the content script's request ${b
 // Known: B24 (docs/findings.md). Whether `error`, which the bridge let out,
 // is one it lets out of the page's objects: what the page's code threw, or
 // what the engine throws on a revoked proxy, a value that JSON cannot hold
-// (a BigInt, a cycle) or one that String() cannot convert.
-const B24_ENGINE = /proxy that has been revoked|serialize a BigInt|circular structure|Cannot convert object to primitive value|Cannot convert a Symbol value/;
+// (a BigInt, a cycle), one that String() cannot convert, or an object that
+// has a built-in's prototype without being one, whose getters and methods
+// of the built-in refuse it ("called on incompatible receiver": the length
+// of a TypedArray, the values of a Map; daily run 38462363590).
+const B24_ENGINE = /proxy that has been revoked|serialize a BigInt|circular structure|Cannot convert object to primitive value|Cannot convert a Symbol value|called on incompatible receiver/;
 function isB24(error) {
   if (pageThrows.has(error)) return true;
   return error instanceof w.TypeError && B24_ENGINE.test(error.message);

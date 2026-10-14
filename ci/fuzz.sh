@@ -53,6 +53,13 @@
 # share of the time left for the targets yet to run, itself among them, from
 # when it starts, and its runs (the replays, the fuzzing, the merge) what is
 # left of that share as each starts:
+# - the fuzzing's own time is <seconds>, or less where the share would not
+#   hold it and then one more input as slow as the slowest that the earlier
+#   crashes hold (the slow units of the run before, replayed first, and
+#   timed), or than RESERVE where none is slower: libFuzzer starts no input
+#   after that time, but ends the one under way, which may be a slow one. A
+#   slower input than that, new, still overruns; it is a slow unit of this
+#   run, and timed in the next;
 # - libFuzzer stops an input that alone takes all that its run may take, and
 #   keeps it, so that it can be replayed (fuzz/replay.mjs);
 # - a run that outlasts what it may take is stopped, and counted as a
@@ -108,6 +115,12 @@ export NODE_OPTIONS="--max-old-space-size=$memory_mb"
 
 # The seconds a run that is told to end has to end, before it is killed.
 grace=60
+
+# The seconds a target keeps of its share, at least, for one more input after
+# its fuzzing's own time: the slow inputs of the daily runs end within five
+# minutes, but for one of submission's, of 466 seconds (daily run
+# 38462363590), which its earlier crashes hold and time.
+RESERVE=300
 
 # When (seconds since the epoch) the next of `n` targets yet to run must end:
 # an equal share of what is left until --until, less the grace of its runs;
@@ -211,11 +224,15 @@ for target in "${targets[@]}"; do
   deadline=$(deadline_of "$left")
   left=$((left - 1))
 
+  slowest=$RESERVE # the seconds of the slowest input of the earlier crashes, RESERVE at least
   if [ -n "$earlier" ] && [ -d "$earlier/$target" ] && [ -n "$(ls -A "$earlier/$target")" ]; then
     still=0
     for input in "$earlier/$target"/*; do
       status=0
+      start=$(date +%s)
       run_until "$deadline" node fuzz/replay.mjs "$target" "$input" || status=$?
+      took=$(( $(date +%s) - start ))
+      if [ "$took" -gt "$slowest" ]; then slowest=$took; fi
       if [ "$status" -ne 0 ]; then
         if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then stopped "The replay of $input"; fi
         cp "$input" "$crashes/$target/"
@@ -231,7 +248,16 @@ for target in "${targets[@]}"; do
 
   dirs=("$corpora/$target")
   if [ -d "fuzz/seeds/$target" ]; then dirs+=("fuzz/seeds/$target"); fi
-  options=(-max_total_time="$seconds" -max_len="$max_len" -rss_limit_mb="$memory_mb" -artifact_prefix="$crashes/$target/" -print_final_stats=1)
+  fuzz_seconds=$seconds
+  if [ -n "$deadline" ]; then
+    room=$(( $(seconds_to "$deadline") - slowest ))
+    if [ "$room" -lt 60 ]; then room=60; fi
+    if [ "$room" -lt "$fuzz_seconds" ]; then
+      fuzz_seconds=$room
+      echo "$target fuzzes for $fuzz_seconds seconds, what its share leaves for one more input of $slowest seconds."
+    fi
+  fi
+  options=(-max_total_time="$fuzz_seconds" -max_len="$max_len" -rss_limit_mb="$memory_mb" -artifact_prefix="$crashes/$target/" -print_final_stats=1)
   if [ -f "fuzz/dict/$target.dict" ]; then options+=(-dict="fuzz/dict/$target.dict"); fi
   before=$(files_in "$corpora/$target")
   log=$(mktemp)

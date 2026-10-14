@@ -62,6 +62,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [B22](#b22) | 低 | 長い TOTP シークレットを background が保存できない（潜在） | ファズ | 対応中（[fix/long-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/long-totp-secret)） | |
 | [B24](#b24) | 低 | TA 採点支援のページ側の橋渡しが，ページのオブジェクトが投げる例外で止まり，文字列でない ID や名前をそのまま渡す | ファズ | 対応中（[fix/grading-bridge-values](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-bridge-values)） | |
 | [B25](#b25) | 低 | 保存された課題のキャッシュが拡張の書く形でないと，課題パネルと popup の描画が止まる | ファズ | 対応中（[fix/cache-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/cache-shape)） | |
+| [B26](#b26) | 低 | TA 採点支援が，提出日時の列にセルの無い行で，提出一覧の読み取りを止める | 再現・ファズ | 対応中（[fix/grading-list-short-rows](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-list-short-rows)） | |
 | [P1](#p1) | **高** | 課題取得の N+1 と，タブごとの短い間隔での再取得（LMS への負荷） | 読解 | 未着手 | [#32](https://github.com/Radian0523/kulms-extension/issues/32), [#27](https://github.com/Radian0523/kulms-extension/issues/27) |
 | [P2](#p2) | 中 | フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行い，開かないフォルダを何度も要求し直す | 読解・ファズ | 対応中（一部：[fix/expand-folders-once](https://github.com/yumasansansan/kulms-extension/tree/fix/expand-folders-once)） | [#62](https://github.com/Radian0523/kulms-extension/issues/62) |
 | [P3](#p3) | 中 | `document.body` 全体を監視する MutationObserver が多く，重い | 読解 | 未着手 | |
@@ -400,7 +401,7 @@ specification: the GNU General Public License, version 3 or any later version
 
 - 場所: [src/grading-ta.js:62-68](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta.js#L62-L68)，[:134-142](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta.js#L134-L142)
 - 何が起きるか: 提出へのリンクや URL のクエリから ID を取り出すとき，`decodeURIComponent` を例外の処理なしに呼ぶ．`%` の後に 16 進数が続かないリンクがあると URIError で止まり，提出一覧の状態アイコンの装飾がその場で途切れる．URL のクエリに壊れた `%` があると，採点画面の起動そのものが止まる．
-- 根拠: ファズ対象 `grading-status` が，約 6 万回目（10 秒）で見つけた．
+- 根拠: ファズ対象 `grading-status` が，約 6 万回目（10 秒）で見つけた．ファズ対象 `grading-pages`（2026-10-14 に加えた）では，ページのクエリ，課題へのリンク，表の提出へのリンクで同じことが起きる．
 - 直し方: 失敗した場合は元の文字列を使う（あるいは `URLSearchParams` で読む）．
 - 対応: デコードできないときは，元の文字列をそのまま使う（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)，B18 と同じブランチ）．
 - テスト: `fuzz/known/grading-status/B16-malformed-percent`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/grading-ta.test.mjs` の「B16」．
@@ -514,6 +515,16 @@ specification: the GNU General Public License, version 3 or any later version
 - 直し方: キャッシュの一覧が配列でなければ空の一覧とみなし，オブジェクトである項目のみを受ける．`status` など文字列であるべき項目は，文字列でなければ空文字列とみなす．
 - 対応: キャッシュを読む箇所（課題パネルの `loadCache()` と `loadStaleCache()`，popup の `render()`）で形を整える `normalizeCache()` を加えた（[fix/cache-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/cache-shape)）．
 - テスト: `fuzz/known/popup/B25-assignments-not-a-list`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B25」の 2 件（課題パネルと popup）．
+
+### B26
+**TA 採点支援が，提出日時の列にセルの無い行で，提出一覧の読み取りを止める**（低・再現・ファズ）
+
+- 場所: [src/grading-ta.js:158-180](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta.js#L158-L180)（`parseSubmissionListGroups()`）
+- 何が起きるか: TA 採点支援は，採点の一覧の表を読むとき，行が状態の列にセルを持つことだけを確かめ，提出日時の列のセル（`cells[submitColIdx]`）を，その行に有るかどうかを確かめずに読む．提出日時の列より少ないセルの行（`colspan` でセルをまとめた行など）があると TypeError になり，その表の状態の読み取りとアイコンの付与が止まる．ページの表は，起動時の Promise の中と，DOM の変化に応じて読み直す `requestAnimationFrame` の中で読まれ，どちらでも例外は誰にも受けられない．取得した一覧のページでは例外は捕まえられるが，その一覧から状態を得られない．
+- 根拠: ファズ対象 `grading-pages`（2026-10-14 に加えた）が，最初の 1 分で見つけた．
+- 直し方: 提出日時の列にセルが無い行では，提出日時を空とする．
+- 対応: そのようにした（[fix/grading-list-short-rows](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-list-short-rows)）．
+- テスト: `fuzz/known/grading-pages/B26-row-short-of-submit-column`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/grading-ta.test.mjs` の「B26」．
 
 ## 速度・負荷
 
@@ -648,7 +659,7 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
 ## fuzz リポジトリの仕組み
 
 - **このリポジトリ（kulms-extension-fuzz）の役割**: kulms-extension を submodule として持ち，上流のコードは変えずに，ハーネス側でテストとファジングを行う．
-- **ハーネス**（[harness/](../harness/)）: 偽の chrome API と jsdom を用意し（jsdom に無く Chrome にある ResizeObserver と Trusted Types の API も持たせる），submodule のスクリプトを manifest と同じ順で読み込む．偽の API は，複数タブで共有するストレージ，メッセージとその記録，拡張自身のファイル（web_accessible_resources の制限つき）を備える．タブは Chrome の文書のとおりに扱う．ウィンドウは 1 つで，前面のタブは 1 つであり，拡張に渡すタブの URL は，拡張がそのページを見てよいとき（ホスト権限があるか，activeTab が与えられたとき）に限る（拡張は "tabs" の権限を持たない）[[ChromeTabs]](#参考文献)．popup はアクションから開かれるので，開いたときに前面のタブへ activeTab を与える [[ChromeActiveTab]](#参考文献)．`tabs.query()` は，前面かどうか，ウィンドウ，URL のパターン（見てよいページに限る）で絞る（2026-10-14 に改めた．それまでは，すべてのタブを前面とし，条件を URL のパターンに限っていた）．`chrome.scripting.executeScript()` は，Chrome の文書のとおり，渡された関数を直列化してタブのページで改めてコンパイルし，引数は JSON として写し，返した値（Promise は待つ）を，注入できたフレームごとの結果とする．ファイルはそのページで順に実行する．スクリプトを入れてよいのは，拡張がそのページを見てよいとき（ホスト権限か activeTab）に限り，Chrome のページ（`chrome://`）には入れない [[ChromeScripting]](#参考文献)．拡張が同梱するライブラリ（jsQR）は，テストや対象が置き換えられる．投げた関数がどうなるかは文書に無いので，ハーネスは拡張の誤りとして報告し，そのフレームを結果から除く（2026-10-14 に改めた．それまでは，関数を実行せず，テストや対象の言う結果を返していた）．キャンバスの 2D コンテキストは，HTML 標準の `drawImage()` と `getImageData()` の手順に従う（使えない画像は描かない，他のオリジンの画像は origin-clean を失わせる，幅か高さが 0 なら IndexSizeError，origin-clean でなければ SecurityError，ビットマップの外は透明な黒）[[HTML]](#参考文献)．jsdom はキャンバスを持たないためで，その仕事は画素ごとに数える（[harness/canvas.mjs](../harness/canvas.mjs)）．IIFE の中の関数は，読み込み時に AST 変換で外へ公開する（行番号は変えない）．読み込むコードは Jazzer.js の計装を通すので，vm や jsdom で動くコードからもカバレッジがファザーに届く．jsdom は，リンクの `href` や `host` を読むたびに URL を解析し直し（HTML 標準の「reinitialize url」[[HTML]](#参考文献) のとおり），セレクタの照合も，上る要素ごとに `host` を読む．その解析器（URL 標準 [[URL]](#参考文献) の URL パーサーの実装）は JavaScript で書かれ，1 文字に 1〜3 マイクロ秒かかる（Node の URL の数百倍）．そのため，最上段の数百万字のリンクを持つ入力では，数えた仕事は線形のまま，1 つの入力が数十分かかることがあった．解析は文字列と文書のベース URL と文字コードで決まるので，ハーネスは直近の 8 つの結果を取っておき，その写しを渡す．数える仕事は標準の手順のままである．また，jsdom の HTML パーサー（parse5）は，下位サロゲートの後に続く下位サロゲートを対として結合し，U+10FFFF を超えるコード点で例外を投げる．HTML 標準の入力ストリームの前処理は，孤立したサロゲートをそれぞれ 1 つのコード点として扱う（解析エラー surrogate-in-input-stream）[[HTML]](#参考文献)．そのため，ハーネスは上位サロゲートに限り結合するよう parse5 を正す（2026-10-14．ファズ対象 `resources` が見つけた）．
+- **ハーネス**（[harness/](../harness/)）: 偽の chrome API と jsdom を用意し（jsdom に無く Chrome にある ResizeObserver と Trusted Types の API も持たせる），submodule のスクリプトを manifest と同じ順で読み込む．偽の API は，複数タブで共有するストレージ，メッセージとその記録，拡張自身のファイル（web_accessible_resources の制限つき）を備える．タブは Chrome の文書のとおりに扱う．ウィンドウは 1 つで，前面のタブは 1 つであり，拡張に渡すタブの URL は，拡張がそのページを見てよいとき（ホスト権限があるか，activeTab が与えられたとき）に限る（拡張は "tabs" の権限を持たない）[[ChromeTabs]](#参考文献)．popup はアクションから開かれるので，開いたときに前面のタブへ activeTab を与える [[ChromeActiveTab]](#参考文献)．`tabs.query()` は，前面かどうか，ウィンドウ，URL のパターン（見てよいページに限る）で絞る（2026-10-14 に改めた．それまでは，すべてのタブを前面とし，条件を URL のパターンに限っていた）．`chrome.scripting.executeScript()` は，Chrome の文書のとおり，渡された関数を直列化してタブのページで改めてコンパイルし，引数は JSON として写し，返した値（Promise は待つ）を，注入できたフレームごとの結果とする．ファイルはそのページで順に実行する．スクリプトを入れてよいのは，拡張がそのページを見てよいとき（ホスト権限か activeTab）に限り，Chrome のページ（`chrome://`）には入れない [[ChromeScripting]](#参考文献)．拡張が同梱するライブラリ（jsQR）は，テストや対象が置き換えられる．投げた関数がどうなるかは文書に無いので，ハーネスは拡張の誤りとして報告し，そのフレームを結果から除く（2026-10-14 に改めた．それまでは，関数を実行せず，テストや対象の言う結果を返していた）．拡張がページに入れる `<script src>` のうち拡張自身のファイルを指すもの（grading-ta.js の橋渡し）は，web_accessible_resources がそのページに開いているときに限り，ページで実行して `load` を発火し，そうでなければ `error` を発火する（HTML 標準の「prepare the script element」[[HTML]](#参考文献)．jsdom はページのスクリプトを実行しないため）．スクリプトが求めるページの移動（`location.href` など）は jsdom が実行しないため，`beforeunload` でページに尋ねた後に記録し，ページはそのまま残す（いずれも 2026-10-14 に加えた）．キャンバスの 2D コンテキストは，HTML 標準の `drawImage()` と `getImageData()` の手順に従う（使えない画像は描かない，他のオリジンの画像は origin-clean を失わせる，幅か高さが 0 なら IndexSizeError，origin-clean でなければ SecurityError，ビットマップの外は透明な黒）[[HTML]](#参考文献)．jsdom はキャンバスを持たないためで，その仕事は画素ごとに数える（[harness/canvas.mjs](../harness/canvas.mjs)）．IIFE の中の関数は，読み込み時に AST 変換で外へ公開する（行番号は変えない）．読み込むコードは Jazzer.js の計装を通すので，vm や jsdom で動くコードからもカバレッジがファザーに届く．jsdom は，リンクの `href` や `host` を読むたびに URL を解析し直し（HTML 標準の「reinitialize url」[[HTML]](#参考文献) のとおり），セレクタの照合も，上る要素ごとに `host` を読む．その解析器（URL 標準 [[URL]](#参考文献) の URL パーサーの実装）は JavaScript で書かれ，1 文字に 1〜3 マイクロ秒かかる（Node の URL の数百倍）．そのため，最上段の数百万字のリンクを持つ入力では，数えた仕事は線形のまま，1 つの入力が数十分かかることがあった．解析は文字列と文書のベース URL と文字コードで決まるので，ハーネスは直近の 8 つの結果を取っておき，その写しを渡す．数える仕事は標準の手順のままである．また，jsdom の HTML パーサー（parse5）は，下位サロゲートの後に続く下位サロゲートを対として結合し，U+10FFFF を超えるコード点で例外を投げる．HTML 標準の入力ストリームの前処理は，孤立したサロゲートをそれぞれ 1 つのコード点として扱う（解析エラー surrogate-in-input-stream）[[HTML]](#参考文献)．そのため，ハーネスは上位サロゲートに限り結合するよう parse5 を正す（2026-10-14．ファズ対象 `resources` が見つけた）．
 - **検出器**（[harness/detectors.mjs](../harness/detectors.mjs)）: 例外のほか，次のものを失敗とする．いずれも，入力の前と後のコンテキスト全体を比べ，拡張がしそうなことに範囲を絞らない（2026-10-13 に広げた）．
   - マークアップ: 文書と，開いたシャドウツリーと，フレームの文書に，新しい要素でも前からある要素でも，スクリプトを動かすもの，外部から読み込むもの，ページを外部へ送るものが増えたら失敗とする．`<script>`（自分の文のもの，src が integrity のハッシュ（Subresource Integrity [[SRI]](#参考文献)）で確かめられないもの．ハッシュは sha256，sha384，sha512 のいずれかが実際の内容と一致するときに限り認め，内容を確かめられるのは拡張自身のファイルに限られる．nonce は認めない．拡張が付ける nonce は何も確かめないため），`<style>`（nonce があっても），確かめられないスタイルシートの `<link>`，マークアップや `setAttribute()` で付いた style 属性（CSSOM で付いたものは除く），`<object>`，`<embed>`，iframe の srcdoc，イベントハンドラの属性（コードが変わったものも），URL の属性が URL 標準 [[URL]](#参考文献) の URL パーサー（ブラウザと同じ）で `javascript:` か `vbscript:` に読めるもの（タブや改行を挟んでも同じ），フレームやスクリプトの `data:` と `blob:`，リンクをそれに変える SVG のアニメーション，`<base>`，`<meta http-equiv>`，スクリプトを読み込む `<link>`，拡張の host_permissions とページと拡張自身のいずれでもないオリジンから資源を読み込むマークアップ．
   - 組み込みの書き換え: 全域オブジェクトが持つすべての関数とそのプロトタイプ，名前空間（Math，JSON，Reflect，Intl，Atomics，WebAssembly），名前の無い組み込み（イテレータ，ジェネレータ，非同期のプロトタイプ，%TypedArray%，%ThrowTypeError%），それらがたどるすべてのプロトタイプで，プロパティの増減と変化（値，getter，setter，属性），プロトタイプの付け替え，拡張不可にすること．全域オブジェクトの関数と名前空間の差し替えと削除．
@@ -667,12 +678,12 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
   - 線形のコードがするはずの上限は，対象ごとに決まる．数える場所は，その対象のブラウザが読み込んだスクリプトのもので，入力が空のときの仕事量も，その対象のものである．同じプロセスでほかの対象が読み込んだスクリプト（テストは対象をまとめて動かす）は数えない．
 - **テスト**（[tests/](../tests/)）: 各問題の再現（todo），ハーネス自体のテスト，ファズ対象のシードと回帰入力と既知の失敗入力の再生．
   - 拡張の非同期の処理は，固定の時間ではなく，ハーネスが拡張に代わって行う処理（chrome API の応答とイベント，メッセージ，fetch，IndexedDB，Web Crypto）がすべて終わるまで待つ（[harness/work.mjs](../harness/work.mjs) の `idle()`）．ページのタイマーにかかわる処理は，ページに自分の時計を持たせて進める（[harness/clock.mjs](../harness/clock.mjs)）．2026-10-14 まで，いくつかのテストは固定の時間（20〜800 ms）を待っていた．カバレッジの計測で機械の負荷が高まると，B12 の todo のテストでは，最初の値に対する拡張の拒否が待ち時間の後に届いたため，テストは最初の値を問題なしとして次の値へ進んだ．最初の値の拒否が届いた時点でテストは失敗として終わり，次の値に対する拒否はテストの終了後に届いた．Node のテストランナーは，これをトップレベルの診断として報告し [[NodeTest]](#参考文献)，失敗の数を 0 としたまま終了コードを 1 とした．すべての固定の待ちを置き換えた後は，16 個の CPU をすべて塞いだ状態でカバレッジを測りながら実行しても，失敗はなく，テストの終了後に届く処理も生じない．
-- **ファジング**（[fuzz/](../fuzz/)）: 外から入力が来る面ごとの 13 の対象と canary．`sidebar`（2026-10-13 に加えた）は，ページの DOM と localStorage と時刻と利用者の操作を入力にする最初の対象で，ページに自分の時計を持たせ（[harness/clock.mjs](../harness/clock.mjs)．タイマーは HTML 標準のタイマーの初期化手順 [[HTML]](#参考文献) に従って設定する），入力の操作の後に時計を 10 分進めて，スクリプトが仕掛けたタイマーをすべてその入力の中で動かす．それでも尽きないタイムアウトは，終わらない処理として失敗とする．`grading-bridge`（2026-10-14 に加えた）は，TA 採点支援がページの世界に入れる橋渡し（grading-ta-page.js）を，ページの採点の要素とその値（ページのスクリプトが作れるものすべて）と，届く求めで動かす．`totp-register`（2026-10-14 に加えた）は，認証サーバーの TOTP 登録のページで動く登録補助を，ページの URL，本文，リンク，画像，コードの入力欄，jsQR の読み取り結果，ページの sessionStorage で動かす（jsQR は拡張が同梱する外部のライブラリであるため，入力が画像ごとに言う結果で置き換える）．jsdom は innerText を持たないため，ハーネスは HTML 標準が CSS を扱わないユーザーエージェントについて定めるとおり，子孫のテキスト内容として与える [[HTML]](#参考文献)．`popup`（2026-10-14 に加えた）は，popup を，chrome.storage.local の値（拡張の書く形，または JSON の任意の値），background の TOTP シークレット，ウィンドウのタブ（LMS，認証サーバー，その他のページ，Chrome の新しいタブのページのタブと，それぞれの content script が popup の更新の求めに返す答え，前面のタブ），前面のタブのページ（画像とキャンバス．その画素，データのオリジン，jsQR がその画素に見つけるもの），利用者の操作で動かす．前面のタブのページは作り，popup の QR の読み取りはそこで実際に動く．ほかのタブのページは作らず，その content script は入力の言う答えで置き換える（content script は，それぞれを入口にする対象がファジングする）．対象の一覧と運用は [fuzz/README.md](../fuzz/README.md) にある．
+- **ファジング**（[fuzz/](../fuzz/)）: 外から入力が来る面ごとの 14 の対象と canary．`sidebar`（2026-10-13 に加えた）は，ページの DOM と localStorage と時刻と利用者の操作を入力にする最初の対象で，ページに自分の時計を持たせ（[harness/clock.mjs](../harness/clock.mjs)．タイマーは HTML 標準のタイマーの初期化手順 [[HTML]](#参考文献) に従って設定する），入力の操作の後に時計を 10 分進めて，スクリプトが仕掛けたタイマーをすべてその入力の中で動かす．それでも尽きないタイムアウトは，終わらない処理として失敗とする．`grading-bridge`（2026-10-14 に加えた）は，TA 採点支援がページの世界に入れる橋渡し（grading-ta-page.js）を，ページの採点の要素とその値（ページのスクリプトが作れるものすべて）と，届く求めで動かす．`totp-register`（2026-10-14 に加えた）は，認証サーバーの TOTP 登録のページで動く登録補助を，ページの URL，本文，リンク，画像，コードの入力欄，jsQR の読み取り結果，ページの sessionStorage で動かす（jsQR は拡張が同梱する外部のライブラリであるため，入力が画像ごとに言う結果で置き換える）．jsdom は innerText を持たないため，ハーネスは HTML 標準が CSS を扱わないユーザーエージェントについて定めるとおり，子孫のテキスト内容として与える [[HTML]](#参考文献)．`popup`（2026-10-14 に加えた）は，popup を，chrome.storage.local の値（拡張の書く形，または JSON の任意の値），background の TOTP シークレット，ウィンドウのタブ（LMS，認証サーバー，その他のページ，Chrome の新しいタブのページのタブと，それぞれの content script が popup の更新の求めに返す答え，前面のタブ），前面のタブのページ（画像とキャンバス．その画素，データのオリジン，jsQR がその画素に見つけるもの），利用者の操作で動かす．前面のタブのページは作り，popup の QR の読み取りはそこで実際に動く．ほかのタブのページは作らず，その content script は入力の言う答えで置き換える（content script は，それぞれを入口にする対象がファジングする）．`grading-pages`（2026-10-14 に加えた）は，TA 採点支援（grading-ta.js）を，Sakai の採点画面と提出一覧のページで動かす．入力は，ページの URL，採点画面（受講者の一覧，入力欄と保存や返却のボタンを持つパネル，採点済みの数），採点画面の要素が持つ提出（拡張がページに入れる橋渡しが実際に読む），ページの表（提出一覧とそれ以外），取得する提出一覧のページへのサーバーの答え，ページの sessionStorage に拡張が残す状態，未保存のまま移動するかを尋ねられたときの利用者の答え，利用者の操作とページ自身の書き換え（受講者の一覧の描き直し，パネルの開閉，状態の書き換え）である．拡張がページを移動させるときは，移動先が LMS であること，利用者が留まると答えた後に移動しないこと，同じ移動について二度尋ねないことも確かめる．対象の一覧と運用は [fuzz/README.md](../fuzz/README.md) にある．
   - 入力は手加減しない（2026-10-07 に見直した）．文字列は入力のビット列を 16 ビットずつ（すべての符号単位），8 ビットずつ（ASCII が出やすい），UTF-8 のいずれかで読む．数は任意の 64 ビットのパターンと境目の値，値は undefined，null，BigInt，任意の深さの入れ子などを含む．ネットワークは失敗，任意のステータスと Content-Type，途中で切れた本文と，リダイレクトで別のオリジンや http から来た応答（相手が CORS で許すかどうかも）も返す．JSON の文字列にできない数（NaN，Infinity）をどう書くかは，入力から読まずに，入力のバイト列から作る乱数（どの段でも同じ並び）で選ぶ．値のキーが段で繰り返す文字列だと，段によってキーが重なり，そうした数の個数が段で変わるからである．
   - 大きさは段で作る．入力そのもの（libFuzzer [[libFuzzer]](#参考文献) に作らせるバイト列）と，その下の段で作る値は 4,096 単位まで．入力は最初に段数を選び，段を上がるたびに，入力が繰り返す片を 2 倍の回数繰り返す．最上段で作る値は，Chrome の runtime メッセージ 1 通が運べる量（JSON の UTF-8 で 64MiB．1 単位は 6 バイト以内であるため 11,184,810 単位）まで．
   - 段から段へ，仕事の増えが前の段の増えの 2^1.5 倍（n log n の仕事が増える量）を超えたら，速い伸びとみなす．伸びを読むのは，コードが段の足した分をたどった（1 単位に 1 歩以上を使った）ときだけで，繰り返す部分が入力の残り以上の長さになった段から．それまでは，繰り返す部分と残りとの掛け合わせ（繰り返す文字列の中で残りの文字列を探すなど）が，段ごとに伸びの割合を変える．一度だけの速い伸びは，繰り返しが初めて行を閉じたときなどに生じる段差であるため，速い伸びがあった段の上の段にだけ，下の段の仕事量から外挿した上限を走らせる前に与え，超えたら止めて失敗とする．線形でない入力は，速い伸びが 2 段続いた所で止まり，何時間も走らない．ほかの段は，線形のコードがするはずの上限（対象のブラウザが読み込んだコードの，数える場所の数 × (U+1) × ⌈log₂(U+2)⌉ ＋ その対象の，入力が空のときの仕事量）で判定する．
   - 時間は，数え方を確かめるために見る．2 段離れた段どうしで，時間の伸びの次数が仕事量の伸びの次数を 0.5 より多く上回ったら，数えていない仕事があるとして失敗とする（下の「時計の揺れ」）．CI では見ない．
-  - 時計で止めるのは，何も数えない所で終わらないものだけ．CI はジョブの終わるべき時刻を `ci/fuzz.sh --until` に渡し，各対象は残りの時間を残りの対象で等しく分けたものを使う．
+  - 時計で止めるのは，何も数えない所で終わらないものだけ．CI はジョブの終わるべき時刻を `ci/fuzz.sh --until` に渡し，各対象は残りの時間を残りの対象で等しく分けたものを使う．ファジングそのものの時間は，その持ち時間に，前の実行で最も遅かった入力（最初に再生して時間を測る）と同じだけ遅い入力をもう 1 つ流す余裕が残るように短くする．余裕は少なくとも 5 分とする．毎日のファジングで遅かった入力は，`submission` の 466 秒の 1 件を除いて 5 分以内に終わったため，測った値から定めた．libFuzzer は，ファジングの時間が過ぎた後に新しい入力を始めないが，途中の入力は最後まで流す．そのため，それまでは最後に遅い入力を始めた対象が持ち時間を超え，失敗として止められていた（2026-10-14 の毎日のファジング 38462363590 の `submission`）．
   - 拡張が自分で捕まえて警告だけ出すエラーのうち，プログラムの誤りを示すもの（TypeError などの文言）も失敗とする．B19 と B20 はこれで見つかった．
   - シードと既知の問題の入力は，`fuzz/inputs.mjs` が，対象の読む値の並びから書く（`fuzz/encode.mjs` が FuzzedDataProvider の逆をたどる）．入力の読み方を変えたときに，これらが黙って別の入力になるのを防ぐためで，テストは，既知の入力がその問題だけを起こすことも確かめる．
   - 修正ブランチは，`KULMS_EXTENSION_DIR` でその拡張を指し，`KULMS_FUZZ_LOOK_FOR` で直した問題を避けずに探して，ファジングで確かめる（下の「ファジングで避けている既知の問題」）．
@@ -719,6 +730,7 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
 | B10 | `i18n` | `$` を含む置換値では，拡張の文の `t()` を呼ばない（値が置換の記法として読まれ，結果が崩れる．置き場所が 2 つある文では，結果と仕事が値の長さの 2 乗や 3 乗で伸びる） |
 | B15 | `i18n` | どのオブジェクトにもあるキー（`constructor`，`toString` など）を引かない |
 | B16 | `grading-status` | `%` の並びが壊れたリンクを読ませない |
+| B16 | `grading-pages` | ページのクエリ，課題へのリンク，表の提出へのリンクのうち，grading-ta.js がデコードする部分に壊れた `%` の並びがあるページは，流さない |
 | B17 | `assignments` | 保存されたメモが配列でなければ無いものとし，一覧から null を除く（メモは拡張自身の読み込み関数で読む） |
 | B18 | `grading-status` | `toString` か `valueOf` を自分に持つオブジェクトを含む応答を読ませない．提出の項目の型を確かめない |
 | B19 | `assignments` | 科目の一覧と科目ごとの取得が捕まえたプログラムの誤り（警告に書いたものも，catch が受けたものも）を数えない．課題，クイズ，サイトの名前が自分の `toString` を持つオブジェクトなら，その名前を除く |
@@ -736,9 +748,10 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
 | B12 | `submission` | ページの sessionStorage の提出の ID が，JSON で配列でない値なら，置かない（途中で書くときも） |
 | P6 | `background-message` | Shift_JIS の表を最初の入力の前に作っておき，どの入力にも数えない（探すときは，入力ごとに表を消し，Service Worker が起動した直後の状態から始める） |
 | B25 | `popup` | 保存された課題のキャッシュのうち，一覧が配列でないもの，オブジェクトでない項目を持つもの，文字列でない状態を持つ項目を含むものは，置かない（途中で書くときも） |
+| B26 | `grading-pages` | 提出日時の列にセルの無い行で `parseSubmissionListGroups()` が投げる TypeError を，ページの表でも取得した一覧でも数えない |
 | B17 | `popup` | 保存されたメモが，配列でない値か，null を含む一覧なら，置かない（途中で書くときも） |
 | B22 | `popup` | 保存するシークレットと，入力欄に打つシークレットのいずれかが UTF-8 で 32 KiB を超える入力は，流さない |
-| B24 | `grading-bridge` | 橋渡しが答えずに，ページのオブジェクトが投げたものか，取り消された Proxy，BigInt，循環，プリミティブに変換できない値でエンジンが投げる例外だけを投げた求めは，問わない（その例外も数えない）．答えた提出の ID，名前，日時は，渡されたまま受ける |
+| B24 | `grading-bridge` | 橋渡しが答えずに，ページのオブジェクトが投げたものか，取り消された Proxy，BigInt，循環，プリミティブに変換できない値，組み込みの型の prototype を継いだだけのオブジェクト（TypedArray の length の getter などが受けない）でエンジンが投げる例外だけを投げた求めは，問わない（その例外も数えない）．答えた提出の ID，名前，日時は，渡されたまま受ける |
 | P7 | `grading-bridge` | 持っている要素より大きい `length` を言う配列もどきは，ページに置かない |
 | P8 | `popup` | 表示しているコードの 1 秒の更新には，固定の仕事（16 字のシークレットで測ったもの）に加えて，表示しているシークレットが 16 字を超える分の仕事（1 字あたりの量を対象が測ったもの）を，入力の上限に加える |
 | P2 | `resources` | 利用者が何も操作しないうちに，拡張が以前に要求したのと同じフォルダの操作を再び要求した場合，サーバーは 404 で答える |
@@ -773,6 +786,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 | fix/redirect-origin（2026-10-14） | `site-contact` ほか取得を行う 5 対象 | S12 | 既知の入力を含む 71 入力が通り，5 対象を各 60 秒実行して失敗なし |
 | fix/web-storage-values の続く修正（2026-10-14） | `submission`，`sidebar` | B12 | 既知の入力（提出の ID が配列でない）とシードが通る |
 | fix/totp-key-once（2026-10-14） | `popup` | P8 | 150 秒（1,687 入力）で失敗なし．`tests/large.test.mjs` の P8 の 2 件が通り，テスト全体も失敗 0．ほかの修正ブランチと衝突なく合わさる（上流が v1.21.1 で自ら直した B5 と B6 の fix/build-contents は，v1.21.1 を基にしたどのブランチとも build.sh で衝突するため除く） |
+| fix/grading-list-short-rows（2026-10-14） | `grading-pages` | B26 | 既知の入力とシードとコーパスの 84 入力が通る．`tests/grading-ta.test.mjs` の B26 のテストが通り，テスト全体も失敗 0．ほかの修正ブランチと衝突なく合わさる（fix/build-contents を除く．上と同じ理由） |
 | fix/validate-totp-secret の続く修正（2026-10-14） | `totp-register` | S6 | 既知の入力とシードを含む 55 入力が通る．同日に加えた更新時の移行の修正は，`tests/totp.test.mjs` の S6 のテスト（更新時の移行）が通り，ほかの 29 本と衝突なく合わさる（`git merge-tree`） |
 | 27 本すべて（2026-10-14） | — | — | 上の 5 本と 2 本の続く修正を含む修正ブランチ 27 本の 351 組は，どれも衝突なく合わさる（`git merge-tree`）．v1.21.1 を基にした 5 本では，テストは失敗 0 で，それぞれの問題の todo が通る |
 
@@ -812,22 +826,24 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
   - カバレッジで届いていなかった background の更新時（`runtime.onInstalled`）の移行にテストを書く際，移行が，旧版の平文のシークレットを，コードを作れないものも文字列でない値も保存することを見つけた（S6 に加え，fix/validate-totp-secret で続けて直した）．
   - これらの後，canary と 13 対象を，カバレッジを測ったコーパスから各 60 秒実行して，失敗はなかった（canary は 7 秒で見つかった）．
   - 同日の朝，`chrome.scripting.executeScript()` に渡された関数をタブのページで実行するようにハーネスを改め，`popup` の対象に前面のタブのページを加えた（「fuzz リポジトリの仕組み」）．QR の読み取りを含めて `popup` を 10 分（4,072 入力）実行して失敗はなく，popup.js の関数にはすべて届く（「カバレッジ」）．キャンバスの仕事を数えるようにした後も，`totp-register` のコーパス（53 入力）はすべて通る．
+  - 同日，TA 採点支援（grading-ta.js）の採点画面と提出一覧のページを入力にする対象 `grading-pages` を加えた（「fuzz リポジトリの仕組み」）．あわせて，ハーネスは，拡張がページに入れる拡張自身のスクリプト（grading-ta.js の橋渡し）をページで実行し，スクリプトが求めるページの移動を記録するようにした．`grading-pages` は最初の 1 分で B26 を見つけた．B26 を避けた後の 10 分の実行は失敗なく終わった．その前の実行は時間の確認で止まったが，同時に動かしたテストの負荷によるものであり，その入力を単独で流すと，時間は数えた仕事量に比例して伸びた．
+  - 同日の毎日のファジング（38462363590，`cef8229`）は 2 対象で失敗した．`grading-bridge` は，ページが組み込みの型の prototype を継いだだけのオブジェクトを置くと，橋渡しがエンジンの TypeError（`Method get TypedArray.prototype.length called on incompatible receiver`）で止まることを見つけた．B24 と同じ原因であり（fix/grading-bridge-values はこれも直す），B24 の回避に加えた．`submission` は，ファジングの時間の終わり近くに始めた遅い入力（466 秒）のため持ち時間を超え，止められた．`ci/fuzz.sh` は，ファジングそのものの時間を，持ち時間にその対象の最も遅い入力をもう 1 つ流す余裕が残るように短くするようにした（「fuzz リポジトリの仕組み」）．遅い入力は，最上段（数百万単位）で 1 単位あたり約 54 歩を数え，ハーネスの正規表現のエンジン（数えるために V8 とは別に 1 歩ずつ動かす）が 1 歩に約 0.5〜0.6 マイクロ秒かかるため，1 つの入力が数分に及ぶ（`submission` と `grading-pages` で測った）．
 
 ## カバレッジ
 
 2026-10-13 に，v1.21.1 で初めて測った．テストと，その日のファジングのコーパスとシード（7 対象の 749 入力）を流すと，拡張自身のコードのうち，文の 51.7%，分岐の 42.3%，関数の 54.5% に届いた．テストだけでは文の 48.9%，コーパスだけでは 31.5% であった．ほとんど届かなかったのは，ページの DOM を整える content script，提出の検知，TOTP の登録補助，TA 採点支援，popup であり，いずれも，それを入口にするファズ対象が無かった．
 
-2026-10-14 に，それらを入口にする 6 つの対象を加え（「fuzz リポジトリの仕組み」），届いていなかった関数のテスト（[tests/panel.test.mjs](../tests/panel.test.mjs) の課題パネルの関数と，[tests/totp.test.mjs](../tests/totp.test.mjs) の background の更新時と起動時の処理）を加えて，測り直した．テスト（264 件）と，13 対象のコーパスとシード（1,810 入力．同日のファジングで育てたもの）を流すと，文の 76.3%（4,086/5,354），分岐の 64.8%（1,980/3,053），関数の 79.0%（545/690）に届く．テストだけでは文の 68.2%，コーパスだけでは 56.9% である．次の表は，文がテスト，コーパス，その両方で届く割合と，両方で届く分岐と関数の割合で，届く割合の低い順に並べた．
+2026-10-14 に，それらを入口にする 6 つの対象を加え（「fuzz リポジトリの仕組み」），届いていなかった関数のテスト（[tests/panel.test.mjs](../tests/panel.test.mjs) の課題パネルの関数と，[tests/totp.test.mjs](../tests/totp.test.mjs) の background の更新時と起動時の処理）を加えて，測り直した．テスト（270 件）と，14 対象のコーパスとシード（1,908 入力．同日のファジングで育てたもの）を流すと，文の 85.7%（4,591/5,354），分岐の 75.0%（2,290/3,053），関数の 89.7%（619/690）に届く．テストだけでは文の 76.4%，コーパスだけでは 66.4% である（テストは各対象のシードと既知の入力も流す）．次の表は，文がテスト，コーパス，その両方で届く割合と，両方で届く分岐と関数の割合で，届く割合の低い順に並べた．
 
 | スクリプト | テスト | コーパス | 合わせて | 分岐 | 関数 |
 |---|---:|---:|---:|---:|---:|
-| `src/grading-ta.js` | 13.2% | 17.5% | 17.5% | 21.3% | 20.8% |
 | `src/settings.js` | 50.6% | 50.6% | 50.6% | 66.0% | 68.8% |
 | `src/submit-detect.js` | 66.7% | 72.9% | 72.9% | 67.4% | 100.0% |
 | `src/tree-view.js` | 65.7% | 76.8% | 77.3% | 62.1% | 91.7% |
 | `src/auth-totp-register.js` | 75.3% | 78.5% | 78.5% | 62.8% | 100.0% |
 | `src/textbooks.js` | 81.0% | 4.5% | 81.0% | 63.7% | 94.7% |
 | `src/assignments.js` | 81.0% | 44.8% | 83.1% | 68.5% | 80.9% |
+| `src/grading-ta.js` | 70.6% | 83.4% | 83.4% | 73.2% | 90.6% |
 | `src/sidebar-resize.js` | 86.4% | 84.7% | 86.4% | 62.5% | 100.0% |
 | `src/course-name.js` | 81.7% | 88.9% | 88.9% | 83.3% | 100.0% |
 | `src/top-favbar.js` | 74.0% | 89.9% | 89.9% | 79.0% | 100.0% |
@@ -835,11 +851,11 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 | `background.js` | 84.3% | 90.2% | 93.4% | 90.5% | 88.5% |
 | `src/auth-totp.js` | 94.3% | 0.0% | 94.3% | 80.0% | 85.7% |
 | `popup.js` | 68.0% | 94.3% | 95.2% | 91.6% | 100.0% |
-| `src/grading-ta-page.js` | 70.5% | 95.5% | 95.5% | 96.2% | 100.0% |
 | `src/tool-visibility.js` | 83.9% | 96.4% | 96.4% | 88.5% | 100.0% |
 | `src/file-drop.js` | 74.3% | 97.3% | 97.3% | 85.7% | 100.0% |
+| `src/grading-ta-page.js` | 72.7% | 97.7% | 97.7% | 98.1% | 100.0% |
 
-- 最も届かないのは `src/grading-ta.js`（TA 採点支援の本体）であり，関数の 84/106 に届かない．届かないのは，Sakai の採点画面と提出一覧の DOM を読む関数（`findGraderElement`，`parseSubmissionList` など）である．`grading-status` は採点の応答から，`grading-bridge` はページの世界の橋渡しから入るため，採点画面の DOM そのものを入口にする対象もテストも無い．これを入口にする対象を加えることが，次の課題である．
+- `src/grading-ta.js`（TA 採点支援の本体）には，当初は文の 17.5%，関数の 22/106 にしか届かなかった．Sakai の採点画面と提出一覧の DOM を読む関数に，それを入口にする対象もテストも無かったためである．それらを入力にする対象 `grading-pages` を加えた後は，文の 83.4%，関数の 96/106 に届く（同日．「fuzz リポジトリの仕組み」）．届かない関数は，橋渡しの読み込みの失敗と例外の処理，前の未採点へのジャンプ，返却と保存のボタンによる状態の保存，未保存のまま移動する前の確認の一部である．今最も届かないのは `src/settings.js`（文の 50.6%）である．
 - `popup.js` のうち，QR の読み取りでページに入れる関数（`scanPageForQR`，`extractSecret`，`tryDecodeImageData`）には，当初は届かなかった．ハーネスが `chrome.scripting.executeScript()` に渡された関数を実行せず，テストや対象の言う結果を返していたためである．Chrome は，渡された関数を直列化してタブのページで実行する [[ChromeScripting]](#参考文献)．ハーネスもそのとおりに実行するようにし，そのカバレッジを popup.js の元の位置に数えるようにしたので，popup.js の関数にはすべて届く（同日に改めた．「fuzz リポジトリの仕組み」）．
 - `src/settings.js` の届かない関数は，読み込みを止めたまま待つ Promise（L8），拡張の更新後に再読み込みを促すバナー（L17〜L34），メッセージの上書きの読み込みの失敗（L132）である．`background.js` の届かない関数は，IndexedDB の要求とトランザクションの失敗の処理（L572〜L617）であり，ハーネスの IndexedDB は失敗しない．
 - `src/assignments.js` の `isGraded`，`getStatusBadgeClass`，`getStatusLabel` は，どこからも呼ばれない（M5）．
@@ -872,7 +888,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 - [DOM] WHATWG, "DOM Standard," Living Standard. https://dom.spec.whatwg.org/
 - [ECMA-262] Ecma International, "ECMAScript Language Specification," ECMA-262. https://tc39.es/ecma262/
 - [Fetch] WHATWG, "Fetch Standard," Living Standard（§2.2.5 の redirect-taint と要求のオリジンの直列化，§4.4 HTTP fetch，§4.5 HTTP-redirect fetch，§4.10 CORS check）. https://fetch.spec.whatwg.org/
-- [HTML] WHATWG, "HTML Standard," Living Standard（§3.2.7 The innerText and outerText properties，§4.6.3 API for hyperlink elements，§4.12.5 The canvas element，§8.7 Timers，§12 Web storage，§13.2.3.5 Preprocessing the input stream）. https://html.spec.whatwg.org/
+- [HTML] WHATWG, "HTML Standard," Living Standard（§3.2.7 The innerText and outerText properties，§4.6.3 API for hyperlink elements，§4.12.1 The script element，§4.12.5 The canvas element，§7.2.4 The Location interface，§8.7 Timers，§12 Web storage，§13.2.3.5 Preprocessing the input stream）. https://html.spec.whatwg.org/
 - [istanbul] istanbul.js. https://istanbul.js.org/
 - [Jazzer.js] Code Intelligence, "Jazzer.js." https://github.com/CodeIntelligenceTesting/jazzer.js
 - [libFuzzer] LLVM Project, "libFuzzer – a library for coverage-guided fuzz testing." https://llvm.org/docs/LibFuzzer.html
