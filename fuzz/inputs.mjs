@@ -497,6 +497,25 @@ export const INPUTS = [
     },
   },
   {
+    // A page of Resources with no form and one folder that Sakai's link
+    // expands, its name and its ID empty; every folder feature on, the
+    // expansion of all folders among them, which finds no form to post. The
+    // page is the row's markup around what the input made, far more than
+    // the input's units, and the bound is of the page (harness/work.mjs): an
+    // input such as this one passed the bound of its units in CI run
+    // 38504368910.
+    file: "seeds/resources/no-form",
+    plan: (w) => {
+      for (let i = 0; i < 4; i++) { w.bool(true); w.bool(true); }
+      w.bool(false);
+      w.int(0, w.remaining, 1);
+      w.bool(true); w.bool(true); w.int(0, 4, 0); string(w, ""); w.bool(false);
+      w.bool(false); w.bool(false); string(w, "");
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 0);
+    },
+  },
+  {
     // The page to submit レポート1, its form with the assignment's reference,
     // the post button, the panel of attachments and its file input; the user
     // drops a PDF on the zone and posts.

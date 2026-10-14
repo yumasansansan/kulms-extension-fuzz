@@ -36,6 +36,10 @@ export async function replay(target, inputs, { log = console.log } = {}) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  // Stopped from outside (ci/coverage.sh, when its time runs out), it ends as
+  // at its end, so that what NODE_V8_COVERAGE counted of the inputs it
+  // replayed is written: a process killed by the signal writes nothing.
+  process.on("SIGTERM", () => process.exit(143));
   const [target, ...inputs] = process.argv.slice(2);
   if (!target || inputs.length === 0) {
     console.error("usage: node fuzz/replay.mjs <target> <input file or directory>...");

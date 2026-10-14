@@ -34,7 +34,7 @@ import { record } from "./log.mjs";
 import { install as installClock } from "./clock.mjs";
 import { Net, response } from "./net.mjs";
 import { backtrackingRegExp, costedClass, costedFunction, installCosts } from "./install.mjs";
-import { compare, finished, forIn, has, instanceOf, isPaused, key, random, spread, started, step, tracked, trackedCrypto, uncounted } from "./work.mjs";
+import { compare, finished, forIn, handOver, has, instanceOf, isPaused, key, random, spread, started, step, tracked, trackedCrypto, uncounted } from "./work.mjs";
 
 // jsdom parses a link's URL anew each time its href, host and the like are
 // read, as the standard's "reinitialize url" says, and its selector engine
@@ -835,6 +835,8 @@ export function openTab(browser, { url, html = EMPTY_PAGE, net = new Net(), scri
     topUrl: top ? top.url : url,
     frameOf: top,
   });
+  // The page is what the input hands the extension (harness/work.mjs).
+  handOver(html.length);
   const w = openWindow(browser, context, html, url, clock);
   loadExtensionScripts(browser, context, w);
   // What chrome.scripting.executeScript runs in the page (inject() of

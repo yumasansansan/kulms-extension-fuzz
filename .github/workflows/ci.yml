@@ -44,10 +44,17 @@
 # of it (ci/carry-over.sh, ci/coverage.sh), and keeps the page that shows it
 # line by line as an artifact; the run's summary says it too. The number is
 # not a gate: nothing here fails for a figure being low. It is read to know
-# where the next test or fuzz target belongs. Each target's corpus is
-# replayed in a process of its own, as the next daily run starts from it, so
-# an input of it that fails on this commit fails the job, before that run
-# would.
+# where the next test or fuzz target belongs. The corpora are replayed in
+# lots of a few inputs, each lot in a process of its own and the lots side by
+# side, as the next daily run starts from them, so an input of them that
+# fails on this commit fails the job, before that run would. A few inputs
+# that climb to the top rungs take most of the time, and counting slows
+# them about three times (one of sidebar's takes some nine minutes, and
+# about thrice that when counted): the job may take two hours, and
+# ci/coverage.sh starts no lot after the time the job notes as it starts
+# (--until), the job's limit less ten minutes for the report and the
+# artifact, and names the inputs it did not replay. They fail nothing, as the
+# daily run replays them before it fuzzes.
 #
 # Each job checks the commit out with plain git, the submodule at its commit,
 # and ci/setup.sh installs the newest Node and the newest pnpm. The one
@@ -207,7 +214,7 @@ jobs:
   coverage:
     name: coverage of the tests and the corpus
     runs-on: ubuntu-26.04
-    timeout-minutes: 60
+    timeout-minutes: 120
     # The corpus is an artifact of a run of fuzz.yml, which gh reads with this
     # run's token.
     permissions:
@@ -215,6 +222,9 @@ jobs:
       actions: read
 
     steps:
+      - name: Note when the replays must end
+        run: echo "COVERAGE_UNTIL=$(( $(date +%s) + 110 * 60 ))" >> "$GITHUB_ENV"
+
       - name: Check out
         run: |
           git config --global core.autocrlf false
@@ -236,7 +246,7 @@ jobs:
         run: bash ci/carry-over.sh fuzz-run/corpora
 
       - name: Count what the tests and the corpus reach
-        run: bash ci/coverage.sh fuzz-run/corpora
+        run: bash ci/coverage.sh --until "$COVERAGE_UNTIL" fuzz-run/corpora
 
       - name: Keep the page it leaves
         if: ${{ always() }}

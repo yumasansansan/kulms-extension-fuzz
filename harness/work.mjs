@@ -30,8 +30,15 @@
 //   sites × (U + 1) × ⌈log₂(U + 2)⌉ + base
 // where the sites are those of the code the input can run, the scripts that
 // the browser of its target has loaded (harness/chrome.mjs), and not those of
-// another target's browser in the same process; U is the size of the input
-// (its bytes, and the units of what is made from them: fuzz/lib.mjs); the
+// another target's browser in the same process; U is the size of the input:
+// its bytes and the units of what is made from them (fuzz/lib.mjs), or, where
+// it is more, what the input hands the extension, the pages it opens and the
+// bodies of the server's answers that the extension reads (handOver()). A
+// target builds a page around what it made of the input, in markup as Sakai
+// writes it that a few bits of the input pick, and linear code goes through
+// all it is handed: an input of 16 bytes put a folder's row of 376 characters
+// (an onclick of 173 among them) in the page of the Resources tool, and its
+// work passed the bound of 16 units (CI run 38504368910). The
 // logarithm allows for sorting, the 1 for what a site does once whatever the
 // input; and base is the work of the target's input of no bytes at all,
 // counted when the target starts (fuzz/lib.mjs). Work past that bound is not
@@ -56,7 +63,8 @@ const NO_CODE = { sites: 0 };
 
 export const work = {
   done: 0, // the work counted since the input began
-  units: 0, // U, the size of the input
+  units: 0, // the size of the input: its bytes, and the units of what is made from them (fuzz/lib.mjs)
+  data: 0, // what the input handed the extension: the pages it opens, and the bodies of answers the extension reads (handOver())
   base: 0, // the work of the input of no bytes of the target whose input this is
   fixed: 0, // the fixed costs of what the input does, whatever its size, as its target measured them (allow())
   code: NO_CODE, // what the input can run: the browser of its target, and the counting sites of the scripts it loaded
@@ -73,7 +81,7 @@ export class WorkExceeded extends Error {
   constructor() {
     super(work.capped
       ? `the extension's work passed ${work.bound}, what its work on the rungs below allows this rung (fuzz/lib.mjs)`
-      : `the extension's work passed ${work.bound}, the most that linear code does with an input of ${work.units} units`);
+      : `the extension's work passed ${work.bound}, the most that linear code does with an input of ${size()} units`);
     this.name = "WorkExceeded";
   }
 }
@@ -89,8 +97,11 @@ export class TimeExceeded extends Error {
 const inputs = new AsyncLocalStorage();
 let epoch = 0;
 
+// U, the size of the input that the bound is of (the head of this file).
+const size = () => Math.max(work.units, work.data);
+
 function rebound() {
-  const u = work.units;
+  const u = size();
   const linear = work.code.sites * (u + 1) * Math.ceil(Math.log2(u + 2)) + work.base + work.fixed;
   work.bound = Math.min(linear, work.cap);
   work.capped = work.cap < linear;
@@ -144,6 +155,8 @@ export function beginInput(units, { judge = true, cap = Infinity, deadline = Inf
   seedRandom(seed);
   work.done = 0;
   work.units = units;
+  work.data = 0;
+  handed = new WeakSet();
   work.code = code;
   work.base = base;
   work.fixed = 0;
@@ -170,6 +183,23 @@ export function addUnits(n) {
   rebound();
 }
 
+// The input hands the extension `n` units: a page it opens, or the body of an
+// answer of the server that the extension reads, `thing` being the answer,
+// which counts once however often the extension asks for it. What the input
+// has handed is its size where that is more than its units (the head of this
+// file). What an earlier input set going and reads late is that input's, as
+// its work is (step()).
+let handed = new WeakSet();
+export function handOver(n, thing = null) {
+  if (epoch > 0 && inputs.getStore() !== epoch) return;
+  if (thing !== null) {
+    if (handed.has(thing)) return;
+    handed.add(thing);
+  }
+  work.data += n;
+  rebound();
+}
+
 // `code` (a browser) loaded a script, whose counting sites it now holds as
 // well: if it holds the code of the input under way, the input may do more.
 export function codeGrew(code) {
@@ -180,7 +210,7 @@ export function codeGrew(code) {
 // bound.
 export function endInput() {
   work.judging = false;
-  return { done: work.done, bound: work.bound, capped: work.capped, units: work.units, over: work.over, overTime: work.overTime };
+  return { done: work.done, bound: work.bound, capped: work.capped, units: work.units, data: work.data, over: work.over, overTime: work.overTime };
 }
 
 let paused = false;

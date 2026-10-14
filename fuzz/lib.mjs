@@ -311,7 +311,7 @@ export function judge() {
   judged = r;
   if (r.overTime) fail(`the extension's time on the rung of ×${rung} passed ${rungTime.toFixed(2)} s: ${timeNote}; time that grows faster than the counted work is work the counting does not see (harness/costs.mjs, harness/web-costs.mjs), or a loop where nothing is counted`);
   if (r.over && r.capped) fail(`the extension's work on the rung of ×${rung} passed ${r.bound}: ${capNote}; it grows faster than n log n with the input's size on two rungs in a row`);
-  if (r.over) fail(`the extension's work passed ${r.bound}, the most that linear code does with an input of ${r.units} units: it is not linear in the input, or it does not end`);
+  if (r.over) fail(`the extension's work passed ${r.bound}, the most that linear code does with an input of ${Math.max(r.units, r.data)} units: it is not linear in the input, or it does not end`);
 }
 
 // Runs `run`, the target's work for one input, on the rungs of `data` (the

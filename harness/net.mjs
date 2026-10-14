@@ -53,7 +53,7 @@
 // A server of an attacker can always say what the CORS check asks for.
 import { matchesPattern } from "./chrome.mjs";
 import { record } from "./log.mjs";
-import { step } from "./work.mjs";
+import { handOver, step } from "./work.mjs";
 
 const encoder = new TextEncoder();
 
@@ -186,20 +186,23 @@ export class Net {
       } else if (!asIs && !corsCheck(answer.headers, serialized, credentials)) {
         throw networkError();
       }
-      return response(context.realm, url, { ...answer, url: final }, context);
+      return response(context.realm, url, { ...answer, url: final }, context, answer);
     };
   }
 }
 
 // A response of `realm` to a request of `url`, which `context` (when given)
 // made: reading its body, when TLS does not vouch for where it came from, is
-// logged in the context's browser.
-export function response(realm, url, { status = 200, headers = {}, body = "", url: finalUrl } = {}, context = null) {
+// logged in the context's browser. The body of `given`, an answer of a route,
+// is what the input hands the extension once the extension reads it
+// (harness/work.mjs).
+export function response(realm, url, { status = 200, headers = {}, body = "", url: finalUrl } = {}, context = null, given = null) {
   const bytes = typeof body === "string" ? encoder.encode(body) : Uint8Array.from(body);
   const lower = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), String(v)]));
   const from = finalUrl || url;
   const unvouched = context && !vouchedFor(context.browser, from);
   const reading = () => {
+    if (given !== null) handOver(bytes.length, given);
     if (unvouched) record(context.browser.foreign, { where: `${context.kind} ${context.url || ""}`.trim(), url: from, redirected: !!finalUrl && finalUrl !== url });
   };
   return {

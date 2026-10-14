@@ -319,6 +319,34 @@ test("a call that loops to a length it is given passes the bound before it runs,
   assert.equal(endInput().over, false);
 });
 
+test("what an input hands the extension, a page and the bodies the extension reads, is the size the bound is of where it is more than the input's units", async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const body = "x".repeat(5000);
+  const answer = { headers: { "content-type": "text/plain" }, body };
+  const net = new Net().on(LMS, () => answer);
+  const html = `<!doctype html><html><head></head><body>${"<p>Sakai</p>".repeat(100)}</body></html>`;
+  const linear = (u) => (u + 1) * Math.ceil(Math.log2(u + 2));
+  beginInput(10, { judge: false, code: { sites: 1 } });
+  const tab = openTab(browser, { url: `${LMS}/portal`, html, scripts: [], net });
+  let judged = endInput();
+  assert.equal(judged.data, html.length, "the page");
+  assert.equal(judged.bound, linear(html.length));
+  // An answer counts once however often the extension reads it; the
+  // extension's own files are not the input's.
+  beginInput(10, { judge: false, code: { sites: 1 } });
+  for (let i = 0; i < 3; i++) await (await tab.window.fetch(`${LMS}/direct/site.json`)).text();
+  await (await tab.window.fetch(`chrome-extension://${browser.id}/_locales/ja/messages.json`)).text();
+  judged = endInput();
+  assert.equal(judged.data, body.length, "the answer's body, once");
+  assert.equal(judged.bound, linear(body.length));
+  // An input whose units are more than what it handed keeps its own size.
+  beginInput(20000, { judge: false, code: { sites: 1 } });
+  await (await tab.window.fetch(`${LMS}/direct/site.json`)).text();
+  judged = endInput();
+  assert.equal(judged.bound, linear(20000));
+});
+
 test("a page that closed is let go: the harness keeps no window it closed", async (t) => {
   v8.setFlagsFromString("--expose-gc");
   const gc = vm.runInNewContext("gc");
