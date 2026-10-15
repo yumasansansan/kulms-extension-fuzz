@@ -690,6 +690,22 @@ export function json(v) {
   }
 }
 
+// Whether v, a value that JSON has given back, cannot be made a string or a
+// number (ToPrimitive of ECMA-262 throws on it): JSON gives back an object's
+// own "toString" only as data, never a function, so that converting such an
+// object throws, and so does an array that holds one at any depth, as its
+// join reaches it. The extension throws where it shows, joins or compares
+// such a value (B17, B25 of docs/findings.md).
+export function unconvertible(v) {
+  if (v === null || typeof v !== "object") return false;
+  try {
+    String(v);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 // What v is after a structured clone, as between the page's world and a
 // content script (the detail of a CustomEvent), or { sendable: false } when a
 // clone cannot carry it (a symbol, a function, or nesting deeper than the

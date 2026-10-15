@@ -49,7 +49,7 @@
 // JSON).
 import { Browser, Net, idle, uncounted, watch } from "../../harness/index.mjs";
 import { COURSE_PAGE, LMS, openCoursePage } from "../../tests/lms.mjs";
-import { answer, bytes, calibrate, fail, json, jsonText, judge, ladder, number, open, provider, seen, string, value, warnings } from "../lib.mjs";
+import { answer, bytes, calibrate, fail, json, jsonText, judge, ladder, number, open, provider, seen, string, unconvertible, value, warnings } from "../lib.mjs";
 
 const NOT_FOUND = { status: 404, headers: { "content-type": "text/html" }, body: "" };
 // Where the extension stores its memos (MEMO_KEY of src/assignments.js).
@@ -225,10 +225,17 @@ async function run(data) {
   const dismissed = json(value(fdp)).value;
   // Known: B17 (docs/findings.md). While it is open, the stored memos are a
   // list or nothing, and no memo of the list is null (what JSON makes of
-  // undefined in a list too): the loader keeps a value that is not a list,
-  // and the drawing calls its forEach; normalizeMemo() hands a null back,
-  // and the drawing reads its deadline.
-  if (open("B17")) memos = Array.isArray(memos) ? memos.filter((m) => m !== null) : undefined;
+  // undefined in a list too), nor holds a value that cannot be made a string
+  // or a number (unconvertible() of lib.mjs) where the panel makes one of it:
+  // its ID (the key of its dismissal) and its text, for every memo; its
+  // deadline and its course's ID, for a memo with a deadline (listed among
+  // the assignments); its course's name, for a memo with a deadline or a
+  // course's ID (the label of its card). The loader keeps a value that is not
+  // a list, and the drawing calls its forEach; normalizeMemo() hands a null
+  // back, and the drawing reads its deadline; the drawing makes strings of
+  // those fields as they are.
+  const setsOffB17 = (m) => m === null || (typeof m === "object" && (unconvertible(m.id) || unconvertible(m.text) || unconvertible(m.deadline) || (m.deadline && unconvertible(m.courseId)) || ((m.deadline || m.courseId) && unconvertible(m.courseName))));
+  if (open("B17")) memos = Array.isArray(memos) ? memos.filter((m) => !setsOffB17(m)) : undefined;
   uncounted(() => {
     browser.storage.local.unload([MEMOS]);
     if (memos !== undefined) browser.storage.local.load({ [MEMOS]: memos });

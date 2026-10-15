@@ -430,6 +430,19 @@ export const INPUTS = [
     },
   },
   {
+    // No course is found, and the stored memos are one memo, without a
+    // deadline, whose text is { toString: 0 }: an object that cannot be made a
+    // string, which the panel puts in the memo's card.
+    file: "known/assignments/B17-memo-text-object",
+    plan: (w) => {
+      w.int(0, w.remaining, 0);
+      w.int(0, 7, 1); w.int(0, w.remaining, 0); answer(w);
+      emptyAnswers(w);
+      w.bool(true); w.int(0, w.remaining, 1); w.int(0, 7, 0); value(w, { id: 1, text: { toString: 0 }, created: 0 });
+      value(w, undefined); value(w, undefined);
+    },
+  },
+  {
     // One course, whose assignments are [null, { title: "レポート1" }].
     file: "known/assignments/B19-null-assignment",
     plan: (w) => {
@@ -762,6 +775,21 @@ export const INPUTS = [
       w.int(0, 2, 0);
       w.int(0, 2, 1); w.bool(true); w.bool(true); w.int(-60 * DAY, 60 * DAY, 0);
       w.bool(false); value(w, "課題");
+      w.int(0, 2, 0); w.int(0, 2, 0); w.int(0, 2, 0);
+      w.bool(false);
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 0);
+    },
+  },
+  {
+    // The popup opens on a cache of one assignment whose closing time is
+    // { toString: 0 }: an object that cannot be made a number, which the
+    // popup compares with the time.
+    file: "known/popup/B25-close-time-object",
+    plan: (w) => {
+      w.int(0, 2, 0);
+      w.int(0, 2, 1); w.bool(true); w.bool(true); w.int(-60 * DAY, 60 * DAY, 0);
+      w.bool(false); value(w, [{ courseId: "C1", name: "レポート1", closeTime: { toString: 0 } }]);
       w.int(0, 2, 0); w.int(0, 2, 0); w.int(0, 2, 0);
       w.bool(false);
       w.int(0, w.remaining, 0);

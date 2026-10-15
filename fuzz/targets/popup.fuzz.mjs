@@ -46,7 +46,7 @@
 // linear code does with an input of its size (ladder() and judge() of
 // fuzz/lib.mjs, harness/work.mjs).
 import { Browser, Clock, Net, allow, aside, idle, installCanvas, measure, openBackground, openBareTab, openPopup, openTab, uncounted, watch } from "../../harness/index.mjs";
-import { bytes, calibrate, fail, json, judge, ladder, number, open, provider, seen, string, value, warnings } from "../lib.mjs";
+import { bytes, calibrate, fail, json, judge, ladder, number, open, provider, seen, string, unconvertible, value, warnings } from "../lib.mjs";
 
 const KEYS = {
   settings: "kulms-settings",
@@ -235,20 +235,30 @@ function isMarks(key) {
 const stored = (key, h, all) => valueOf(key, h, all);
 
 // Known: B17 (docs/findings.md). Whether memos as stored set it off: a value
-// that is not an array where there are memos to read, or a list with a null.
+// that is not an array where there are memos to read, a list with a null, or
+// a memo that holds a value that cannot be made a string or a number
+// (unconvertible() of lib.mjs) where the popup makes one of it: its ID, for
+// every memo (the key of its dismissal), and, for a memo with a deadline
+// (listed among the assignments), its deadline, text, course's ID and
+// course's name. A memo without a deadline is not shown with those.
+const DEADLINE_MEMO_FIELDS = ["deadline", "text", "courseId", "courseName"];
 function setsOffB17(memos) {
   if (memos === undefined || memos === null || memos === false || memos === 0 || memos === "") return false;
-  return !Array.isArray(memos) || memos.some((m) => m === null);
+  return !Array.isArray(memos) || memos.some((m) => m === null || (typeof m === "object" && (unconvertible(m.id) || (m.deadline && DEADLINE_MEMO_FIELDS.some((k) => unconvertible(m[k]))))));
 }
 
 // Known: B25. Whether a cache of assignments as stored sets it off: a list of
 // them that is not an array, or one that holds what is not an object, or an
-// assignment whose status is not a string.
+// assignment whose status is not a string, or one that holds a value that
+// cannot be made a string or a number in a field that the popup shows, joins
+// or compares: its course's name and ID, its name, URL and entity ID, its
+// deadline and its closing time.
+const SHOWN_FIELDS = ["courseName", "courseId", "name", "url", "entityId", "deadline", "closeTime"];
 function setsOffB25(cache) {
   if (cache === null || typeof cache !== "object" || !cache.assignments) return false;
   const list = cache.assignments;
   if (!Array.isArray(list)) return true;
-  return list.some((a) => a === null || typeof a !== "object" || (a.status && typeof a.status !== "string"));
+  return list.some((a) => a === null || typeof a !== "object" || (a.status && typeof a.status !== "string") || SHOWN_FIELDS.some((k) => unconvertible(a[k])));
 }
 
 // Known: B22. Whether a secret is longer than the background can save.
@@ -377,12 +387,14 @@ async function run(data) {
   const values = {};
   for (const [key, h] of Object.entries(input.stored)) values[key] = stored(key, h, input.stored);
   // Known: B17. While it is open, memos stored as a value that is not an
-  // array, or as a list with a null, are not put in the store, at the start
-  // or by a write of the actions: the popup's render() stops on them, as the
-  // assignment panel's does.
+  // array, as a list with a null, or with a memo that holds a value the popup
+  // cannot make a string or a number of (setsOffB17()), are not put in the
+  // store, at the start or by a write of the actions: the popup's render()
+  // stops on them, as the assignment panel's does.
   if (open("B17") && (setsOffB17(values.memos) || input.actions.some((a) => a.kind === "store" && a.key === "memos" && setsOffB17(stored("memos", a.held, input.stored))))) return;
-  // Known: B25. While it is open, a cache of assignments that sets it off is
-  // not put in the store, at the start or by a write of the actions.
+  // Known: B25. While it is open, a cache of assignments that sets it off
+  // (setsOffB25()) is not put in the store, at the start or by a write of the
+  // actions.
   if (open("B25") && (setsOffB25(values.cache) || input.actions.some((a) => a.kind === "store" && a.key === "cache" && setsOffB25(stored("cache", a.held, input.stored))))) return;
   // Known: S6. While it is open, an input that keeps a secret of what is not
   // base32 and shows its QR code is left out: popup.js percent-encodes such a

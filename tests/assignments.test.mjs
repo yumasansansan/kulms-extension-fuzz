@@ -201,6 +201,80 @@ test("B25: a stored cache whose list of assignments is not a list does not stop 
   assert.ok(await until(() => EMPTY.some((text) => popup.document.body.textContent.includes(text)), { timeout: 2000 }), "the popup shows no list, empty or not");
 });
 
+// An object of its own toString, which cannot be made a string or a number:
+// what JSON gives back of an object's own toString (data, not a function).
+const UNCONVERTIBLE = { toString: 0 };
+
+// The stored state of B17 a third way: memos that each hold UNCONVERTIBLE in
+// one field where the panel or the popup makes a string or a number of it
+// (the ID; the text; the deadline; the course's ID or name of a memo with a
+// deadline; the course's name of a memo with a course's ID), beside a memo
+// that is whole.
+const withUnconvertibleMemoFields = () => {
+  const due = Date.now() + 2 * H;
+  return {
+    ...cached([assignment("A1", "レポート1", Date.now() + 30 * H)]),
+    "kulms-memos": [
+      { id: UNCONVERTIBLE, text: "メモA", created: 1 },
+      { id: 2, text: UNCONVERTIBLE, created: 1 },
+      { id: 3, text: "メモC", created: 1, deadline: UNCONVERTIBLE },
+      { id: 4, text: UNCONVERTIBLE, created: 1, deadline: due },
+      { id: 5, text: "メモE", created: 1, deadline: due, courseId: UNCONVERTIBLE, courseName: "線形代数" },
+      { id: 6, text: "メモF", created: 1, deadline: due, courseId: "C1", courseName: UNCONVERTIBLE },
+      { id: 7, text: "メモG", created: 1, courseId: "C1", courseName: UNCONVERTIBLE },
+      { id: 8, text: "残るメモ", created: 1 },
+    ],
+  };
+};
+
+test("B17: stored memos whose fields cannot be made strings do not stop the drawing of the panel", { todo: "B17: the panel makes strings of a memo's ID, text, deadline and course as they are stored" }, async (t) => {
+  const browser = browserWith(withUnconvertibleMemoFields());
+  t.after(() => browser.close());
+  const tab = openCoursePage(browser);
+  await until(() => tab.document.getElementById("kulms-assign-toggle"));
+  tab.document.getElementById("kulms-assign-toggle").click();
+  const panel = tab.document.getElementById("kulms-assign-panel");
+  await until(() => card(panel, "レポート1") && card(panel, "残るメモ"), { timeout: 2000 });
+  assert.ok(card(panel, "レポート1") && card(panel, "残るメモ"), "the panel lacks the assignment or the memo");
+});
+
+test("B17: stored memos whose fields cannot be made strings do not stop the popup's list", { todo: "B17: the popup makes strings of a memo's ID, deadline, text and course as they are stored" }, async (t) => {
+  const browser = browserWith(withUnconvertibleMemoFields());
+  t.after(() => browser.close());
+  const popup = openPopup(browser);
+  await until(() => popup.document.body.textContent.includes("残るメモ"), { timeout: 2000 });
+  const text = popup.document.body.textContent;
+  assert.ok(text.includes("レポート1") && text.includes("残るメモ"), "the popup lacks the assignment or the memo");
+});
+
+// The stored state of B25 a second way: cached assignments that each hold
+// UNCONVERTIBLE in one field that the panel or the popup shows, joins or
+// compares, beside an assignment that is whole.
+const withUnconvertibleAssignmentFields = () => cached([
+  assignment("A1", "レポート1", Date.now() + 30 * H),
+  ...["courseName", "courseId", "name", "url", "status", "entityId", "deadline", "closeTime"]
+    .map((field, i) => ({ ...assignment(`B${i}`, `課題${i}`, Date.now() + 40 * H), [field]: UNCONVERTIBLE })),
+]);
+
+test("B25: cached assignments whose fields cannot be made strings or numbers do not stop the drawing of the panel", { todo: "B25: the panel shows, joins and compares an assignment's fields as they are cached" }, async (t) => {
+  const browser = browserWith(withUnconvertibleAssignmentFields());
+  t.after(() => browser.close());
+  const tab = openCoursePage(browser);
+  await until(() => tab.document.getElementById("kulms-assign-toggle"));
+  tab.document.getElementById("kulms-assign-toggle").click();
+  const panel = tab.document.getElementById("kulms-assign-panel");
+  await until(() => card(panel, "レポート1"), { timeout: 2000 });
+  assert.ok(card(panel, "レポート1"), "the panel lacks the assignment");
+});
+
+test("B25: cached assignments whose fields cannot be made strings or numbers do not stop the popup", { todo: "B25: render() shows, joins and compares an assignment's fields as they are cached" }, async (t) => {
+  const browser = browserWith(withUnconvertibleAssignmentFields());
+  t.after(() => browser.close());
+  const popup = openPopup(browser);
+  await until(() => popup.document.body.textContent.includes("レポート1"), { timeout: 2000 });
+  assert.ok(popup.document.body.textContent.includes("レポート1"), "the popup lacks the assignment");
+});
+
 test("B23: a page that has filled its sessionStorage still has the panel load its assignments", { todo: "B23: openPanel() writes kulms-panel-open to the page's sessionStorage, and QuotaExceededError stops it before it loads" }, async (t) => {
   const browser = browserWith(cached([assignment("A1", "レポート1", Date.now() + 30 * H)]));
   t.after(() => browser.close());

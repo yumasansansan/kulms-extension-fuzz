@@ -54,7 +54,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [B14](#b14) | 低 | Shift_JIS にない文字を検索語から黙って落とす | 再現 | 未着手 | |
 | [B15](#b15) | 低 | `t()` がキーをプロトタイプ越しに引き，`t("hasOwnProperty")` が undefined になる（潜在） | ファズ | 対応中（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)） | |
 | [B16](#b16) | 低 | TA 採点支援が壊れた `%` の並びで URIError を投げ，装飾が止まる | ファズ | 対応中（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)） | |
-| [B17](#b17) | 中 | 保存されたメモが配列でないか，null を 1 つでも含むと，課題パネルの描画が止まる | ファズ | 対応中（[fix/invalid-memo](https://github.com/yumasansansan/kulms-extension/tree/fix/invalid-memo)） | |
+| [B17](#b17) | 中 | 保存されたメモが配列でないか，null を 1 つでも含むか，欄に文字列にできない値を持つと，課題パネルの描画が止まる | ファズ | 対応中（[fix/invalid-memo](https://github.com/yumasansansan/kulms-extension/tree/fix/invalid-memo)） | |
 | [B18](#b18) | 低 | TA 採点支援が，ページから届く提出の status の型を確かめず TypeError で止まる | ファズ | 対応中（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)） | |
 | [B19](#b19) | 低 | Sakai の応答に形の崩れた項目が 1 つあると，ほかの科目や課題も一覧から消える | ファズ | 対応中（[fix/sakai-answer-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/sakai-answer-shape)） | |
 | [B20](#b20) | 低 | サイト連絡先の取得で，pages.json の形の崩れたページが，後のページを隠す | ファズ | 対応中（[fix/site-contact-pages](https://github.com/yumasansansan/kulms-extension/tree/fix/site-contact-pages)） | |
@@ -433,17 +433,18 @@ specification: the GNU General Public License, version 3 or any later version
 - テスト: `fuzz/known/grading-status/B16-malformed-percent`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/grading-ta.test.mjs` の「B16」．
 
 ### B17
-**保存されたメモが配列でないか，null を 1 つでも含むと，課題パネルの描画が止まる**（中・ファズ）
+**保存されたメモが配列でないか，null を 1 つでも含むか，欄に文字列にできない値を持つと，課題パネルの描画が止まる**（中・ファズ）
 
 - 場所: [src/assignments.js:1064-1066](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L1064-L1066)，[:1468-1470](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L1468-L1470)，[:674-676](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L674-L676)，[:720](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L720)，[popup.js:390-393](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L390-L393)
 - 何が起きるか:
   - メモは `normalizeMemo()` を通してから `.deadline` や `.id` を読むが，`normalizeMemo()` は文字列しか直さず，null をそのまま返す．そのため，保存されたメモの一覧に null が 1 つでもあると TypeError になり，課題パネルの描画全体が止まる．popup の一覧と，期限の切れた非表示の掃除（読み込み時）も同じ箇所で止まる．
   - メモの一覧は `loadMemos()` が `result[MEMO_KEY] || []` として読むので，保存された値が配列でなく，偽でもないとき（文字列やオブジェクトなど）は，それがそのまま一覧になる．描画が `memos.forEach` を呼ぶ箇所で TypeError になり，課題パネルの描画全体が止まる．popup も，長さを持つ値（文字列など）では一覧が止まる．
+  - メモの欄も，拡張が書いた型であるものとして使う．ID は非表示のキーを作るために，本文，期限，科目の ID と名前は表示のために，文字列か数にする．JSON が返す，自分の `toString` を持つオブジェクト（`{ toString: 0 }` など）は文字列にも数にもできない [[ECMA-262]](#参考文献) ので，そうした値が欄に 1 つでもあると TypeError になり，課題パネルも popup も描画が止まる．課題パネルでは ID，本文，期限のいずれでも止まり，期限のあるメモでは科目の ID，期限か科目の ID のあるメモでは科目名でも止まる．popup では ID と期限のいずれでも止まり，期限のあるメモでは本文，科目の ID，科目名でも止まる（期限の無いメモは，これらを表示しない）．
   - 値は拡張自身のストレージから来るが，旧版や，計画中のスマホ版との同期，ストレージの破損などで 1 件でも壊れると，パネルを開けない状態が続く．
-- 根拠: ファズ対象 `assignments` が，Linux で約 2,500 回目（9 秒）に null のメモを見つけた．配列でない一覧は，2026-10-09 の毎日のファジング（[run 37853268307](https://github.com/yumasansansan/kulms-extension-fuzz/actions/runs/37853268307)）が見つけた．
-- 直し方: 読み込んだ値が配列でなければ空の一覧とし，一覧から，オブジェクトでない要素を取り除く（`normalizeMemo()` で null や数値を捨てる）．
-- 対応: `normalizeMemo()` は，オブジェクトでも文字列でもないものに null を返し，呼び出し元（課題パネルの 4 か所と popup の 1 か所）はそれを飛ばす．`loadMemos()` は配列でない値を空の一覧とみなし，popup は配列でない値ではメモを描かない（[fix/invalid-memo](https://github.com/yumasansansan/kulms-extension/tree/fix/invalid-memo)）．
-- テスト: `fuzz/known/assignments/B17-null-memo` と `B17-memos-not-a-list`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B17」の 4 件（null と配列でない一覧，それぞれ課題パネルと popup）．
+- 根拠: ファズ対象 `assignments` が，Linux で約 2,500 回目（9 秒）に null のメモを見つけた．配列でない一覧は，2026-10-09 の毎日のファジング（[run 37853268307](https://github.com/yumasansansan/kulms-extension-fuzz/actions/runs/37853268307)）が見つけた．欄の値は，2026-10-14 の毎日のファジング（[run 38636298848](https://github.com/yumasansansan/kulms-extension-fuzz/actions/runs/38636298848)）で，ファズ対象 `assignments` が，本文が `{ toString: 0 }` のメモで見つけた．どの欄で止まるかは，欄ごとに確かめた．
+- 直し方: 読み込んだ値が配列でなければ空の一覧とし，一覧から，オブジェクトでない要素を取り除く（`normalizeMemo()` で null や数値を捨てる）．メモの欄の型も正す．
+- 対応: `normalizeMemo()` は，オブジェクトでも文字列でもないものに null を返し，呼び出し元（課題パネルの 4 か所と popup の 1 か所）はそれを飛ばす．`loadMemos()` は配列でない値を空の一覧とみなし，popup は配列でない値ではメモを描かない（[fix/invalid-memo](https://github.com/yumasansansan/kulms-extension/tree/fix/invalid-memo)）．`normalizeMemo()` は欄の型も正す．表示や連結に使う欄（本文，科目の ID と名前）は文字列でなければ空文字列に（有限の数は文字列にする），期限は有限の数でなければ null に，ID は文字列か有限の数でなければ null にする（2026-10-15．同じブランチの続く修正）．
+- テスト: `fuzz/known/assignments/B17-null-memo`，`B17-memos-not-a-list`，`B17-memo-text-object`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B17」の 6 件（null，配列でない一覧，欄に文字列にできない値．それぞれ課題パネルと popup）．
 
 ### B18
 **TA 採点支援が，ページから届く提出の status の型を確かめず TypeError で止まる**（低・ファズ）
@@ -536,11 +537,11 @@ specification: the GNU General Public License, version 3 or any later version
 **保存された課題のキャッシュが拡張の書く形でないと，課題パネルと popup の描画が止まる**（低・ファズ）
 
 - 場所: [src/assignments.js:2909-2925](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L2909-L2925)（キャッシュの読み込み），[:462-466](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L462-L466)（`isSubmitted()`），[popup.js:313-360](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L313-L360)（`render()`），[:87-91](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L87-L91)（`isSubmitted()`），[:93-96](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L93-L96)（`getCheckedKey()`）
-- 何が起きるか: 課題パネルと popup は，`chrome.storage.local` [[ChromeStorage]](#参考文献) の課題のキャッシュ（`kulms-assignments`）を，拡張自身が書いた形であるものとして読む．課題の一覧（`assignments`）が配列でない値（文字列やオブジェクト）であれば `forEach` や `filter` の呼び出しで，項目に null などのオブジェクトでない値があればその項目のプロパティの読み取りで，状態（`status`）が文字列でない真の値であれば `isSubmitted()` の `toLowerCase()` の呼び出しで，TypeError になる．課題パネルは例外を捕まえて警告するのみで一覧を描かず，popup では例外が設定の読み込みの後の Promise の中で起き，誰も受けないため，一覧は空のまま残る．値は拡張自身のストレージから来るが，旧版との互換，ストレージの破損，将来の同期（B17 と同様）で 1 件でも壊れると，課題パネルではキャッシュの有効期間（既定で 2 分）が過ぎて取り直すまで，popup では content script がキャッシュを書き直すまで，一覧を表示できない．
-- 根拠: ファズ対象 `popup`（2026-10-14 に加えた）が見つけた．課題パネルでも同じ 3 通りの値で止まることを確かめた．
+- 何が起きるか: 課題パネルと popup は，`chrome.storage.local` [[ChromeStorage]](#参考文献) の課題のキャッシュ（`kulms-assignments`）を，拡張自身が書いた形であるものとして読む．課題の一覧（`assignments`）が配列でない値（文字列やオブジェクト）であれば `forEach` や `filter` の呼び出しで，項目に null などのオブジェクトでない値があればその項目のプロパティの読み取りで，状態（`status`）が文字列でない真の値であれば `isSubmitted()` の `toLowerCase()` の呼び出しで，TypeError になる．表示や連結，比較に使う欄（科目名，科目の ID，名前，ID，期限，締め切り．popup では URL も）に，文字列や数にできない値（JSON が返す，自分の `toString` を持つオブジェクト）があっても，TypeError になる．課題パネルは例外を捕まえて警告するのみで一覧を描かず，popup では例外が設定の読み込みの後の Promise の中で起き，誰も受けないため，一覧は空のまま残る．値は拡張自身のストレージから来るが，旧版との互換，ストレージの破損，将来の同期（B17 と同様）で 1 件でも壊れると，課題パネルではキャッシュの有効期間（既定で 2 分）が過ぎて取り直すまで，popup では content script がキャッシュを書き直すまで，一覧を表示できない．
+- 根拠: ファズ対象 `popup`（2026-10-14 に加えた）が見つけた．課題パネルでも同じ 3 通りの値で止まることを確かめた．欄の値は，2026-10-14 の毎日のファジング（[run 38636298848](https://github.com/yumasansansan/kulms-extension-fuzz/actions/runs/38636298848)）で，`popup` が，締め切りが `{ toString: 0 }` の課題で見つけた．どの欄で止まるかは，欄ごとに確かめた（課題パネルは URL を除く 7 つ，popup は 8 つ）．
 - 直し方: キャッシュの一覧が配列でなければ空の一覧とみなし，オブジェクトである項目のみを受ける．`status` など文字列であるべき項目は，文字列でなければ空文字列とみなす．
-- 対応: キャッシュを読む箇所（課題パネルの `loadCache()` と `loadStaleCache()`，popup の `render()`）で形を整える `normalizeCache()` を加えた（[fix/cache-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/cache-shape)）．
-- テスト: `fuzz/known/popup/B25-assignments-not-a-list`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B25」の 2 件（課題パネルと popup）．
+- 対応: キャッシュを読む箇所（課題パネルの `loadCache()` と `loadStaleCache()`，popup の `render()`）で形を整える `normalizeCache()` を加えた（[fix/cache-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/cache-shape)）．`normalizeCache()` は，文字列であるべき欄と時刻の欄も正すので，欄に文字列や数にできない値がある形も直る（2026-10-15 に確かめた）．
+- テスト: `fuzz/known/popup/B25-assignments-not-a-list` と `B25-close-time-object`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B25」の 4 件（配列でない一覧と，欄に文字列や数にできない値．それぞれ課題パネルと popup）．
 
 ### B26
 **TA 採点支援が，提出日時の列にセルの無い行で，提出一覧の読み取りを止める**（低・再現・ファズ）
@@ -826,7 +827,7 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
 | B15 | `i18n` | どのオブジェクトにもあるキー（`constructor`，`toString` など）を引かない |
 | B16 | `grading-status` | `%` の並びが壊れたリンクを読ませない |
 | B16 | `grading-pages` | ページのクエリ，課題へのリンク，表の提出へのリンクのうち，grading-ta.js がデコードする部分に壊れた `%` の並びがあるページは，流さない |
-| B17 | `assignments` | 保存されたメモが配列でなければ無いものとし，一覧から null を除く（メモは拡張自身の読み込み関数で読む） |
+| B17 | `assignments` | 保存されたメモが配列でなければ無いものとし，一覧から null を除く．文字列や数にできない値を，ID か本文か期限に持つメモ，期限があって科目の ID に持つメモ，期限か科目の ID があって科目名に持つメモも除く（メモは拡張自身の読み込み関数で読む） |
 | B18 | `grading-status` | `toString` か `valueOf` を自分に持つオブジェクトを含む応答を読ませない．提出の項目の型を確かめない |
 | B19 | `assignments` | 科目の一覧と科目ごとの取得が捕まえたプログラムの誤り（警告に書いたものも，catch が受けたものも）を数えない．課題，クイズ，サイトの名前が自分の `toString` を持つオブジェクトなら，その名前を除く |
 | B20 | `site-contact`，`background-message` | `fetchSakaiSiteContact()` が捕まえたプログラムの誤り（警告に書いたものも，catch が受けたものも）を数えない |
@@ -842,9 +843,9 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
 | S6 | `popup` | base32 でない文字を含むシークレットを保存したまま「QR」を押す入力は，流さない．8 ビットに満たないシークレットのコードの表示で起きる `DataError: Zero-length key is not supported` の未処理の拒否を数えない |
 | B12 | `submission` | ページの sessionStorage の提出の ID が，JSON で配列でない値なら，置かない（途中で書くときも） |
 | P6 | `background-message` | Shift_JIS の表を最初の入力の前に作っておき，どの入力にも数えない（探すときは，入力ごとに表を消し，Service Worker が起動した直後の状態から始める） |
-| B25 | `popup` | 保存された課題のキャッシュのうち，一覧が配列でないもの，オブジェクトでない項目を持つもの，文字列でない状態を持つ項目を含むものは，置かない（途中で書くときも） |
+| B25 | `popup` | 保存された課題のキャッシュのうち，一覧が配列でないもの，オブジェクトでない項目を持つもの，文字列でない状態を持つ項目を含むもの，表示や連結，比較に使う欄（科目名，科目の ID，名前，URL，ID，期限，締め切り）に文字列や数にできない値を持つ項目を含むものは，置かない（途中で書くときも） |
 | B26 | `grading-pages` | 提出日時の列にセルの無い行で `parseSubmissionListGroups()` が投げる TypeError を，ページの表でも取得した一覧でも数えない |
-| B17 | `popup` | 保存されたメモが，配列でない値か，null を含む一覧なら，置かない（途中で書くときも） |
+| B17 | `popup` | 保存されたメモが，配列でない値か，null を含む一覧か，文字列や数にできない値を，ID に持つメモか，期限があって期限，本文，科目の ID か科目名に持つメモを含む一覧なら，置かない（途中で書くときも） |
 | B22 | `popup` | 保存するシークレットと，入力欄に打つシークレットのいずれかが UTF-8 で 32 KiB を超える入力は，流さない |
 | B24 | `grading-bridge` | 橋渡しが答えずに，ページのオブジェクトが投げたものか，取り消された Proxy，BigInt，循環，プリミティブに変換できない値，組み込みの型の prototype を継いだだけのオブジェクト（TypedArray の length の getter などが受けない）でエンジンが投げる例外だけを投げた求めは，問わない（その例外も数えない）．答えた提出の ID，名前，日時は，渡されたまま受ける |
 | P7 | `grading-bridge` | 持っている要素より大きい `length` を言う配列もどきは，ページに置かない |
@@ -866,7 +867,8 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 |---|---|---|---|
 | fix/i18n-lookup | `i18n` | B10，B15（のちに B21 も） | 前半の修正では，値の中の置き場所の名前が後から置き換わる（B10 の後半）のを見つけた．直した後は 120 秒で失敗なし |
 | fix/grading-ta-input | `grading-status` | B16，B18 | 60 秒で失敗なし |
-| fix/invalid-memo | `assignments` | B17 | 60 秒で失敗なし．2026-10-12 の続く修正の後は，引き継いだコーパス 370 入力と，シードからの 3 分のファジングで失敗なし |
+| fix/invalid-memo | `assignments`，`popup` | B17 | 60 秒で失敗なし．2026-10-12 の続く修正の後は，引き継いだコーパス 370 入力と，シードからの 3 分のファジングで失敗なし．2026-10-15 の欄の型を正す修正の後は，run 38636298848 のコーパスから，`assignments` と `popup` を 3 分ずつで失敗なし |
+| fix/cache-shape | `popup` | B25 | 2026-10-15，欄に文字列や数にできない値がある形について，run 38636298848 のコーパスから 3 分で失敗なし |
 | fix/message-shape | `background-message` | S7 | 60 秒で失敗なし |
 | fix/site-contact-regex | `site-contact` | S2 | 60 秒で失敗なし |
 | fix/syllabus-parse | `syllabus-detail` | S8 | 60 秒で失敗なし |
