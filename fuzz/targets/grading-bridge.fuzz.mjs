@@ -290,17 +290,73 @@ function isB24(error) {
   return error instanceof w.TypeError && B24_ENGINE.test(error.message);
 }
 
-// Known: P7. Whether an array-like that the input puts in the page says it has
-// more elements than it has, at the top of the graders' value or under a
-// proxy of it.
-function setsOffP7({ graders }) {
-  return graders.some(({ prop }) => {
-    if (prop.kind !== "value") return false;
-    const s = prop.value.kind === "proxy" ? prop.value.of : prop.value;
-    if (s.kind !== "arrayLike" || s.length === null) return false;
-    const n = Number(s.length);
-    return Math.floor(Math.min(n > 0 ? n : 0, 2 ** 53 - 1)) > s.items.length;
-  });
+// ToLength of ECMA-262, of a number.
+const toLength = (n) => {
+  const x = Math.trunc(n);
+  return Number.isNaN(x) || x <= 0 ? 0 : Math.min(x, 2 ** 53 - 1);
+};
+
+// Whether `key` is an array index (ECMA-262): the canonical string of an
+// integer below 2^32 - 1.
+const isIndex = (key) => /^(?:0|[1-9]\d*)$/.test(key) && Number(key) < 2 ** 32 - 1;
+
+// The elements below `length` that an object of the own keys `keys` holds.
+const heldBelow = (keys, length) => new Set(keys.filter((k) => isIndex(k) && Number(k) < length)).size;
+
+// Whether the bridge's Array.from() of `s`, a source as read() reads it, goes
+// the way of an array-like (the value has no @@iterator) to a length past the
+// elements that it holds. The page's values that go that way are those that
+// are no array and no Map and have a length that is a number: an array-like
+// whose length is said (one with an iterator of its own goes by it), an
+// object whose last entry keyed "length" is a number, and a plain object of
+// value() whose length is a number; a typed array and a string go by their
+// iterators.
+function loopsPastWhatItHolds(s) {
+  switch (s.kind) {
+    case "arrayLike":
+      return !s.iterator && s.length !== null && toLength(s.length) > s.items.length;
+    case "object": {
+      const last = s.entries.findLast(([k]) => k === "length");
+      if (!last || last[1].kind !== "value" || typeof last[1].value !== "number") return false;
+      const length = toLength(last[1].value);
+      return length > heldBelow(s.entries.map(([k]) => k), length);
+    }
+    case "value": {
+      const v = s.value;
+      if (v === null || typeof v !== "object" || Object.getPrototypeOf(v) !== Object.prototype) return false;
+      if (!Object.hasOwn(v, "length") || typeof v.length !== "number") return false;
+      const length = toLength(v.length);
+      return length > heldBelow(Object.keys(v), length);
+    }
+    default:
+      return false;
+  }
+}
+
+// The traps of a proxy that the bridge passes on its way to Array.from(): a
+// `get` trap throws where it reads the length, a `getPrototypeOf` trap where
+// it asks whether the value is a Map, and Array.from() itself only gets.
+const TRAPS_PASSED = ["ownKeys", "getOwnPropertyDescriptor", "has"];
+
+// Known: P7. Whether the bridge, asked at all, loops past the elements of the
+// value it reads: the originalSubmissions of the grader it picks (the first
+// <sakai-grader> whose ID begins with "sakai-grader-", else the first
+// <sakai-grader>), the value itself or through a proxy whose trap the bridge
+// passes. The harness stops a loop to a length before it runs where it can
+// read the length (lengthOfArrayLike() of harness/costs.mjs), but it reads no
+// proxy's, as that would run the page's code: through a proxy, the loop ran
+// uncounted, and to a length of 2^31 V8 ended the whole process ("invalid
+// table size", the dictionary of the elements having grown as far as it
+// can) after some ten seconds and 1.6 GB. Until daily run 38718496528 this
+// looked at array-likes only, and at every grader, read or not.
+function setsOffP7({ graders, requests }) {
+  if (requests.length === 0) return false;
+  const tagged = graders.filter((g) => g.tag === "sakai-grader");
+  const read = tagged.find((g) => g.id !== null && g.id.startsWith("sakai-grader-")) || tagged[0];
+  if (!read || read.prop.kind !== "value") return false;
+  const s = read.prop.value;
+  if (s.kind === "proxy") return TRAPS_PASSED.includes(s.trap) && loopsPastWhatItHolds(s.of);
+  return loopsPastWhatItHolds(s);
 }
 
 // What the bridge threw, to be read in a failure's message.
@@ -339,8 +395,8 @@ function checkAnswers(r, answers, raised) {
 async function run(data) {
   const input = read(provider(data));
   browser.forget();
-  // Known: P7. While it is open, an array-like that says it has more elements
-  // than it has is not put in the page.
+  // Known: P7. While it is open, an input whose requests make the bridge loop
+  // past the elements of the value it reads is not run (setsOffP7()).
   if (open("P7") && setsOffP7(input)) return;
   pageThrows = new Set();
   uncounted(() => build(input));

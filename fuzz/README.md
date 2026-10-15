@@ -111,7 +111,7 @@ KULMS+ のコードに，外から入ってくる値（シラバスの HTML，Sa
 | `popup` | B17 | 保存されたメモが，配列でない値か，null を含む一覧か，文字列や数にできない値を，ID に持つメモか，期限があって期限，本文，科目の ID か科目名に持つメモを含む一覧なら，置かない（途中で書くときも） |
 | `popup` | B22 | 保存するシークレットと，入力欄に打つシークレットのいずれかが UTF-8 で 32 KiB を超える入力は，流さない |
 | `grading-bridge` | B24 | 橋渡しが答えずに，ページのオブジェクトが投げたものか，取り消された Proxy，BigInt，循環，プリミティブに変換できない値，組み込みの型の prototype を継いだだけのオブジェクト（TypedArray の length の getter などが受けない）でエンジンが投げる例外だけを投げた求めは，問わない（その例外も数えない）．答えた提出の ID，名前，日時は，渡されたまま受ける |
-| `grading-bridge` | P7 | 持っている要素より大きい `length` を言う配列もどきは，ページに置かない |
+| `grading-bridge` | P7 | 求めがあり，橋渡しが読む採点の要素の値が，`Array.from()` が長さまで回る値（配列でも Map でもなく，反復子を持たず，`length` が数のもの．罠が橋渡しを通す Proxy で包んだものも）で，持つ要素より大きい長さを言うなら，その入力は走らせない |
 | `grading-pages` | B16 | ページのクエリ，課題へのリンク，表の提出へのリンクのうち，grading-ta.js がデコードする部分に壊れた `%` の並びがあるページは，流さない |
 | `grading-pages` | B26 | 提出日時の列にセルの無い行で `parseSubmissionListGroups()` が投げる TypeError を，ページの表でも取得した一覧でも数えない |
 | `popup` | P8 | 表示しているコードの 1 秒の更新には，固定の仕事に加えて，表示しているシークレットが 16 字を超える分の仕事（1 字あたりの量を対象が測ったもの）を，入力の上限に加える |
@@ -181,6 +181,12 @@ pnpm exec jazzer fuzz/targets/syllabus-detail.fuzz.mjs fuzz-run/corpora/syllabus
 
 ```bash
 bash ci/fuzz.sh 60 fuzz-run/corpora fuzz-run/crashes
+```
+
+`ci/fuzz.sh` は，出力をその場で書き出し，1 分ごとに，プロセスが持つメモリと，マシンが使える量を 1 行で書きます．1 つのプロセスが持てるメモリは，始めたときにマシンが使える量から，[../ci/memory.sh](../ci/memory.sh) の余白を引いたものです．それを超えた入力は，失敗として残ります．ほかのプログラムも動かすデスクトップでは，`KULMS_FUZZ_MEMORY_MB` で小さくできます．
+
+```bash
+KULMS_FUZZ_MEMORY_MB=4096 bash ci/fuzz.sh 60 fuzz-run/corpora fuzz-run/crashes
 ```
 
 ```bash

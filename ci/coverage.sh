@@ -71,14 +71,16 @@ chunk=10
 # as many at once as the machine has processors, and 4 GiB of memory for (the
 # heap V8 takes by itself on a machine of 16 GiB). Three quarters of the
 # memory are for the heaps, shared among the lots under way; the rest is left
-# to what is not heap. A lot whose memory runs out (V8 aborts it, or the
-# system kills it, and it writes no counts) is replayed again once the others
-# are done, alone, with a heap of all the memory, as ci/fuzz.sh fuzzes: one of
-# submission's inputs takes more than 4 GiB uncounted. Should the memory run
-# out still, the inputs it did not replay are named, and fail nothing: the
-# fuzzing judges memory (ci/fuzz.sh), not this. KULMS_COVERAGE_JOBS sets how
-# many lots run at once.
-memory_mb=$(node -p 'Math.floor(require("node:os").totalmem() / 2 ** 20)')
+# to what is not heap. A lot whose memory runs out (V8 aborts it, or it holds
+# more than its share of all the memory, and it writes no counts) is replayed
+# again once the others are done, alone, with all the memory that a process
+# may hold, as ci/fuzz.sh fuzzes: one of submission's inputs takes more than
+# 4 GiB uncounted. Should the memory run out still, the inputs it did not
+# replay are named, and fail nothing: the fuzzing judges memory (ci/fuzz.sh),
+# not this. KULMS_COVERAGE_JOBS sets how many lots run at once. The memory is
+# what the machine has available as the script starts, not all that it has
+# (ci/memory.sh): a heap of all of it could take the runner down with it.
+. "$(dirname "$0")/memory.sh"
 processors=$(node -p 'require("node:os").availableParallelism()')
 room=$((memory_mb / 4096))
 at_once=${KULMS_COVERAGE_JOBS:-$((processors < room ? processors : room))}
@@ -91,13 +93,15 @@ share_mb=$((memory_mb * 3 / 4 / at_once))
 grace=30
 
 # Replays the inputs "$@" of the target $1 as its lot $2 (the place of the
-# lot's first input) with a heap of $3 MiB, and keeps what the replay wrote,
+# lot's first input) with a heap of $3 MiB, stopped should it hold more than
+# $4 MiB in all (guard_memory() of ci/memory.sh: V8's heap limit leaves out
+# what is held outside the heap), and keeps what the replay wrote,
 # raw/fuzz-<target>.<lot>.log, and how it ended, raw/fuzz-<target>.<lot>.end:
 # passed, failed (an input failed), memory (the memory ran out), or time (the
 # time ran out first).
 replay_lot() {
-  local target=$1 lot=$2 heap=$3
-  shift 3
+  local target=$1 lot=$2 heap=$3 hold=$4
+  shift 4
   local limit=()
   if [ -n "$until_time" ]; then
     local left=$((until_time - $(date +%s)))
@@ -108,12 +112,21 @@ replay_lot() {
     fi
     limit=(timeout --kill-after="$grace" "$left")
   fi
-  local code=0
+  local code=0 marker=$raw/fuzz-$target.$lot.memory
+  rm -f "$marker"
   KULMS_FUZZ_NOISE=Infinity NODE_V8_COVERAGE="$PWD/$raw/fuzz-$target" NODE_OPTIONS="--max-old-space-size=$heap" \
-    "${limit[@]}" node fuzz/replay.mjs "$target" "$@" > "$raw/fuzz-$target.$lot.log" 2>&1 || code=$?
+    "${limit[@]}" node fuzz/replay.mjs "$target" "$@" > "$raw/fuzz-$target.$lot.log" 2>&1 &
+  local run=$!
+  guard_memory "$run" "$hold" "$marker" &
+  local guard=$!
+  wait "$run" || code=$?
+  kill $(under "$guard") "$guard" 2>/dev/null || true
+  wait "$guard" 2>/dev/null || true
   local end=failed
   if [ "$code" -eq 0 ]; then
     end=passed
+  elif [ -e "$marker" ]; then
+    end=memory
   elif [ -n "$until_time" ] && { [ "$code" -eq 124 ] || [ "$code" -eq 137 ]; } && [ "$(date +%s)" -ge "$until_time" ]; then
     end=time
   elif [ "$code" -eq 137 ] || grep -q 'JavaScript heap out of memory' "$raw/fuzz-$target.$lot.log"; then
@@ -155,7 +168,7 @@ if [ "$report_only" -eq 0 ]; then
           running=$((running - 1))
         fi
         printf '%s\0' "${files[@]:i:chunk}" > "$raw/fuzz-$target.$i.files"
-        replay_lot "$target" "$i" "$share_mb" "${files[@]:i:chunk}" &
+        replay_lot "$target" "$i" "$share_mb" "$((memory_mb / at_once))" "${files[@]:i:chunk}" &
         running=$((running + 1))
       done
     done
@@ -167,7 +180,7 @@ if [ "$report_only" -eq 0 ]; then
         if [ "$(cat "$raw/fuzz-$target.$i.end")" = memory ]; then
           echo "   the lot of $target from its input $i ran out of its share of the memory: replayed again, alone"
           mapfile -d '' -t again < "$raw/fuzz-$target.$i.files"
-          replay_lot "$target" "$i" "$memory_mb" "${again[@]}"
+          replay_lot "$target" "$i" "$memory_mb" "$memory_mb" "${again[@]}"
         fi
       done
     done

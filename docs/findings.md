@@ -70,7 +70,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [P4](#p4) | 低 | jsQR（256KB）と qrcode-gen（56KB）を広すぎる範囲に注入する | 読解 | 対応中（jsQR：[fix/jsqr-where-read](https://github.com/yumasansansan/kulms-extension/tree/fix/jsqr-where-read)） | |
 | [P5](#p5) | 低 | 教科書の取得が科目ごとの直列処理 | 読解・再現 | 対応中（[fix/textbooks-parallel](https://github.com/yumasansansan/kulms-extension/tree/fix/textbooks-parallel)） | |
 | [P6](#p6) | 低 | Service Worker の起動ごとに Shift_JIS 変換表を作り直す | 計測 | 未着手 | |
-| [P7](#p7) | 低 | TA 採点支援のページ側の橋渡しが，配列もどきの `length` が示す回数だけ反復する | ファズ | 対応中（[fix/grading-bridge-values](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-bridge-values)） | |
+| [P7](#p7) | 低 | TA 採点支援のページ側の橋渡しが，配列もどきの `length` が示す回数だけ反復する | ファズ・ブラウザ | 対応中（[fix/grading-bridge-values](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-bridge-values)） | |
 | [P8](#p8) | 低 | 表示中の TOTP コードを毎秒作り直すたびに，シークレットをデコードし，HMAC の鍵を作り直す | 再現・ファズ | 対応中（[fix/totp-key-once](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-key-once)） | |
 | [M1](#保守性) | — | TOTP の実装が 4 か所に重複している | 読解 | 未着手 | |
 | [M2](#保守性) | — | popup.js と assignments.js，textbooks.js と assignments.js の重複 | 読解 | 未着手 | |
@@ -618,14 +618,14 @@ specification: the GNU General Public License, version 3 or any later version
 - テスト: `fuzz/known/background-message/P6-first-search`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
 ### P7
-**TA 採点支援のページ側の橋渡しが，配列もどきの `length` が示す回数だけ反復する**（低・ファズ）
+**TA 採点支援のページ側の橋渡しが，配列もどきの `length` が示す回数だけ反復する**（低・ファズ・ブラウザ）
 
 - 場所: [src/grading-ta-page.js:45](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/grading-ta-page.js#L45)
-- 何が起きるか: `normalizeSubmissions()` は，`originalSubmissions` が配列でも Map でもなく，`length` が数なら，`Array.from()` で配列にする．`Array.from()` は要素の有無に関わらず `length` まで反復する [[ECMA-262]](#参考文献) ため，`length` が 2^32 − 2 なら約 43 億回反復し，それより大きければ「Invalid array length」の RangeError になる．値はページのものであるため，ページのスクリプトはいつでもこの状態を作れる（ページが自らを停止させうるのと同様であり，害はそのページに留まる）．Sakai 自身は配列を置くため，通常は発生しない．
-- 根拠: ファズ対象 `grading-bridge`．ハーネスは，配列もどきの長さまで反復する組み込み（`Array.from()` と `%TypedArray%.from()`）を，走る前にその長さで数え，入力の上限を超えるなら走らせずに止める（[harness/costs.mjs](../harness/costs.mjs) の `least`）．
+- 何が起きるか: `normalizeSubmissions()` は，`originalSubmissions` が配列でも Map でもなく，`length` が数なら，`Array.from()` で配列にする．`Array.from()` は，値が反復子を持たなければ，要素の有無に関わらず `length` まで反復する [[ECMA-262]](#参考文献) ため，`length` が 2^32 − 2 なら約 43 億回反復し，それより大きければ「Invalid array length」の RangeError になる．`length` を持つ値は，配列もどきに限らず，`length` という名前の数を持つ任意のオブジェクトでも，それを包む Proxy でもよい．Edge 155 で，`length` が 2^25 と 2^31 の Proxy（`has` の罠を持つもの）を置くと，橋渡しはページの主スレッドをそれぞれ 2.9 秒と 7.1 秒ふさぎ，前者には空の一覧を答え，後者では RangeError を投げて答えなかった．値はページのものであるため，ページのスクリプトはいつでもこの状態を作れる（ページが自らを停止させうるのと同様であり，害はそのページに留まる）．Sakai 自身は配列を置くため，通常は発生しない．
+- 根拠: ファズ対象 `grading-bridge`．ハーネスは，配列もどきの長さまで反復する組み込み（`Array.from()` と `%TypedArray%.from()`）を，走る前にその長さで数え，入力の上限を超えるなら走らせずに止める（[harness/costs.mjs](../harness/costs.mjs) の `least`）．ただし Proxy の長さは，読むとページのコードが動くため前もって読まず，ループは数えられないまま最後まで走る．Node 26 では，長さ 2^25 のループは 2.3 秒と 489 MB を使って走り終えた後に上限を超え，2^31 では V8 が約 10 秒と 1.6 GB の後にプロセスごと終わった（"invalid table size"．要素の辞書がそれ以上大きくなれない）．オブジェクトと Proxy の形は，2026-10-15 の毎日のファジング（38718496528）の停止を調べる中で，ファジングの回避が配列もどきだけを見ていたことから見つけた（「ファジングで避けている既知の問題」）．
 - 直し方: 配列と Map だけを受け，ほかは空の一覧とする．
 - 対応: 配列，Map，キーごとのオブジェクトのみを受け，`length` の値は使わない（[fix/grading-bridge-values](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-bridge-values)．B24 と同じブランチ）．
-- テスト: `fuzz/known/grading-bridge/P7-array-like-length`．
+- テスト: `fuzz/known/grading-bridge/P7-array-like-length`，`P7-object-length`，`P7-proxy-length`．
 
 ### P8
 **表示中の TOTP コードを毎秒作り直すたびに，シークレットをデコードし，HMAC の鍵を作り直す**（低・再現・ファズ）
@@ -794,6 +794,8 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
   - `ci.yml`（push ごと）: Ubuntu と Windows でのテスト，lint（このリポジトリには ESLint のすべての指摘で失敗し，submodule の拡張には DOM XSS と ReDoS のルールを掛けて報告だけする），REUSE，canary と各対象 1 分のファジング，カバレッジの計測．落ちた入力は artifact に残す．カバレッジの計測は，テストと，次の毎日のファジングが引き継ぐコーパス（[ci/carry-over.sh](../ci/carry-over.sh)）を流し，1 行ずつ示すページを artifact に残す．数字では失敗にしないが，コーパスの入力がそのコミットで落ちれば失敗にする（次の毎日のファジングより先に判明する）．
   - `fuzz.yml`（毎日）: 各対象 20 分のファジング．対象ごとに 1 つのジョブとし，すべてのジョブを並べて走らせる．ADLplug-Next は重い対象をそれぞれ別のパートにするが，このリポジトリにはパートごとのビルドが無く，どのコーパスが重くなるかは日によって変わるので，すべての対象をそれぞれのジョブにした（2026-10-14）．コーパスと落ちた入力は対象ごとの artifact で引き継ぎ（分ける前の 1 つの artifact からも取る．[ci/carry-over.sh](../ci/carry-over.sh)），前回落ちた入力を最初に再生する．
   - どちらのジョブも，始めに，ファジングが終わるべき時刻（GitHub がジョブを止める 6 時間から，残したものを保存する 30 分を引いた時刻．`fuzz.yml` はジョブ自身の上限 330 分の 5 分前）を記録して `ci/fuzz.sh --until` に渡す．
+  - 1 つのプロセス（対象のファジング，入力の再生）が持てるメモリは，スクリプトの開始時にマシンが使える量（`/proc/meminfo` の MemAvailable [[ProcMeminfo]](#参考文献)）から余白を引いたものとする（[ci/memory.sh](../ci/memory.sh)．2026-10-15 に改めた）．libFuzzer はそれを超えたプロセスの入力を（`-rss_limit_mb`），V8 はヒープがそれを超えた入力を（`--max-old-space-size`）止め，どちらも入力を残す．libFuzzer の居ない入力の再生（前の回に落ちた入力，カバレッジの計測）は，常駐メモリを 1 秒ごとに見て，超えたら止める．余白は，その 1 秒の間にプロセスが増やしうる量（各対象のコーパスを流して 0.1 秒ごとに測った最大）と，周りのプロセス（pnpm，timeout，シェル）が持つ量の和である．それまでは，マシンの全メモリを限度としていた．OS と runner がその一部を持ち，Ubuntu 26.04 では `/tmp` もメモリ上にある [[RunnerImages]](#参考文献) ため，どちらの限度にも達する前にマシンのメモリが尽きえた．GitHub は資源の尽きた runner を止める [[RunnerShutdown]](#参考文献)．止められたジョブは，ログがそこで切れ，後のステップ（見つけたものの保存）も動かない．
+  - ファジングと再生が出力するものは，その場でジョブのログに流し（以前は一時ファイルに書き，終わってから一部を抜き出していた），1 分ごとに，そのプロセスが持つメモリと，マシンが使える量とスワップの使用量を 1 行で書く．runner が止められたときに残るのはログだけだからである．出力の写しは，メモリ上の `/tmp` ではなく，ディスクに置く．
 
 ## 時計の揺れ
 
@@ -848,7 +850,7 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
 | B17 | `popup` | 保存されたメモが，配列でない値か，null を含む一覧か，文字列や数にできない値を，ID に持つメモか，期限があって期限，本文，科目の ID か科目名に持つメモを含む一覧なら，置かない（途中で書くときも） |
 | B22 | `popup` | 保存するシークレットと，入力欄に打つシークレットのいずれかが UTF-8 で 32 KiB を超える入力は，流さない |
 | B24 | `grading-bridge` | 橋渡しが答えずに，ページのオブジェクトが投げたものか，取り消された Proxy，BigInt，循環，プリミティブに変換できない値，組み込みの型の prototype を継いだだけのオブジェクト（TypedArray の length の getter などが受けない）でエンジンが投げる例外だけを投げた求めは，問わない（その例外も数えない）．答えた提出の ID，名前，日時は，渡されたまま受ける |
-| P7 | `grading-bridge` | 持っている要素より大きい `length` を言う配列もどきは，ページに置かない |
+| P7 | `grading-bridge` | 求めがあり，橋渡しが読む採点の要素の値が，`Array.from()` が長さまで回る値（配列でも Map でもなく，反復子を持たず，`length` が数のもの．罠が橋渡しを通す Proxy で包んだものも）で，持つ要素より大きい長さを言うなら，その入力は走らせない（2026-10-15 まで，配列もどきだけを見ていた） |
 | P8 | `popup` | 表示しているコードの 1 秒の更新には，固定の仕事（16 字のシークレットで測ったもの）に加えて，表示しているシークレットが 16 字を超える分の仕事（1 字あたりの量を対象が測ったもの）を，入力の上限に加える |
 | P2 | `resources` | 利用者が何も操作しないうちに，拡張が以前に要求したのと同じフォルダの操作を再び要求した場合，サーバーは 404 で答える |
 
@@ -876,7 +878,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 | fix/site-contact-pages | `site-contact`，`background-message` | B20 | 各 120 秒で失敗なし |
 | 13 本すべてを当てたもの | 7 対象すべて | S2，S7，S8，B10，B15〜B18，B21 | `assignments` が，科目の一覧でも B19 と同じ誤りが起きるのを見つけた（B19 に加えた）．避ける範囲を広げた後は，`assignments` を 120 秒，ほかの 6 対象を各 60 秒実行して失敗なし．入力の件数などの上限を外した後も，7 対象を各 60 秒実行して失敗なし |
 | 24 本すべてを当てたもの（2026-10-08） | 7 対象すべて | S2，S6，S7，S8，S9，B10，B15〜B21 | 各 60 秒，続けて各 300 秒で失敗なし．当てると，S1 の前半と S9 が `src/auth-totp.js` で衝突したので，S9 のブランチはそこに触れないようにした（そのデコードは S1 の前半が取り除く）．その後は，24 本の 2 本ずつのどの組も，24 本を続けて取り込む 40 通りの順も衝突せず，どの順でも同じ結果になる（`git merge-tree` で確かめた）．S1 の前半が background に移したデコードに S9 の正規表現が残っていたのと，B1 の修正が読む `isLoading` を B9 の修正が消していたのも，それぞれのブランチで直した．テストは失敗 0 で，todo 62 件のうち 58 件が通る（残りは，判断を要する B14，S1 の後半，コミットを `git archive` してビルドする B5 と B6）．2026-10-12 に，B17 の続く修正も当てて流すと，失敗 0 で，todo 66 件のうち 61 件が通る（残りは同じ 4 件と，直していない P6）．2026-10-13 に B22 の修正（25 本目）も当てると，失敗 0 で，todo 68 件のうち 63 件が通る．同じ日に，上流の v1.21.1 に残る 22 本（取り込まれた 2 本と，上流が同じ修正を入れた fix/build-contents を除く）を当てると，40 通りの順のいずれでも衝突せずに同じツリーになり，失敗 0 で，todo 61 件のうち 58 件が通る（残りは B14，S1 の後半，P6） |
-| fix/grading-bridge-values（2026-10-14） | `grading-bridge` | B24，P7 | 既知の入力 3 件とコーパス 144 入力が通り，120 秒（8,899 回）で失敗なし |
+| fix/grading-bridge-values（2026-10-14） | `grading-bridge` | B24，P7 | 既知の入力 3 件とコーパス 144 入力が通り，120 秒（8,899 回）で失敗なし．2026-10-15 に加えた P7 の既知の入力 2 件（オブジェクトと Proxy）も通る |
 | fix/storage-full（2026-10-14） | `sidebar`，`submission`，`totp-register` | B23 | 既知の入力 3 件が通り，各 60 秒で失敗なし．課題パネルの B23 のテストも通る |
 | fix/expand-folders-once（2026-10-14） | `resources` | P2 | 既知の入力と，P2 を見つけた入力を含む 90 入力が通り，90 秒（556 回）で失敗なし |
 | fix/cache-shape（2026-10-14） | `popup` | B25 | 既知の入力を含む 157 入力が通り，90 秒（1,238 回）で失敗なし．B25 のテスト 2 件も通る |
@@ -929,6 +931,11 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
   - 同日に push した `1c51506` と `a56db05` の CI は，2 つのジョブで失敗した．`a56db05` の 1 分のファジングでは，`resources` の 16 バイトの入力が線形のコードの上限を超えた．すべての設定を有効にし，フォームの無いページに，Sakai のリンクで開くフォルダの行を 1 つ（376 文字．うち onclick が 173 文字）置くだけの入力である．上限の入力の大きさに，対象が入力から組み立てたページの大きさが入っていなかったため，線形の仕事が上限を超えた．この入力は `1c51506` のハーネスでも失敗し，この日のファジングが初めて作ったものであった．上限の入力の大きさは，入力が拡張に渡したもの（ページの HTML と，拡張が読んだ答えの本文）がより大きければ，その大きさとした（「fuzz リポジトリの仕組み」の仕事量）．同じ形の入力をシード `seeds/resources/no-form` とした．カバレッジのジョブは 2 回とも終わらなかった（「カバレッジ」）．
   - 同日の予定実行の毎日のファジング（38474299674，`cef8229`）は 4 対象で失敗した．`grading-bridge` は，前の回に止まった入力（B24）を最初に流し直して止まった．`a56db05` で避けるようにした入力であり，現在のコードでは通る．`popup` は，保存された `J`（Base32 の 1 文字）のコードを表示すると，毎秒，誰も受けない拒否が出ることを見つけた．これは S6 の帰結であり，対象は S6 の回避をこれにも広げた（既知の入力 `S6-short-secret-shown`）．修正ブランチ fix/validate-totp-secret は保存の前の検証しか直していなかったので，保存済みのシークレットにも備える続く修正を加えた（S6）．`sidebar` と `submission` は，コーパスの再生だけで持ち時間（34 分と 38 分）を使い切り，止められた．最上段まで上がる入力を含むコーパスは再生に時間がかかり，どのコーパスがそうなるかは日によって変わる．毎日のファジングは，対象ごとにジョブを分け，各対象がジョブの時間をまるごと使えるようにした（下の CI）．
   - 同日に push した `0c893e9` の CI はすべて通った．カバレッジのジョブは 53 分で終わった．`submission` の重い入力を含む組だけがメモリを使い切り，最後に単独で流し直されて通った．流しきれなかった入力は無かった．`sidebar` の重い入力は，数えながら単独で流すと 32 分 39 秒かかり（一部は別の測定と並行），最大の常駐メモリは 3.9 GiB であった．
+- 2026-10-15 の毎日のファジング（38636298848，`3bd3efa`）は，`popup` と `assignments` で止まった．どちらも，保存された値の欄に文字列にも数にもできない値（JSON が返す，自身の `toString` を持つオブジェクト）がある形であり，B25 と B17 の回避を，止まる欄に限って広げた（B17，B25）．
+  - 同じ日に手動で始めた各対象 20 分のファジング（38718496528，`0429d3b`）では，`grading-bridge` のジョブが，ファジングを始めて約 8 分後に，runner の停止（"The runner has received a shutdown signal"．終了コード 143）で終わった．ファジングの出力は一時ファイルに書いていたためログには何も残らず，見つけたものを保存するステップも動かなかった．GitHub は資源の尽きた runner を止めるが，その計測は公開されない [[RunnerShutdown]](#参考文献) ため，原因の入力は特定できない．それまでの 2 回の実行では，このジョブの最大の常駐メモリは 2.5〜2.8 GB であった．
+  - この回が引き継いだコーパス（99 入力）は，CI の設定で 6.3 秒，最大の常駐メモリ 790 MB で通る．同じコーパスから，CI の設定で 20 分（60,430 回）ファジングしても失敗はなく，最大の常駐メモリは 2.6 GB であった（手元では，ヒープを 4 GB，常駐メモリを 6 GB に限った）．
+  - 調べる中で，P7 の回避の抜けを見つけた．回避は配列もどきだけを見ていたが，`length` が数のオブジェクトも，それを包む Proxy も，橋渡しを長さまで回す．Proxy の長さはハーネスが前もって読まないため，ループを走る前に止められず，長さ 2^31 では V8 がプロセスごと終わる（P7）．ただし，そうして終わったプロセスの入力は libFuzzer が失敗として残すので，runner を止めた原因とは言えない．回避は，橋渡しが実際に読む採点の要素と，長さまで回る値に限って広げ，既知の入力を 2 件加えた．
+  - 限度に達する前にマシンのメモリが尽きないよう，プロセスが持てるメモリを，マシンの全メモリではなく使える量から定めた．あわせて，ファジングの出力をその場でログに流し，1 分ごとにメモリの使用量を書くようにした（「fuzz リポジトリの仕組み」の CI）．
 
 ## カバレッジ
 
@@ -993,8 +1000,8 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 - [CWSBranding] Google, "Branding guidelines," Chrome Web Store, Chrome for Developers. https://developer.chrome.com/docs/webstore/branding
 - [DOM] WHATWG, "DOM Standard," Living Standard. https://dom.spec.whatwg.org/
 - [ECMA-262] Ecma International, "ECMAScript Language Specification," ECMA-262. https://tc39.es/ecma262/
-- [FirefoxCICP] Mozilla, "gfx/thebes/gfxUtils.cpp," Firefox（`gfxUtils::CicpToColorSpace`：行列係数が未指定のとき，原色から行列を推し量る）. https://github.com/mozilla-firefox/firefox/blob/main/gfx/thebes/gfxUtils.cpp
 - [Fetch] WHATWG, "Fetch Standard," Living Standard（§2.2.5 の redirect-taint と要求のオリジンの直列化，§4.4 HTTP fetch，§4.5 HTTP-redirect fetch，§4.10 CORS check）. https://fetch.spec.whatwg.org/
+- [FirefoxCICP] Mozilla, "gfx/thebes/gfxUtils.cpp," Firefox（`gfxUtils::CicpToColorSpace`：行列係数が未指定のとき，原色から行列を推し量る）. https://github.com/mozilla-firefox/firefox/blob/main/gfx/thebes/gfxUtils.cpp
 - [GitHubActionsEvents] GitHub, "Events that trigger workflows," GitHub Docs（フォークからの pull_request では，GITHUB_TOKEN は読み取りの権限のみを持つ）. https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
 - [GooglePlayBadges] Google, "Google Play badges." https://play.google.com/intl/en_us/badges/
 - [H273] ITU-T, "Coding-independent code points for video signal type identification," Recommendation H.273. https://www.itu.int/rec/T-REC-H.273
@@ -1009,6 +1016,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 - [NodeCoverage] OpenJS Foundation, "Command-line API: NODE_V8_COVERAGE=dir," Node.js Documentation. https://nodejs.org/api/cli.html#node_v8_coveragedir
 - [NodeTest] OpenJS Foundation, "Test runner: Extraneous asynchronous activity," Node.js Documentation（v26.11.1）. https://nodejs.org/api/test.html#extraneous-asynchronous-activity
 - [OWASP-Clickjacking] OWASP, "Clickjacking Defense Cheat Sheet," OWASP Cheat Sheet Series. https://cheatsheetseries.owasp.org/cheatsheets/Clickjacking_Defense_Cheat_Sheet.html
+- [ProcMeminfo] Linux man-pages project, "proc_meminfo(5)"（MemAvailable：スワップせずに新しい割り当てに渡せるメモリの見積もり）. https://man7.org/linux/man-pages/man5/proc_meminfo.5.html
 - [recheck] TSUYUSATO Kitsune, "recheck." https://makenowjust-labs.github.io/recheck/
 - [ReferrerPolicy] W3C, "Referrer Policy," Candidate Recommendation Draft（meta 要素による指定）. https://www.w3.org/TR/referrer-policy/
 - [REUSE] Free Software Foundation Europe, "REUSE Specification." https://reuse.software/spec/
@@ -1016,6 +1024,8 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 - [RFC6194] T. Polk et al., "Security Considerations for the SHA-0 and SHA-1 Message-Digest Algorithms," RFC 6194, 2011（§3.3，§4）. https://www.rfc-editor.org/rfc/rfc6194
 - [RFC6238] D. M'Raihi et al., "TOTP: Time-Based One-Time Password Algorithm," RFC 6238, 2011. https://www.rfc-editor.org/rfc/rfc6238
 - [RFC8446] E. Rescorla, "The Transport Layer Security (TLS) Protocol Version 1.3," RFC 8446, 2018. https://www.rfc-editor.org/rfc/rfc8446
+- [RunnerImages] GitHub, "images/ubuntu/scripts/build/install-swift.sh," actions/runner-images（Ubuntu 26.04 の `/tmp` はメモリ上の tmpfs）. https://github.com/actions/runner-images/blob/e7c7cb8f4227797c6404a4e98c2ad463c2f70f91/images/ubuntu/scripts/build/install-swift.sh#L27-L29
+- [RunnerShutdown] GitHub, "The runner has received a shutdown signal. This can happen when the runner service is stopped, or a manually started runner is canceled," actions/runner-images, Discussion #8640（GitHub のホストする runner でこの停止が起きた例は，どれも資源（メモリか CPU）が尽きたためで，その計測は利用者に公開されない，との回答）. https://github.com/actions/runner-images/discussions/8640
 - [Sanitizer] WICG, "HTML Sanitizer API," Draft Community Group Report. https://wicg.github.io/sanitizer-api/
 - [SRI] W3C, "Subresource Integrity," W3C Recommendation. https://www.w3.org/TR/SRI/
 - [Storage] WHATWG, "Storage Standard," Living Standard（§4.1 Storage endpoints）. https://storage.spec.whatwg.org/

@@ -158,6 +158,10 @@ jobs:
       # included: a job that the limit stops counts as cancelled, and that is
       # the very run whose corpus and failing inputs are worth having. Each
       # target's are artifacts of their own, which ci/carry-over.sh gathers.
+      # Only a runner that GitHub stops, as it does one whose resources run
+      # out, runs no step after it; its log is all that is left, which is why
+      # ci/fuzz.sh writes what it does there as it goes, and leaves the runner
+      # the memory it needs (ci/memory.sh).
       - name: Keep the corpus
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -67,6 +67,16 @@
 # No input or run that ends within a target's share of the job's time is
 # stopped. Without --until, no clock stops anything.
 #
+# Nor is an input judged by its memory, but for one that takes all the memory
+# that a process may hold (ci/memory.sh): libFuzzer or V8 then stops it, and it
+# is kept as an input that failed.
+#
+# What a run prints goes to the job's log as it comes, and every minute a line
+# says how much memory the run holds and how much the machine has left: when
+# GitHub stops a runner whose resources run out, the log up to then is all
+# that is left of the job (ci/memory.sh). A copy goes to a file on disk, for
+# what is read back of it; not to /tmp, which is in memory on Ubuntu 26.04.
+#
 # The script fails when any target fails.
 set -euo pipefail
 
@@ -107,11 +117,17 @@ earlier=${4:-}
 # inputs and lets them grow as the short ones stop finding anything new.
 max_len=$(node --input-type=module -e 'import { BOTTOM } from "./fuzz/lib.mjs"; console.log(BOTTOM)')
 
-# The memory a target may take: what the machine has. No input is judged by
-# its memory either; libFuzzer reports one that takes all of it, and keeps it,
-# and V8's heap may grow as far.
-memory_mb=$(node -p 'Math.floor(require("node:os").totalmem() / 2 ** 20)')
+# The memory a process may hold (memory_mb, ci/memory.sh): libFuzzer stops an
+# input whose process holds more, and keeps it, and V8's heap may grow as far.
+. "$(dirname "$0")/memory.sh"
 export NODE_OPTIONS="--max-old-space-size=$memory_mb"
+echo "The machine has $total_mb MiB of memory, $available_mb MiB of it available; a process may hold $memory_mb MiB."
+
+# Where the copies of what the runs print go: a directory on disk, which the
+# script removes as it ends (on a runner, under the job's own temporary
+# directory).
+logs=$(mktemp -d -p "${RUNNER_TEMP:-/var/tmp}" kulms-fuzz.XXXXXX)
+trap 'rm -rf "$logs"' EXIT
 
 # The seconds a run that is told to end has to end, before it is killed.
 grace=60
@@ -187,14 +203,52 @@ stopped() {
   echo "$1 did not end by its share of the time that --until gives, and was stopped: something does not end where no work is counted."
 }
 
+# Says every minute, while the process `pid` lasts, how much memory it holds
+# with those under it, and how much the machine has available and has
+# swapped.
+say_memory() {
+  local pid=$1
+  while sleep 60 && kill -0 "$pid" 2>/dev/null; do
+    echo "[memory $(date -u +%H:%M:%S)] the run holds $(held_by "$pid") MiB; the machine has $(awk '
+      /^MemAvailable:/ { available = $2 } /^SwapTotal:/ { swap = $2 } /^SwapFree:/ { free = $2 }
+      END { printf "%d MiB available and %d MiB swapped", available / 1024, (swap - free) / 1024 }' /proc/meminfo)"
+  done
+}
+
+# Runs `run_until "$@"` (the deadline, then the command), what it prints going
+# to the job's log as it comes and to `log`, with say_memory() beside it, and
+# sets `status` to how it ended. Given --guard first, guard_memory()
+# (ci/memory.sh) stops it too, as libFuzzer stops the fuzzing, should it hold
+# more than a process may: a replay has no libFuzzer to stop it, and V8's
+# heap limit leaves out what is held outside the heap. `status` is then 137,
+# and `$log.memory` says so.
+observed() {
+  local guard=0
+  if [ "$1" = --guard ]; then guard=1; shift; fi
+  status=0
+  rm -f "$log.memory"
+  { run_until "$@" 2>&1 | tee "$log"; } &
+  local run=$!
+  say_memory "$run" &
+  local watchers=($!)
+  if [ "$guard" = 1 ]; then
+    guard_memory "$run" "$memory_mb" "$log.memory" &
+    watchers+=($!)
+  fi
+  wait "$run" || status=$?
+  local w
+  for w in "${watchers[@]}"; do
+    kill $(under "$w") "$w" 2>/dev/null || true
+  done
+  wait "${watchers[@]}" 2>/dev/null || true
+}
+
 if [ "$canary" = 1 ]; then
   mkdir -p "$crashes/canary"
-  log=$(mktemp)
-  status=0
+  log=$logs/canary.log
   deadline=$(deadline_of 1)
   command_for canary "$deadline" -- -max_total_time="$seconds" -rss_limit_mb="$memory_mb" -artifact_prefix="$crashes/canary/"
-  run_until "$deadline" "${cmd[@]}" > "$log" 2>&1 || status=$?
-  tail -n 20 "$log"
+  observed "$deadline" "${cmd[@]}"
   if [ "$status" -ne 0 ] && grep -q "planted bug of the canary" "$log"; then
     rm -rf "$crashes/canary"
     echo "The fuzzer found the canary's planted bug: the harness's code is instrumented and steers it."
@@ -228,13 +282,13 @@ for target in "${targets[@]}"; do
   if [ -n "$earlier" ] && [ -d "$earlier/$target" ] && [ -n "$(ls -A "$earlier/$target")" ]; then
     still=0
     for input in "$earlier/$target"/*; do
-      status=0
+      log=$logs/$target.replay.log
       start=$(date +%s)
-      run_until "$deadline" node fuzz/replay.mjs "$target" "$input" || status=$?
+      observed --guard "$deadline" node fuzz/replay.mjs "$target" "$input"
       took=$(( $(date +%s) - start ))
       if [ "$took" -gt "$slowest" ]; then slowest=$took; fi
       if [ "$status" -ne 0 ]; then
-        if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then stopped "The replay of $input"; fi
+        if [ ! -e "$log.memory" ] && { [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; }; then stopped "The replay of $input"; fi
         cp "$input" "$crashes/$target/"
         still=1
       fi
@@ -260,14 +314,12 @@ for target in "${targets[@]}"; do
   options=(-max_total_time="$fuzz_seconds" -max_len="$max_len" -rss_limit_mb="$memory_mb" -artifact_prefix="$crashes/$target/" -print_final_stats=1)
   if [ -f "fuzz/dict/$target.dict" ]; then options+=(-dict="fuzz/dict/$target.dict"); fi
   before=$(files_in "$corpora/$target")
-  log=$(mktemp)
-  status=0
+  log=$logs/$target.log
   command_for "$target" "$deadline" "${dirs[@]}" -- "${options[@]}"
-  run_until "$deadline" "${cmd[@]}" > "$log" 2>&1 || status=$?
-  grep -E '^(#[0-9]+[[:space:]]+(INITED|DONE)|stat::number_of_executed_units|Done [0-9]+ runs|==[0-9]+==)' "$log" || true
+  observed "$deadline" "${cmd[@]}"
   if [ "$status" -ne 0 ]; then
     if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then stopped "$target"; fi
-    tail -n 40 "$log"
+    echo "$target failed (status $status); the input is in $crashes/$target/."
     failed+=("$target")
     continue
   fi
@@ -277,6 +329,7 @@ for target in "${targets[@]}"; do
     rm -rf "$corpora/$target.merged"
     mkdir -p "$corpora/$target.merged"
     command_for "$target" "$deadline" "$corpora/$target.merged" "$corpora/$target" -- -merge=1 -max_len="$max_len" -rss_limit_mb="$memory_mb"
+    log=$logs/$target.merge.log
     if run_until "$deadline" "${cmd[@]}" > "$log" 2>&1; then
       rm -rf "$corpora/$target"
       mv "$corpora/$target.merged" "$corpora/$target"

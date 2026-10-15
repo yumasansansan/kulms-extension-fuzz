@@ -190,6 +190,16 @@ const GRADING_PAGE = { site: "2026-110-1001-000", assignment: "a1b2c3d4", tool: 
 
 const BRIDGE_FIELDS = ["id", "submissionId", "reference", "firstSubmitterName", "status", "submissionStatus", "submittedTime",
   "submitted", "draft", "hasHistory", "grade", "graded", "returned", "length"];
+const BRIDGE_TRAPS = ["get", "getPrototypeOf", "ownKeys", "getOwnPropertyDescriptor", "has"];
+
+// The grader's submissions as an object of the bridge's input (read()'s
+// "object") with one entry, keyed "length", of the value `length`.
+function bridgeObjectWithLength(w, length) {
+  w.int(0, 6, 4);
+  w.int(0, w.remaining, 1);
+  w.bool(true); w.pick(BRIDGE_FIELDS, "length");
+  w.int(0, 4, 0); value(w, length);
+}
 
 // A submission of the bridge's input whose fields are `fields`, each a field
 // Sakai gives and its value: a string as a string field, any other value as
@@ -703,6 +713,33 @@ export const INPUTS = [
           w.bool(true); number(w, 2 ** 32 - 2);
           w.int(0, w.remaining, 0);
           w.bool(false);
+        },
+      }], ["r"]);
+    },
+  },
+  {
+    // The grader's submissions are an object of no elements whose length is
+    // 2^32 - 2: the bridge's Array.from() loops to that, as for an
+    // array-like, and the harness stops the loop before it runs.
+    file: "known/grading-bridge/P7-object-length",
+    plan: (w) => {
+      bridgePage(w, [{ id: "1", prop: () => { w.int(0, 2, 2); bridgeObjectWithLength(w, 2 ** 32 - 2); } }], ["r"]);
+    },
+  },
+  {
+    // The same through a proxy whose trap (has) the bridge passes, with a
+    // length of 2^25: the harness cannot read the length of a proxy before
+    // the loop runs, and counts the loop once it has run. To a length of
+    // 2^31 V8 ends the process instead (docs/findings.md, P7).
+    file: "known/grading-bridge/P7-proxy-length",
+    plan: (w) => {
+      bridgePage(w, [{
+        id: "1",
+        prop: () => {
+          w.int(0, 2, 2); w.int(0, 6, 5);
+          bridgeObjectWithLength(w, 2 ** 25);
+          w.pick(BRIDGE_TRAPS, "has");
+          w.bool(true); string(w, "x");
         },
       }], ["r"]);
     },
