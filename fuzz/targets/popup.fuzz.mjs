@@ -45,7 +45,7 @@
 // grows faster than n log n from rung to rung of the input, or passes what
 // linear code does with an input of its size (ladder() and judge() of
 // fuzz/lib.mjs, harness/work.mjs).
-import { Browser, Clock, Net, allow, aside, idle, installCanvas, measure, openBackground, openBareTab, openPopup, openTab, uncounted, watch } from "../../harness/index.mjs";
+import { Browser, Clock, Net, allow, aside, idle, installCanvas, measure, openBackground, openBareTab, openPopup, openTab, uncounted, watch, work } from "../../harness/index.mjs";
 import { bytes, calibrate, fail, json, judge, ladder, number, open, provider, seen, string, unconvertible, value, warnings } from "../lib.mjs";
 
 const KEYS = {
@@ -465,6 +465,9 @@ async function run(data) {
     if (!t.repeat || hidden("totp-debug")) return;
     allow(TICK_COST + (open("P8") ? TICK_PER_CHAR * Math.max(0, shownLength() - 16) : 0));
   };
+  // Known: P9. What making the code of each secret cost, past the fixed cost,
+  // the first time in this input (the case "totp-qrgen" below).
+  const made = new Map();
   for (const a of input.actions) {
     switch (a.kind) {
       case "section": click(pick(".section-header", a.at)); break;
@@ -481,12 +484,30 @@ async function run(data) {
       case "totp-save": click(byId("totp-save-btn")); break;
       case "totp-show": click(byId("totp-show-btn")); break;
       case "totp-delete": click(byId("totp-delete-btn")); break;
-      case "totp-qrgen":
+      case "totp-qrgen": {
         // A click that makes the code pays its fixed cost (costOf()); one that
         // hides the code shown does not make it.
-        if (hidden("totp-qr-display")) allow(QR_COST);
+        const makes = hidden("totp-qr-display");
+        if (makes) allow(QR_COST);
+        // Known: P9 (docs/findings.md). While it is open, a click that makes
+        // the code of a secret whose code the popup has made before in this
+        // input also pays, past the fixed cost, what making it cost then: the
+        // popup asks the background for the secret and makes its code anew
+        // each time the code is shown, as the finding says. The secret is the
+        // one the background holds as the click comes.
+        let first = null;
+        if (makes && open("P9")) {
+          const secret = await aside(() => bg.global.loadTotpSecret());
+          if (secret && made.has(secret)) allow(made.get(secret));
+          else if (secret) first = { secret, before: uncounted(() => work.done) };
+        }
         click(byId("totp-qrgen-btn"));
+        if (first) {
+          await idle();
+          if (!hidden("totp-qr-display")) made.set(first.secret, Math.max(0, uncounted(() => work.done) - first.before - QR_COST));
+        }
         break;
+      }
       case "totp-scan": click(byId("totp-qr-btn")); break;
       case "time": await clock.advance(a.ms); break;
       default: {

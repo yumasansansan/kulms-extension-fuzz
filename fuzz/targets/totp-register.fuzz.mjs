@@ -52,6 +52,27 @@ const DONE = "設定が完了しました"; // 設定が完了しました
 const SECRET = "シークレット"; // シークレット
 const NO_QR = "QRコードを読み込めない場合";
 
+// Known: B22 (docs/findings.md). background.js writes a secret's ciphertext
+// out by spreading its bytes into String.fromCharCode(), and the engine throws
+// a RangeError past so many arguments: about 125,000 bytes in V8, some 60,000
+// in the harness, whose wrappers of the built-ins pass the arguments on once
+// more. A secret of more than 32 KiB in UTF-8 counts as long, as
+// background-message and popup count it; a TOTP secret is some 32
+// characters. What a secret comes to as text is what TextEncoder makes of it.
+const LONG_SECRET = 2 ** 15;
+function utf8Length(v) {
+  let text;
+  try {
+    text = String(v);
+  } catch {
+    return 0; // TextEncoder throws on it as well, before anything is encrypted
+  }
+  return new TextEncoder().encode(text).length;
+}
+// The slip that B22 makes, as the detectors tell it: the RangeError, its stack
+// in encryptSecret() or in the harness's String.fromCharCode() that it calls.
+const B22_SLIP = /^a slip the extension caught at background\.js:\d+ [^\n]*: RangeError: Maximum call stack size exceeded\n(?:\s+at String\.fromCharCode [^\n]*\n)?\s+at encryptSecret /;
+
 // As many of make() as the input has bytes for.
 function list(fdp, make) {
   const out = [];
@@ -202,14 +223,23 @@ async function run(data) {
     }
   });
   for (const line of log.slips()) fail(`a slip of the code: ${line}`);
+  const savedLong = uncounted(() => browser.traffic.some(({ message }) =>
+    message && message.type === "kulms-totp-save" && utf8Length(message.secret) > LONG_SECRET));
   // Known: B23 (docs/findings.md). While it is open, a QuotaExceededError that
   // the extension's code lets out is not counted: the helper writes the page's
   // sessionStorage, which the page may have filled, as the finding says.
   // Known: S6. While it is open, the rejection of a secret too short to make a
   // key of is not counted: the helper takes from the page's text a secret it
   // does not check, as the finding says.
+  // Known: B22. While it is open, the RangeError that the background's
+  // encryptSecret() meets as it spreads a long secret's ciphertext into
+  // String.fromCharCode(), and catches, is not counted, when the helper had it
+  // save a secret longer than LONG_SECRET (CI run 38743594130 and daily run
+  // 38802566900: a secret the page's sessionStorage held, saved on a page that
+  // says the registration is done).
   const problems = seen(watcher).filter((p) => !(open("B23") && /: QuotaExceededError: /.test(p)) &&
-    !(open("S6") && /^unhandled rejection: DataError: Zero-length key is not supported/.test(p)));
+    !(open("S6") && /^unhandled rejection: DataError: Zero-length key is not supported/.test(p)) &&
+    !(open("B22") && savedLong && B22_SLIP.test(p)));
   if (problems.length) fail(problems.join("\n"));
   judge();
 }

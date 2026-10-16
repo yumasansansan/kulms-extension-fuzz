@@ -32,7 +32,14 @@
 // arguments), after(this, the arguments, the result, what before gave) }.
 // null marks a member whose steps do not grow.
 
-import { log2, searchSteps, stringUnits, units } from "./costs.mjs";
+import { log2, searchSteps, stringUnits, textUnits, units } from "./costs.mjs";
+
+// The units of a value given to a member that takes a DOMString, USVString,
+// ByteString or CSSOMString (textUnits() of harness/costs.mjs); null as the
+// empty string where the member says [LegacyNullToEmptyString], and null and
+// undefined as nothing where the type is nullable or the argument optional.
+const nullAsEmpty = (v) => (v === null ? 0 : textUnits(v));
+const nullable = (v) => (v === null || v === undefined ? 0 : textUnits(v));
 
 // --- The tree, measured.
 
@@ -398,7 +405,7 @@ export function liveView(collection, root, childrenOnly) {
 // URL) and queues a record for the observers of the element's ancestors.
 
 const attributeCount = (el) => (el && el.attributes ? el.attributes.length : 0);
-const attributeSet = (el, value) => attributeCount(el) + units(value) + mutated(el);
+const attributeSet = (el, value) => attributeCount(el) + textUnits(value) + mutated(el);
 const reflectGet = null; // the content attribute's value, read as it is
 const reflectSet = (el, [value]) => attributeSet(el, value);
 const urlGet = (el, args, r) => units(r) + units(el && el.baseURI); // the attribute parsed as a URL against the base
@@ -434,10 +441,10 @@ export const WEB = {
   "Node.prototype.contains": (self, [other]) => depthOf(other),
   "Node.prototype.textContent (get)": textOf,
   "HTMLElement.prototype.innerText (get)": textOf, // the descendant text content, for a user agent without CSS (harness/contexts.mjs)
-  "HTMLElement.prototype.innerText (set)": { before: (self) => subtreeSize(self), after: (self, [value]) => units(value) + mutated(self) },
-  "Node.prototype.textContent (set)": { before: (self) => subtreeSize(self), after: (self, [value]) => units(value) + mutated(self) },
-  "Node.prototype.nodeValue (set)": { before: (self) => units(self.nodeValue), after: (self, [value]) => units(value) + mutated(self) },
-  "CharacterData.prototype.data (set)": { before: (self) => units(self.data), after: (self, [value]) => units(value) + mutated(self) },
+  "HTMLElement.prototype.innerText (set)": { before: (self) => subtreeSize(self), after: (self, [value]) => nullAsEmpty(value) + mutated(self) },
+  "Node.prototype.textContent (set)": { before: (self) => subtreeSize(self), after: (self, [value]) => nullable(value) + mutated(self) },
+  "Node.prototype.nodeValue (set)": { before: (self) => units(self.nodeValue), after: (self, [value]) => nullable(value) + mutated(self) },
+  "CharacterData.prototype.data (set)": { before: (self) => units(self.data), after: (self, [value]) => nullAsEmpty(value) + mutated(self) },
   "CharacterData.prototype.remove": { before: (self) => 1, after: (self, a, r, b) => mutated(self.parentNode || self) },
   "DocumentType.prototype.remove": { before: (self) => 1, after: (self) => mutated(self) },
   "Element.prototype.remove": { before: (self) => subtreeSize(self) + depthOf(self), after: (self) => (touched(self), 0) },
@@ -446,7 +453,7 @@ export const WEB = {
     [`${i}.prototype.querySelector`, (self, [s], r) => queryFirst(self, s, r)],
     [`${i}.prototype.querySelectorAll`, (self, [s]) => queryAll(self, s)],
     [`${i}.prototype.children (get)`, (self, a, r) => (liveView(r, self, true), 0)],
-    [`${i}.prototype.getElementsByTagName`, (self, [name], r) => (liveView(r, self, false), units(name))],
+    [`${i}.prototype.getElementsByTagName`, (self, [name], r) => (liveView(r, self, false), textUnits(name))],
   ])),
   // The element and its ancestors, matched up to the one found (DOM: the
   // scoping root is the element).
@@ -462,12 +469,12 @@ export const WEB = {
   "Element.prototype.matches": (self, [s]) => String(s).length + elementSteps(parseSelectors(s), self, self),
   "Element.prototype.insertAdjacentElement": { before: (self, [, el]) => moving(el), after: (self) => mutated(self.parentNode || self) },
   "Element.prototype.innerHTML (get)": textOf,
-  "Element.prototype.innerHTML (set)": { before: (self) => subtreeSize(self), after: (self, [html]) => units(html) * (1 + maxDepth(self)) + subtreeSize(self) + mutated(self) },
+  "Element.prototype.innerHTML (set)": { before: (self) => subtreeSize(self), after: (self, [html]) => nullAsEmpty(html) * (1 + maxDepth(self)) + subtreeSize(self) + mutated(self) },
   "ShadowRoot.prototype.innerHTML (get)": textOf,
   "ShadowRoot.prototype.host (get)": NOTHING, // the element it is attached to
-  "ShadowRoot.prototype.innerHTML (set)": { before: (self) => subtreeSize(self), after: (self, [html]) => units(html) * (1 + maxDepth(self)) + subtreeSize(self) + mutated(self) },
+  "ShadowRoot.prototype.innerHTML (set)": { before: (self) => subtreeSize(self), after: (self, [html]) => nullAsEmpty(html) * (1 + maxDepth(self)) + subtreeSize(self) + mutated(self) },
   "Element.prototype.getAttribute": (self, [name]) => attributeCount(self) * (1 + stringUnits(name)),
-  "Element.prototype.setAttribute": (self, [name, value]) => attributeCount(self) * (1 + stringUnits(name)) + units(value) + mutated(self),
+  "Element.prototype.setAttribute": (self, [name, value]) => attributeCount(self) * (1 + stringUnits(name)) + textUnits(value) + mutated(self),
   "Element.prototype.classList (get)": (self, a, r) => (ownerOf.set(r, self), 0),
   "Element.prototype.getBoundingClientRect": (self) => layout(self),
   "Element.prototype.id (get)": NOTHING,
@@ -485,7 +492,7 @@ export const WEB = {
   "Document.prototype.getElementById": (self, [id], r) => reach(self, r) * (1 + stringUnits(id)),
   "DocumentFragment.prototype.getElementById": (self, [id], r) => reach(self, r) * (1 + stringUnits(id)),
   "SVGSVGElement.prototype.getElementById": (self, [id], r) => reach(self, r) * (1 + stringUnits(id)),
-  "Document.prototype.createElement": (self, [name]) => units(name),
+  "Document.prototype.createElement": (self, [name]) => textUnits(name),
   "Document.prototype.createTextNode": NOTHING,
   "Document.prototype.createDocumentFragment": NOTHING,
   "Document.prototype.createTreeWalker": NOTHING,
@@ -494,10 +501,10 @@ export const WEB = {
   "Document.prototype.head (get)": (self) => childCount(self.documentElement),
   "Document.prototype.documentElement (get)": (self) => childCount(self),
   "Document.prototype.title (get)": (self, a, r) => subtreeSize(self) + units(r),
-  "Document.prototype.title (set)": (self, [v]) => subtreeSize(self) + units(v) + mutated(self),
+  "Document.prototype.title (set)": (self, [v]) => subtreeSize(self) + textUnits(v) + mutated(self),
   "Document.prototype.open": (self) => subtreeSize(self),
   // write() puts its markup into the parser at the insertion point.
-  "Document.prototype.write": (self, args) => args.reduce((n, a) => n + units(String(a)), 0) * (1 + maxDepth(self)) + mutated(self),
+  "Document.prototype.write": (self, args) => args.reduce((n, a) => n + textUnits(a), 0) * (1 + maxDepth(self)) + mutated(self),
   "Document.prototype.close": NOTHING,
   "Document.prototype.hidden (get)": NOTHING,
   "Document.prototype.visibilityState (get)": NOTHING,
@@ -568,7 +575,7 @@ export const WEB = {
   "DOMTokenList.prototype.value (get)": (self, a, r) => units(r),
   "DOMTokenList.prototype.value (set)": (self, [v]) => {
     const el = ownerOf.get(self);
-    return units(v) + (el ? attributeSet(el, v) : 0);
+    return textUnits(v) + (el ? attributeSet(el, v) : 0);
   },
   "DOMTokenList.prototype.forEach": NOTHING,
   "DOMTokenList.prototype.keys": NOTHING,
@@ -631,8 +638,8 @@ export const WEB = {
   // Elements of HTML.
   "HTMLElement.prototype.dataset (get)": (self, a, r) => (ownerOf.set(r, self), 0),
   "HTMLElement.prototype.style (get)": (self, a, r) => (ownerOf.set(r, self), 0),
-  "HTMLElement.prototype.style (set)": (self, [v]) => units(v) + attributeSet(self, v), // [PutForwards=cssText]
-  "SVGElement.prototype.style (set)": (self, [v]) => units(v) + attributeSet(self, v),
+  "HTMLElement.prototype.style (set)": (self, [v]) => textUnits(v) + attributeSet(self, v), // [PutForwards=cssText]
+  "SVGElement.prototype.style (set)": (self, [v]) => textUnits(v) + attributeSet(self, v),
   "SVGElement.prototype.dataset (get)": (self, a, r) => (ownerOf.set(r, self), 0),
   "SVGElement.prototype.style (get)": (self, a, r) => (ownerOf.set(r, self), 0),
   "SVGElement.prototype.className (get)": NOTHING,
@@ -656,10 +663,10 @@ export const WEB = {
   },
   "HTMLOptionElement.prototype.label (get)": textOf,
   "HTMLOptionElement.prototype.text (get)": textOf,
-  "HTMLOptionElement.prototype.text (set)": { before: (self) => subtreeSize(self), after: (self, [v]) => units(v) + mutated(self) },
+  "HTMLOptionElement.prototype.text (set)": { before: (self) => subtreeSize(self), after: (self, [v]) => textUnits(v) + mutated(self) },
   "HTMLOptionElement.prototype.selected (get)": NOTHING,
   "HTMLOptionElement.prototype.value (get)": textOf,
-  "HTMLInputElement.prototype.value (set)": (self, [v]) => units(v), // sanitized
+  "HTMLInputElement.prototype.value (set)": (self, [v]) => nullAsEmpty(v), // sanitized
   "HTMLInputElement.prototype.checked (set)": (self) => (self.type === "radio" ? subtreeSize(self.form || documentOf(self)) : 1),
   "HTMLInputElement.prototype.select": NOTHING,
   "HTMLInputElement.prototype.files (get)": NOTHING,
@@ -667,16 +674,16 @@ export const WEB = {
   "HTMLInputElement.prototype.checked (get)": NOTHING,
   "HTMLInputElement.prototype.value (get)": NOTHING,
   "HTMLTextAreaElement.prototype.value (get)": (self, a, r) => units(r), // the raw value, its line breaks made one kind
-  "HTMLTextAreaElement.prototype.value (set)": (self, [v]) => units(v),
+  "HTMLTextAreaElement.prototype.value (set)": (self, [v]) => nullAsEmpty(v),
   "HTMLTextAreaElement.prototype.select": NOTHING,
   "HTMLAnchorElement.prototype.text (get)": textOf,
   "HTMLAnchorElement.prototype.toString": (self, a, r) => units(r) + units(self.baseURI), // the href parsed
   "HTMLAreaElement.prototype.toString": (self, a, r) => units(r) + units(self.baseURI),
-  "HTMLAnchorElement.prototype.text (set)": { before: (self) => subtreeSize(self), after: (self, [v]) => units(v) + mutated(self) },
+  "HTMLAnchorElement.prototype.text (set)": { before: (self) => subtreeSize(self), after: (self, [v]) => textUnits(v) + mutated(self) },
   "HTMLScriptElement.prototype.text (get)": textOf,
-  "HTMLScriptElement.prototype.text (set)": { before: (self) => subtreeSize(self), after: (self, [v]) => units(v) + mutated(self) },
+  "HTMLScriptElement.prototype.text (set)": { before: (self) => subtreeSize(self), after: (self, [v]) => textUnits(v) + mutated(self) },
   "HTMLTitleElement.prototype.text (get)": textOf,
-  "HTMLTitleElement.prototype.text (set)": { before: (self) => subtreeSize(self), after: (self, [v]) => units(v) + mutated(self) },
+  "HTMLTitleElement.prototype.text (set)": { before: (self) => subtreeSize(self), after: (self, [v]) => textUnits(v) + mutated(self) },
   "HTMLFormElement.prototype.submit": (self) => subtreeSize(self),
   "HTMLCanvasElement.prototype.getContext": NOTHING,
   "HTMLTemplateElement.prototype.content (get)": NOTHING,
@@ -688,14 +695,14 @@ export const WEB = {
 
   // CSSOM: a declaration block, its declarations gone through, serialized
   // again into the element's style attribute when it changes.
-  "CSSStyleDeclaration.prototype.setProperty": (self, [p, v]) => units(p) + units(v) + self.length + units(self.cssText) + (ownerOf.has(self) ? mutated(ownerOf.get(self)) : 0),
+  "CSSStyleDeclaration.prototype.setProperty": (self, [p, v]) => textUnits(p) + nullAsEmpty(v) + self.length + units(self.cssText) + (ownerOf.has(self) ? mutated(ownerOf.get(self)) : 0),
   "CSSStyleDeclaration.prototype.removeProperty": (self) => self.length + units(self.cssText) + (ownerOf.has(self) ? mutated(ownerOf.get(self)) : 0),
   "CSSStyleDeclaration.prototype.cssText (get)": (self, a, r) => self.length + units(r),
-  "CSSStyleDeclaration.prototype.cssText (set)": (self, [v]) => units(v) + (ownerOf.has(self) ? mutated(ownerOf.get(self)) : 0),
+  "CSSStyleDeclaration.prototype.cssText (set)": (self, [v]) => textUnits(v) + (ownerOf.has(self) ? mutated(ownerOf.get(self)) : 0),
   "CSSRule.prototype.cssText (get)": (self, a, r) => units(r),
   "CSSRule.prototype.cssText (set)": NOTHING, // does nothing, as CSSOM says
   "CSSRule.prototype.type (get)": NOTHING,
-  "CSSStyleSheet.prototype.replace": (self, [text]) => units(text),
+  "CSSStyleSheet.prototype.replace": (self, [text]) => textUnits(text),
   "StyleSheet.prototype.href (get)": NOTHING,
   "StyleSheet.prototype.title (get)": NOTHING,
   "StyleSheet.prototype.type (get)": NOTHING,
@@ -705,14 +712,14 @@ export const WEB = {
   // Parsing and serializing (DOM Parsing, HTML): the parser goes through
   // its input, and a token may look through the stack of open elements, as
   // deep as the tree it makes.
-  "DOMParser.prototype.parseFromString": (self, [s], r) => units(s) * (1 + maxDepth(r)) + subtreeSize(r),
+  "DOMParser.prototype.parseFromString": (self, [s], r) => textUnits(s) * (1 + maxDepth(r)) + subtreeSize(r),
   "XMLSerializer.prototype.serializeToString": (self, [node], r) => subtreeSize(node) + units(r),
 
   // URL: parsing goes through the input and the base; a getter serializes
   // a part; a setter parses it and serializes the URL again.
-  "URL.parse": (self, [u, b]) => units(u) + units(b),
-  "URL.canParse": (self, [u, b]) => units(u) + units(b),
-  "URL.prototype.href (set)": (self, [v]) => units(v),
+  "URL.parse": (self, [u, b]) => textUnits(u) + nullable(b),
+  "URL.canParse": (self, [u, b]) => textUnits(u) + nullable(b),
+  "URL.prototype.href (set)": (self, [v]) => textUnits(v),
   "URL.prototype.searchParams (get)": NOTHING,
   "URLSearchParams.prototype.size (get)": NOTHING,
   "URL.prototype.toString": (self, a, r) => units(r),
@@ -722,8 +729,8 @@ export const WEB = {
   "URLSearchParams.prototype.get": (self, [name]) => self.size * (1 + stringUnits(name)),
   "URLSearchParams.prototype.has": (self, [name]) => self.size * (1 + stringUnits(name)),
   "URLSearchParams.prototype.delete": (self, [name]) => self.size * (1 + stringUnits(name)) + units(self.toString()),
-  "URLSearchParams.prototype.set": (self, [name, v]) => self.size * (1 + stringUnits(name)) + units(v) + units(self.toString()),
-  "URLSearchParams.prototype.append": (self, [name, v]) => units(name) + units(v) + units(self.toString()),
+  "URLSearchParams.prototype.set": (self, [name, v]) => self.size * (1 + stringUnits(name)) + textUnits(v) + units(self.toString()),
+  "URLSearchParams.prototype.append": (self, [name, v]) => textUnits(name) + textUnits(v) + units(self.toString()),
   "URLSearchParams.prototype.sort": (self) => self.size * log2(self.size) + units(self.toString()),
   "URLSearchParams.prototype.forEach": (self) => self.size,
   "URLSearchParams.prototype.keys": NOTHING,
@@ -731,11 +738,11 @@ export const WEB = {
 
   // Encoding.
   "TextDecoder.prototype.decode": (self, [input], r) => units(input) + units(r),
-  "TextEncoder.prototype.encode": (self, [s], r) => units(s) + units(r),
+  "TextEncoder.prototype.encode": (self, [s], r) => nullable(s) + units(r),
 
   // Web Storage: a list of key-value pairs, gone through to find a key.
   "Storage.prototype.getItem": (self, [k]) => self.length * (1 + stringUnits(k)),
-  "Storage.prototype.setItem": (self, [k, v]) => self.length * (1 + stringUnits(k)) + units(v),
+  "Storage.prototype.setItem": (self, [k, v]) => self.length * (1 + stringUnits(k)) + textUnits(v),
   "Storage.prototype.removeItem": (self, [k]) => self.length * (1 + stringUnits(k)),
   "Storage.prototype.key": (self) => self.length,
   "SVGStringList.prototype.getItem": NOTHING,
@@ -754,9 +761,9 @@ export const WEB = {
   "CustomElementRegistry.prototype.get": NOTHING, // none is defined: the extension defines no element
   "Headers.prototype.get": (self, [name]) => [...self.keys()].length * (1 + stringUnits(name)),
   "Headers.prototype.has": (self, [name]) => [...self.keys()].length * (1 + stringUnits(name)),
-  "Headers.prototype.set": (self, [name, v]) => [...self.keys()].length * (1 + stringUnits(name)) + units(v),
+  "Headers.prototype.set": (self, [name, v]) => [...self.keys()].length * (1 + stringUnits(name)) + textUnits(v),
   "Headers.prototype.delete": (self, [name]) => [...self.keys()].length * (1 + stringUnits(name)),
-  "Headers.prototype.append": (self, [name, v]) => units(name) + units(v),
+  "Headers.prototype.append": (self, [name, v]) => textUnits(name) + textUnits(v),
   "Headers.prototype.forEach": (self) => [...self.keys()].length,
   "Headers.prototype.keys": NOTHING,
   "Headers.prototype.values": NOTHING,
@@ -776,12 +783,12 @@ function family(iface, member, kind) {
   // find the property; set as setProperty() does.
   if (iface === "CSSStyleProperties" || iface === "CSS2Properties") {
     if (kind === "get") return (self) => self.length;
-    if (kind === "set") return WEB["CSSStyleDeclaration.prototype.setProperty"] && ((self, [v]) => units(v) + self.length + units(self.cssText) + (ownerOf.has(self) ? mutated(ownerOf.get(self)) : 0));
+    if (kind === "set") return WEB["CSSStyleDeclaration.prototype.setProperty"] && ((self, [v]) => nullAsEmpty(v) + self.length + units(self.cssText) + (ownerOf.has(self) ? mutated(ownerOf.get(self)) : 0));
   }
   // Rules and style sheets of CSSOM, their parts as kept; a rule's style set
   // is its cssText set ([PutForwards=cssText]).
   if (/^CSS.*(?:Rule|Declarations)$/.test(iface) && kind === "get") return null;
-  if (/^CSS.*(?:Rule|Declarations)$/.test(iface) && kind === "set") return member === "style" ? (self, [v]) => units(v) : null;
+  if (/^CSS.*(?:Rule|Declarations)$/.test(iface) && kind === "set") return member === "style" ? (self, [v]) => textUnits(v) : null;
   if (iface === "CSSStyleDeclaration" && member === "length" && kind === "get") return null;
   // Values of SVG, of the screen, the plugins, files, selections, records:
   // what the object holds.
@@ -797,12 +804,12 @@ function family(iface, member, kind) {
   // The parts of an anchor's or an area's URL: the href parsed.
   if (/^(?:HTMLAnchorElement|HTMLAreaElement)$/.test(iface) && ["origin", "protocol", "username", "password", "host", "hostname", "port", "pathname", "search", "hash"].includes(member)) {
     if (kind === "get") return urlGet;
-    if (kind === "set") return (self, [v]) => units(self.href) + units(v) + attributeSet(self, self.href);
+    if (kind === "set") return (self, [v]) => units(self.href) + textUnits(v) + attributeSet(self, self.href);
   }
   // The parts of a URL: serialized when read; parsed when set.
   if (/^(?:URL|webkitURL)$/.test(iface)) {
     if (kind === "get") return (self, a, r) => units(r);
-    if (kind === "set") return (self, [v]) => units(v) + units(self.href);
+    if (kind === "set") return (self, [v]) => textUnits(v) + units(self.href);
     if (member === "parse" || member === "canParse") return WEB[`URL.${member}`];
   }
   return key in WEB ? WEB[key] : undefined;
@@ -827,8 +834,8 @@ export function webRuleOf(iface, member, kind, isStatic = false) {
 
 // The constructors of web interfaces, by name: what making one goes through.
 export const WEB_CONSTRUCTORS = {
-  URL: (self, [u, b]) => units(u) + units(b),
-  webkitURL: (self, [u, b]) => units(u) + units(b),
+  URL: (self, [u, b]) => textUnits(u) + nullable(b),
+  webkitURL: (self, [u, b]) => textUnits(u) + nullable(b),
   URLSearchParams: (self, [init]) => (typeof init === "string" ? init.length : 0), // a record or a list is gone through by its iterator's next(), counted
   TextDecoder: null,
   TextEncoder: null,

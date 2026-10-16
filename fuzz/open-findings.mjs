@@ -47,6 +47,7 @@ export const OPEN = new Set([
   "P6", // the background builds its Shift_JIS table on its first search, about 156,000 steps
   "P7", // the page bridge loops to an array-like's length, not to what it holds
   "P8", // the popup decodes the TOTP secret and makes its HMAC key anew every second the code is shown
+  "P9", // the popup and the settings panel make the QR code of the TOTP secret anew each time it is shown
 ]);
 for (const id of (process.env.KULMS_FUZZ_LOOK_FOR || "").split(",")) OPEN.delete(id.trim());
 

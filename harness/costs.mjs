@@ -44,6 +44,24 @@
 // the code or spread, whose spreading is counted) is of the second kind.
 
 import { types } from "node:util";
+import v8 from "node:v8";
+
+// V8 serializes JSON.stringify(value), given no replacer and no gap, on a fast
+// path (its flag --json-stringify-fast-path, on by default) that looks for a
+// cycle only once in 200,000 turns of its loop (kGlobalInterruptBudget of
+// src/json/json-stringifier.cc, V8 14.6 as Node 26 has it), and writes what it
+// walks meanwhile into a buffer outside the heap. A value that holds itself
+// has it write the value out tens of thousands of times before it throws:
+// grading-bridge's process held 13 GB on a fuzzing runner, its strings a few
+// thousand units long (daily run 38802566900; Edge 155 took 82 to 101 ms on
+// the same value at its shortest). The standard throws as it meets the cycle
+// (ECMA-262, SerializeJSONObject and SerializeJSONArray, step 1), and the rule
+// of JSON.stringify below counts the work so; the harness runs the slow path,
+// which V8 also takes given a replacer or a gap, and which looks for a cycle
+// once the nesting passes ten. What Chrome's fast path does on top of the
+// steps for such a value is not counted: there, the count is no bound for
+// Chrome (docs/findings.md, B24).
+v8.setFlagsFromString("--no-json-stringify-fast-path");
 
 // --- What an operation goes through.
 
@@ -67,6 +85,26 @@ export function units(x) {
   } catch {
     return 0;
   }
+}
+
+// The units of the string that an operation makes of `x` and goes through,
+// where it takes a string: ECMA-262's ToString of a primitive (a string as it
+// is; the digits of a number or a BigInt; true, false, undefined, null), and
+// Web IDL's conversions to DOMString, USVString and ByteString, which are made
+// by it. An object is made a string by methods of its own (@@toPrimitive,
+// toString, valueOf), whose work is counted where they run (a built-in's by
+// its rule, the extension's code as it runs, a page's not, as it is not the
+// extension's); its length, which units() reads of an array-like, is no part
+// of it. A symbol cannot be made a string: the operation throws first. Until
+// 2026-10-16 these operations counted units(): an object of the server's JSON
+// with a length of 5.8e250 had encodeURIComponent() of it, which makes
+// "[object Object]" of it, counted at 2^53 steps (CI run 38743594130,
+// site-contact).
+export function textUnits(x) {
+  if (typeof x === "string") return x.length;
+  if (typeof x === "symbol") return 0;
+  if (x === null || (typeof x !== "object" && typeof x !== "function")) return String(x).length;
+  return 0;
 }
 
 // The elements that Array.from() and %TypedArray%.from() go through for
@@ -133,6 +171,9 @@ const ofArg = (i) => (self, args) => units(args[i]);
 const ofThisAndResult = (self, args, r) => units(self) + units(r);
 const ofThisAndArg = (i) => (self, args) => units(self) + units(args[i]);
 const ofArgAndResult = (i) => (self, args, r) => units(args[i]) + units(r);
+// The same, of an argument that the operation makes a string of (textUnits()).
+const ofText = (i) => (self, args) => textUnits(args[i]);
+const ofTextAndResult = (i) => (self, args, r) => textUnits(args[i]) + units(r);
 const keysOfArg = (i) => (self, args) => keyCount(args[i]);
 const keysOfResult = (self, args, r) => keyCount(r);
 // A step a call: what the engine calls once for each element it goes through
@@ -148,7 +189,7 @@ const sorting = (self, [compare]) => units(self) * (typeof compare === "function
 // could be, and at each a comparison that goes through `x`.
 export function searchSteps(s, x, from, found) {
   const n = units(s);
-  const m = units(x);
+  const m = textUnits(x);
   const places = found >= 0 ? found - from + 1 : n - m - from + 1;
   return Math.max(0, places) * Math.max(1, m);
 }
@@ -182,17 +223,17 @@ export const STOPS = new Set([
 // What is not here is in FIXED below, by pattern.
 export const ECMASCRIPT = {
   // The global functions: what they go through.
-  "decodeURI": ofArgAndResult(0),
-  "decodeURIComponent": ofArgAndResult(0),
-  "encodeURI": ofArgAndResult(0),
-  "encodeURIComponent": ofArgAndResult(0),
-  "escape": ofArgAndResult(0),
-  "unescape": ofArgAndResult(0),
-  "eval": ofArg(0), // parsing its source (the code it runs is not the extension's, and is not counted: tests/costs.test.mjs checks that the extension calls none)
-  "isFinite": ofArg(0), // ToNumber of a string goes through it
-  "isNaN": ofArg(0),
-  "parseFloat": ofArg(0),
-  "parseInt": ofArg(0),
+  "decodeURI": ofTextAndResult(0),
+  "decodeURIComponent": ofTextAndResult(0),
+  "encodeURI": ofTextAndResult(0),
+  "encodeURIComponent": ofTextAndResult(0),
+  "escape": ofTextAndResult(0),
+  "unescape": ofTextAndResult(0),
+  "eval": (self, [x]) => (typeof x === "string" ? x.length : 0), // parsing its source, a string (any other value it returns as it is: PerformEval, step 2); the code it runs is not the extension's, and is not counted (tests/costs.test.mjs checks that the extension calls none)
+  "isFinite": ofText(0), // ToNumber of a string goes through it
+  "isNaN": ofText(0),
+  "parseFloat": ofText(0),
+  "parseInt": ofText(0),
 
   "Object.assign": (self, [, ...sources]) => sum(sources.map(keyCount)),
   "Object.create": keysOfArg(1),
@@ -309,19 +350,19 @@ export const ECMASCRIPT = {
   "SharedArrayBuffer.prototype.grow": (self, [n]) => integer(n),
   "SharedArrayBuffer.prototype.slice": ofResult,
 
-  "BigInt": ofArg(0), // from a string, its digits
+  "BigInt": ofText(0), // from a string, its digits
   "BigInt.asIntN": (self, [, x]) => bigUnits(x),
   "BigInt.asUintN": (self, [, x]) => bigUnits(x),
   "BigInt.prototype.toLocaleString": digits,
   "BigInt.prototype.toString": digits,
 
   "Date": (self, args) => (args.length === 1 && typeof args[0] === "string" ? args[0].length : 0), // a string is parsed
-  "Date.parse": ofArg(0),
+  "Date.parse": ofText(0),
 
   "Error.prototype.toString": ofResult,
 
-  "JSON.parse": ofArg(0),
-  "JSON.rawJSON": ofArg(0),
+  "JSON.parse": ofText(0),
+  "JSON.rawJSON": ofText(0),
   "JSON.stringify": ofResult,
 
   "Map.groupBy": ofArg(0),
@@ -330,25 +371,25 @@ export const ECMASCRIPT = {
   ...Object.fromEntries(["Map.prototype.get", "Map.prototype.set", "Map.prototype.has", "Map.prototype.delete", "Map.prototype.getOrInsert",
     "Map.prototype.getOrInsertComputed", "Set.prototype.add", "Set.prototype.has", "Set.prototype.delete"].map((p) => [p, (self, [k]) => stringUnits(k)])),
 
-  "Number": ofArg(0), // ToNumber of a string goes through it
-  "Number.parseFloat": ofArg(0),
-  "Number.parseInt": ofArg(0),
+  "Number": ofText(0), // ToNumber of a string goes through it
+  "Number.parseFloat": ofText(0),
+  "Number.parseInt": ofText(0),
 
   "Reflect.apply": ofArg(2),
   "Reflect.construct": ofArg(1),
   "Reflect.ownKeys": ofResult,
 
   "RegExp": (self, [pattern]) => (typeof pattern === "string" ? pattern.length : 0), // its pattern is parsed
-  "RegExp.escape": ofArgAndResult(0),
-  "RegExp.prototype.compile": ofArg(0),
+  "RegExp.escape": ofTextAndResult(0),
+  "RegExp.prototype.compile": ofText(0),
   "RegExp.prototype.flags (get)": ofResult,
   "RegExp.prototype.source (get)": ofResult,
   "RegExp.prototype.toString": ofResult,
   // What the RegExp's own methods of the symbols do through exec() is counted
   // there (harness/work.mjs); here, what they make of it.
   "RegExp.prototype.Symbol(Symbol.match)": ofResult,
-  "RegExp.prototype.Symbol(Symbol.replace)": ofArgAndResult(0),
-  "RegExp.prototype.Symbol(Symbol.split)": ofArgAndResult(0),
+  "RegExp.prototype.Symbol(Symbol.replace)": ofTextAndResult(0),
+  "RegExp.prototype.Symbol(Symbol.split)": ofTextAndResult(0),
 
   "Set.prototype.clear": ofThis,
   "Set.prototype.difference": ofThisAndArg(0),
@@ -367,7 +408,7 @@ export const ECMASCRIPT = {
   "String.prototype.big": ofResult,
   "String.prototype.blink": ofResult,
   "String.prototype.bold": ofResult,
-  "String.prototype.endsWith": ofArg(0),
+  "String.prototype.endsWith": ofText(0),
   "String.prototype.fixed": ofResult,
   "String.prototype.fontcolor": ofResult,
   "String.prototype.fontsize": ofResult,
@@ -375,20 +416,20 @@ export const ECMASCRIPT = {
   "String.prototype.indexOf": (s, [x, from], r) => searchSteps(s, x, integer(from), r),
   "String.prototype.isWellFormed": ofThis,
   "String.prototype.italics": ofResult,
-  "String.prototype.lastIndexOf": (s, [x], r) => Math.max(1, units(s) - Math.max(r, 0)) * Math.max(1, units(x)),
+  "String.prototype.lastIndexOf": (s, [x], r) => Math.max(1, units(s) - Math.max(r, 0)) * Math.max(1, textUnits(x)),
   "String.prototype.link": ofResult,
-  "String.prototype.localeCompare": ofThisAndArg(0),
+  "String.prototype.localeCompare": (s, [x]) => units(s) + textUnits(x),
   "String.prototype.match": ofResult, // a RegExp is made of a string, and its work is counted at exec()
   "String.prototype.matchAll": ofThis,
   "String.prototype.normalize": ofThisAndResult,
-  "String.prototype.padEnd": ofArg(1), // the filler, made once; the rest is a rope
-  "String.prototype.padStart": ofArg(1),
+  "String.prototype.padEnd": ofText(1), // the filler, made once; the rest is a rope
+  "String.prototype.padStart": ofText(1),
   "String.prototype.replace": (s, [x], r) => stringPattern(s, x) + units(r),
   "String.prototype.replaceAll": (s, [x], r) => stringPattern(s, x) + units(r),
   "String.prototype.search": () => 0, // a RegExp's, counted at exec()
   "String.prototype.small": ofResult,
   "String.prototype.split": (s, [x], r) => stringPattern(s, x) + units(s) + units(r),
-  "String.prototype.startsWith": ofArg(0),
+  "String.prototype.startsWith": ofText(0),
   "String.prototype.strike": ofResult,
   "String.prototype.sub": ofResult,
   "String.prototype.sup": ofResult,
@@ -403,7 +444,7 @@ export const ECMASCRIPT = {
   "String.prototype.trimRight": trimmed,
   "String.prototype.trimStart": trimmed,
 
-  "Symbol.for": ofArg(0),
+  "Symbol.for": ofText(0),
 
   "Intl.getCanonicalLocales": ofArg(0),
   "Intl.Collator.supportedLocalesOf": ofArg(0),
@@ -415,8 +456,8 @@ export const ECMASCRIPT = {
   "Intl.PluralRules.supportedLocalesOf": ofArg(0),
   "Intl.RelativeTimeFormat.supportedLocalesOf": ofArg(0),
   "Intl.Segmenter.supportedLocalesOf": ofArg(0),
-  "Intl.Locale": ofArg(0),
-  "Intl.DisplayNames.prototype.of": ofArgAndResult(0),
+  "Intl.Locale": ofText(0),
+  "Intl.DisplayNames.prototype.of": ofTextAndResult(0),
   "Intl.ListFormat.prototype.format": ofArgAndResult(0),
   "Intl.ListFormat.prototype.formatToParts": ofArgAndResult(0),
   // compare is a function of the collator's, made once and kept: the getter
@@ -429,7 +470,7 @@ export const ECMASCRIPT = {
 };
 
 // What compare() of an Intl.Collator goes through.
-export const COLLATOR_COMPARE = (self, [a, b]) => units(a) + units(b);
+export const COLLATOR_COMPARE = (self, [a, b]) => textUnits(a) + textUnits(b);
 
 // The built-in whose work is the steps of the backtracking matcher of the
 // harness (harness/backtrack.mjs, harness/work.mjs).

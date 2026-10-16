@@ -72,6 +72,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [P6](#p6) | 低 | Service Worker の起動ごとに Shift_JIS 変換表を作り直す | 計測 | 未着手 | |
 | [P7](#p7) | 低 | TA 採点支援のページ側の橋渡しが，配列もどきの `length` が示す回数だけ反復する | ファズ・ブラウザ | 対応中（[fix/grading-bridge-values](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-bridge-values)） | |
 | [P8](#p8) | 低 | 表示中の TOTP コードを毎秒作り直すたびに，シークレットをデコードし，HMAC の鍵を作り直す | 再現・ファズ | 対応中（[fix/totp-key-once](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-key-once)） | |
+| [P9](#p9) | 低 | QR コードを表示するたびに，シークレットを読み直し，QR コードを最初から作る | ファズ | 未着手 | |
 | [M1](#保守性) | — | TOTP の実装が 4 か所に重複している | 読解 | 未着手 | |
 | [M2](#保守性) | — | popup.js と assignments.js，textbooks.js と assignments.js の重複 | 読解 | 未着手 | |
 | [M3](#保守性) | — | テストが無く，CI は PR 時の ESLint のみ．IIFE 構造でテストしにくい | 読解 | 未着手 | |
@@ -506,7 +507,7 @@ specification: the GNU General Public License, version 3 or any later version
 
 - 場所: [background.js:706-718](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L706-L718)
 - 何が起きるか: `encryptSecret()` は，暗号文を `btoa` に渡す前に `String.fromCharCode(...bytes)` で文字列にする．スプレッドで渡す引数の数にはエンジンの上限があり（V8 で約 12.5 万），それより長いシークレットでは `RangeError`（Maximum call stack size exceeded）になる．`kulms-totp-save` はエラーを返し，何も保存しない．実際の TOTP シークレットは 32 字程度であるため，利用者がこの上限に達することはほとんどない．
-- 根拠: background の対象が，入力の初めの TOTP の保存内容を入力から作るようにした時点で，そのテストが 6.5 万字のシークレットで見つけた（ハーネスは組み込み関数を包んで引数をもう一度渡すため，上限が約 6 万バイトに下がる）．Node だけでも，12.6 万バイトから同じ例外になる．
+- 根拠: background の対象が，入力の初めの TOTP の保存内容を入力から作るようにした時点で，そのテストが 6.5 万字のシークレットで見つけた（ハーネスは組み込み関数を包んで引数をもう一度渡すため，上限が約 6 万バイトに下がる）．Node だけでも，12.6 万バイトから同じ例外になる．TOTP の登録補助も，ページの sessionStorage に保留された長いシークレットを，登録が済んだと書くページで保存させる．ファズ対象 `totp-register` が，2026-10-15 の CI（38743594130）と毎日のファジング（38802566900）でこれを見つけた．
 - 直し方: 暗号文を少しずつ文字列にする．
 - 対応: 8,192 バイトずつ `String.fromCharCode.apply` で文字列にする関数を加え，暗号文と IV の両方に使う（[fix/long-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/long-totp-secret)）．
 - テスト: `fuzz/known/background-message/B22-long-secret`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/totp.test.mjs` の「B22」（20 万字のシークレットを保存して読み出す）．
@@ -528,10 +529,11 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: 橋渡しはページの世界で動き，Sakai の採点画面の要素（`<sakai-grader>`）の `originalSubmissions` を読んで，content script の求めに JSON の文字列で答える．その要素と値はページのもので，ページのスクリプト（攻撃者のものも）がいつでも作り変えられる．
   - 橋渡しは値を読む箇所で例外を受けない．ページのオブジェクトが投げる例外（getter，Proxy の罠，取り消された Proxy），`JSON.stringify()` が書けない値（BigInt，循環），`String()` が変換できない値（`reference` の `toString` が関数でないなど）で，そのまま例外を投げる．答えは返らず，content script は 300ms 待って何も表示しない．例外はページのコンソールと `window.onerror` に，拡張のスクリプトのものとして届く．ページが送る求めの ID が JSON にできない値でも同じである．
   - ID（`id` か `submissionId`），提出者名，提出日時は，真と見なせる値なら型を確かめずにそのまま渡す（数，オブジェクト，Symbol など）．Symbol は JSON で落ちて ID の無い提出になり，オブジェクトは content script の側で B18 の例外になる．
-- 根拠: ファズ対象 `grading-bridge`（2026-10-14 に加えた）が見つけた．
+  - 値が自らを持つ（循環する）と，`JSON.stringify()` は TypeError を投げるが，Chrome の V8 は，replacer も space も無い呼び出しを速い道で書き出し，循環をそのループの 20 万回ごとにしか調べない [[V8JSON]](#参考文献)．それまでの間，同じ値を書き出し続けるので，投げるまでの時間とメモリは，値の文字列の長さに比例して大きくなる．`submissionId` が自らである提出（鍵と値を合わせて 100 字ほど）では，Edge 155 で 82〜101 ms かかり，Node 26 では同じ値でヒープの外に 115 MiB を使った．ページは自らのオブジェクトでこれを起こせるので，害はそのページに留まる．
+- 根拠: ファズ対象 `grading-bridge`（2026-10-14 に加えた）が見つけた．循環の形は，2026-10-15 の毎日のファジング（38802566900）で，ハーネスが V8 の速い道を通ったために，対象のプロセスが 13 GB を使って止められたことから調べた（ハーネスは速い道を使わないようにした．「fuzz リポジトリの仕組み」の仕事量）．
 - 直し方: 求めの処理全体で例外を受け，受けたら空の一覧で答える．提出は 1 件ずつ読み，読めないものは捨てる．ID，名前，日時は文字列のときだけ使い，ほかは空にする（ID が空の提出は捨てる）．求めの ID も文字列のときだけ受ける．
 - 対応: 上のとおりに直し，ID は有限の数も文字列にして受ける（[fix/grading-bridge-values](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-bridge-values)．P7 と同じブランチ）．
-- テスト: `fuzz/known/grading-bridge/B24-getter-throws` と `fuzz/known/grading-bridge/B24-id-not-a-string`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
+- テスト: `fuzz/known/grading-bridge/B24-getter-throws`，`B24-id-not-a-string`，`B24-submission-holds-itself`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
 ### B25
 **保存された課題のキャッシュが拡張の書く形でないと，課題パネルと popup の描画が止まる**（低・ファズ）
@@ -636,6 +638,16 @@ specification: the GNU General Public License, version 3 or any later version
 - 直し方: 表示を始めるときに 1 度だけデコードして鍵を作り，毎秒は署名（HMAC の計算）だけを行う．
 - 対応: popup と設定パネルの両方で，そのようにした（[fix/totp-key-once](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-key-once)．2026-10-14）．
 - テスト: `tests/large.test.mjs` の「P8」の 2 件（popup と設定パネル．todo）．
+
+### P9
+**QR コードを表示するたびに，シークレットを読み直し，QR コードを最初から作る**（低・ファズ）
+
+- 場所: [popup.js:774-799](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/popup.js#L774-L799)，[src/assignments.js:2384-2413](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/src/assignments.js#L2384-L2413)
+- 何が起きるか: popup と LMS の設定パネルの QR のボタンは，QR コードの表示と非表示を切り替える．非表示にするときは描いた SVG を消し，表示するときは，background に保存されたシークレットを読み直して（復号を含む），同梱の qrcode-gen で QR コードを作り直す．qrcode-gen は 8 通りのマスクをすべての模様に試して，最良のものを選ぶ．模様の数は QR コードの型番とともに増え，型番は符号化する URI の長さで決まるため，1 回の表示の仕事はシークレットの長さにほぼ比例する（ハーネスの数え方で，1 字で 78.6 万歩，32 字で 101 万歩，256 字で 366 万歩，1,024 字で 1,273 万歩，2,048 字で 2,399 万歩）．表示のたびに作り直すので，仕事は表示の回数との積で増える．通常のシークレット（32 字程度）であれば，数回の表示は問題にならない．
+- 根拠: 2026-10-15 の毎日のファジング（38802566900）で，ファズ対象 `popup` が，数百字のシークレットの QR コードを 7 回表示する入力で，線形のコードの上限を超えた（1,044 単位の入力で，上限を 23 歩超えた）．対象は，QR コードを作る固定の仕事（最短のシークレットの分）を上限に加えていたが，長いシークレットで増える分は入力の仕事として数えていた．
+- 直し方: 作った SVG をシークレットが変わるまで取っておき，表示を切り替えるだけにする（P8 と同じく，1 度作ったものを使い回す）．
+- 対応: 未着手．
+- テスト: `fuzz/known/popup/P9-qr-shown-again`（512 字のシークレットの QR コードを 5 回表示する．`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
 ## 保守性
 
@@ -772,6 +784,8 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
   - 入力の大きさによらない，入力のした操作の固定の仕事は，対象が，入力が空のときの仕事量と同じく測り，その入力の上限に加える（[harness/work.mjs](../harness/work.mjs) の `allow()`．2026-10-14 に加えた）．下の段から外挿した上限には加えない．下の段も同じだけ払うからである．popup の QR の生成（最短のシークレットで約 78 万歩）と，表示したコードの毎秒の更新（16 字のシークレットで 1 秒に 2,652 歩．ページの時計がタイマーを動かす前に払う）がこれに当たる．それより長いシークレットが加える分は入力のものとして数え，判定する．それまでは，QR を作るかコードを表示する小さな入力が，線形のコードの上限を超えていた．また，対象が利用者の操作のために要素を探す処理（`querySelectorAll()`，`getElementById()`）も拡張の仕事として数えていたので，数えないようにした．
   - 線形のコードがするはずの上限は，対象ごとに決まる．数える場所は，その対象のブラウザが読み込んだスクリプトのもので，入力が空のときの仕事量も，その対象のものである．同じプロセスでほかの対象が読み込んだスクリプト（テストは対象をまとめて動かす）は数えない．
   - 上限の入力の大きさ U は，入力のバイト数とそれから作った値の単位数である．ただし，入力が拡張に渡したもの，すなわち開いたページの HTML と，拡張が読んだサーバーの答えの本文の大きさがそれより大きければ，その大きさを U とする（[harness/work.mjs](../harness/work.mjs) の `handOver()`．2026-10-14 に加えた）．答えは，拡張が何度求めても 1 度だけ数える．拡張自身のファイル（messages.json など）は入力ではないので数えない．対象は，入力から作った値の周りに Sakai の書くとおりのマークアップを組み立て，どの形にするかを入力の数ビットで選ぶ．一方，線形のコードは渡されたもの全体をたどる．そのため，それまでは 16 バイトの入力がフォルダの行（376 文字．うち onclick が 173 文字）をページに入れると，授業資料のフォルダ展開（tree-view.js）の仕事が 16 単位の上限を超えた（2026-10-14 の CI の実行 38504368910 の `resources`）．段から段への伸びは，これまでどおり入力の単位で読む．
+  - 文字列を受ける組み込み関数と Web API の要素（`encodeURIComponent()`，`textContent` の設定など）は，仕様が引数を文字列にする（ECMA-262 の ToString [[ECMA-262]](#参考文献)，Web IDL の DOMString など [[WebIDL]](#参考文献)）ので，その文字列の長さで数える．オブジェクトは自らのメソッド（toString など）で文字列になり，その仕事はそのメソッドが動く所で数える（[harness/costs.mjs](../harness/costs.mjs) の `textUnits()`．2026-10-16 に改めた）．それまでは，配列もどきの長さと同じく，オブジェクトの `length` を読んでいた．そのため，サーバーの JSON の `{"length": 5.8e250}` を `encodeURIComponent()` に渡すと，`"[object Object]"` にするだけの呼び出しを 2^53 歩と数えた（CI の実行 38743594130 の `site-contact`）．
+  - ハーネスは，V8 の `JSON.stringify()` の速い道を使わない（`--no-json-stringify-fast-path`．2026-10-16 から）．速い道は，循環をループの 20 万回ごとにしか調べず，その間に書き出したものをヒープの外に持つ [[V8JSON]](#参考文献)．自らを持つ値を渡されると，対象のプロセスが 13 GB を使い，ファジングの上限で止められた（毎日のファジング 38802566900 の `grading-bridge`）．規格は循環に会った時点で TypeError を投げ，仕事もそのように数える．Chrome の速い道が規格の手順の上に行う仕事は数えないので，そこでは数えた仕事は Chrome の上限にならない（B24）．
 - **テスト**（[tests/](../tests/)）: 各問題の再現（todo），ハーネス自体のテスト，ファズ対象のシードと回帰入力と既知の失敗入力の再生．
   - 拡張の非同期の処理は，固定の時間ではなく，ハーネスが拡張に代わって行う処理（chrome API の応答とイベント，メッセージ，fetch，IndexedDB，Web Crypto）がすべて終わるまで待つ（[harness/work.mjs](../harness/work.mjs) の `idle()`）．ページのタイマーにかかわる処理は，ページに自分の時計を持たせて進める（[harness/clock.mjs](../harness/clock.mjs)）．2026-10-14 まで，いくつかのテストは固定の時間（20〜800 ms）を待っていた．カバレッジの計測で機械の負荷が高まると，B12 の todo のテストでは，最初の値に対する拡張の拒否が待ち時間の後に届いたため，テストは最初の値を問題なしとして次の値へ進んだ．最初の値の拒否が届いた時点でテストは失敗として終わり，次の値に対する拒否はテストの終了後に届いた．Node のテストランナーは，これをトップレベルの診断として報告し [[NodeTest]](#参考文献)，失敗の数を 0 としたまま終了コードを 1 とした．すべての固定の待ちを置き換えた後は，16 個の CPU をすべて塞いだ状態でカバレッジを測りながら実行しても，失敗はなく，テストの終了後に届く処理も生じない．
 - **ファジング**（[fuzz/](../fuzz/)）: 外から入力が来る面ごとの 14 の対象と canary．`sidebar`（2026-10-13 に加えた）は，ページの DOM と localStorage と時刻と利用者の操作を入力にする最初の対象で，ページに自分の時計を持たせ（[harness/clock.mjs](../harness/clock.mjs)．タイマーは HTML 標準のタイマーの初期化手順 [[HTML]](#参考文献) に従って設定する），入力の操作の後に時計を 10 分進めて，スクリプトが仕掛けたタイマーをすべてその入力の中で動かす．それでも尽きないタイムアウトは，終わらない処理として失敗とする．`grading-bridge`（2026-10-14 に加えた）は，TA 採点支援がページの世界に入れる橋渡し（grading-ta-page.js）を，ページの採点の要素とその値（ページのスクリプトが作れるものすべて）と，届く求めで動かす．`totp-register`（2026-10-14 に加えた）は，認証サーバーの TOTP 登録のページで動く登録補助を，ページの URL，本文，リンク，画像，コードの入力欄，jsQR の読み取り結果，ページの sessionStorage で動かす（jsQR は拡張が同梱する外部のライブラリであるため，入力が画像ごとに言う結果で置き換える）．jsdom は innerText を持たないため，ハーネスは HTML 標準が CSS を扱わないユーザーエージェントについて定めるとおり，子孫のテキスト内容として与える [[HTML]](#参考文献)．`popup`（2026-10-14 に加えた）は，popup を，chrome.storage.local の値（拡張の書く形，または JSON の任意の値），background の TOTP シークレット，ウィンドウのタブ（LMS，認証サーバー，その他のページ，Chrome の新しいタブのページのタブと，それぞれの content script が popup の更新の求めに返す答え，前面のタブ），前面のタブのページ（画像とキャンバス．その画素，データのオリジン，jsQR がその画素に見つけるもの），利用者の操作で動かす．前面のタブのページは作り，popup の QR の読み取りはそこで実際に動く．ほかのタブのページは作らず，その content script は入力の言う答えで置き換える（content script は，それぞれを入口にする対象がファジングする）．`grading-pages`（2026-10-14 に加えた）は，TA 採点支援（grading-ta.js）を，Sakai の採点画面と提出一覧のページで動かす．入力は，ページの URL，採点画面（受講者の一覧，入力欄と保存や返却のボタンを持つパネル，採点済みの数），採点画面の要素が持つ提出（拡張がページに入れる橋渡しが実際に読む），ページの表（提出一覧とそれ以外），取得する提出一覧のページへのサーバーの答え，ページの sessionStorage に拡張が残す状態，未保存のまま移動するかを尋ねられたときの利用者の答え，利用者の操作とページ自身の書き換え（受講者の一覧の描き直し，パネルの開閉，状態の書き換え）である．拡張がページを移動させるときは，移動先が LMS であること，利用者が留まると答えた後に移動しないこと，同じ移動について二度尋ねないことも確かめる．対象の一覧と運用は [fuzz/README.md](../fuzz/README.md) にある．
@@ -842,6 +856,7 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
 | B12 | `sidebar` | ページの localStorage のツールの設定が，オブジェクトでない値か，オブジェクトでない項目や `hasOwnProperty` というキーを持つ項目を含むなら，置かない（途中で書くときも） |
 | B23 | `sidebar`，`submission`，`totp-register` | 拡張のコードが投げた QuotaExceededError を数えない（これらの対象で Web Storage に書くのは tool-visibility.js，sidebar-resize.js，submit-detect.js，auth-totp-register.js のみ） |
 | S6 | `totp-register` | 鍵にできないほど短いシークレットによる `DataError: Zero-length key is not supported` の未処理の拒否を数えない |
+| B22 | `totp-register` | 登録補助が background に UTF-8 で 32 KiB を超えるシークレットを保存させたとき，`encryptSecret()` が `String.fromCharCode()` で受ける RangeError（background が捕まえて警告する）を数えない |
 | S6 | `popup` | base32 でない文字を含むシークレットを保存したまま「QR」を押す入力は，流さない．8 ビットに満たないシークレットのコードの表示で起きる `DataError: Zero-length key is not supported` の未処理の拒否を数えない |
 | B12 | `submission` | ページの sessionStorage の提出の ID が，JSON で配列でない値なら，置かない（途中で書くときも） |
 | P6 | `background-message` | Shift_JIS の表を最初の入力の前に作っておき，どの入力にも数えない（探すときは，入力ごとに表を消し，Service Worker が起動した直後の状態から始める） |
@@ -852,6 +867,7 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
 | B24 | `grading-bridge` | 橋渡しが答えずに，ページのオブジェクトが投げたものか，取り消された Proxy，BigInt，循環，プリミティブに変換できない値，組み込みの型の prototype を継いだだけのオブジェクト（TypedArray の length の getter などが受けない）でエンジンが投げる例外だけを投げた求めは，問わない（その例外も数えない）．答えた提出の ID，名前，日時は，渡されたまま受ける |
 | P7 | `grading-bridge` | 求めがあり，橋渡しが読む採点の要素の値が，`Array.from()` が長さまで回る値（配列でも Map でもなく，反復子を持たず，`length` が数のもの．罠が橋渡しを通す Proxy で包んだものも）で，持つ要素より大きい長さを言うなら，その入力は走らせない（2026-10-15 まで，配列もどきだけを見ていた） |
 | P8 | `popup` | 表示しているコードの 1 秒の更新には，固定の仕事（16 字のシークレットで測ったもの）に加えて，表示しているシークレットが 16 字を超える分の仕事（1 字あたりの量を対象が測ったもの）を，入力の上限に加える |
+| P9 | `popup` | 入力の中で QR コードを作ったことのあるシークレットの QR コードを再び作るクリックには，固定の仕事に加えて，そのシークレットで初めて作ったときに測った仕事を，入力の上限に加える |
 | P2 | `resources` | 利用者が何も操作しないうちに，拡張が以前に要求したのと同じフォルダの操作を再び要求した場合，サーバーは 404 で答える |
 
 S2，S8，S9 の正規表現は，以前は入力を切って避けていた（サイト情報のページを 512 バイト，KULASIS のページを 16,384 バイトで）．現在は入力を切らず，正規表現のみを線形のエンジンに移す．線形のエンジンは同じ一致を入力長に比例する時間で見つけるので，ほかの部分の遅さは，そのまま数えて判定できる．
@@ -878,7 +894,8 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 | fix/site-contact-pages | `site-contact`，`background-message` | B20 | 各 120 秒で失敗なし |
 | 13 本すべてを当てたもの | 7 対象すべて | S2，S7，S8，B10，B15〜B18，B21 | `assignments` が，科目の一覧でも B19 と同じ誤りが起きるのを見つけた（B19 に加えた）．避ける範囲を広げた後は，`assignments` を 120 秒，ほかの 6 対象を各 60 秒実行して失敗なし．入力の件数などの上限を外した後も，7 対象を各 60 秒実行して失敗なし |
 | 24 本すべてを当てたもの（2026-10-08） | 7 対象すべて | S2，S6，S7，S8，S9，B10，B15〜B21 | 各 60 秒，続けて各 300 秒で失敗なし．当てると，S1 の前半と S9 が `src/auth-totp.js` で衝突したので，S9 のブランチはそこに触れないようにした（そのデコードは S1 の前半が取り除く）．その後は，24 本の 2 本ずつのどの組も，24 本を続けて取り込む 40 通りの順も衝突せず，どの順でも同じ結果になる（`git merge-tree` で確かめた）．S1 の前半が background に移したデコードに S9 の正規表現が残っていたのと，B1 の修正が読む `isLoading` を B9 の修正が消していたのも，それぞれのブランチで直した．テストは失敗 0 で，todo 62 件のうち 58 件が通る（残りは，判断を要する B14，S1 の後半，コミットを `git archive` してビルドする B5 と B6）．2026-10-12 に，B17 の続く修正も当てて流すと，失敗 0 で，todo 66 件のうち 61 件が通る（残りは同じ 4 件と，直していない P6）．2026-10-13 に B22 の修正（25 本目）も当てると，失敗 0 で，todo 68 件のうち 63 件が通る．同じ日に，上流の v1.21.1 に残る 22 本（取り込まれた 2 本と，上流が同じ修正を入れた fix/build-contents を除く）を当てると，40 通りの順のいずれでも衝突せずに同じツリーになり，失敗 0 で，todo 61 件のうち 58 件が通る（残りは B14，S1 の後半，P6） |
-| fix/grading-bridge-values（2026-10-14） | `grading-bridge` | B24，P7 | 既知の入力 3 件とコーパス 144 入力が通り，120 秒（8,899 回）で失敗なし．2026-10-15 に加えた P7 の既知の入力 2 件（オブジェクトと Proxy）も通る |
+| fix/grading-bridge-values（2026-10-14） | `grading-bridge` | B24，P7 | 既知の入力 3 件とコーパス 144 入力が通り，120 秒（8,899 回）で失敗なし．2026-10-15 に加えた P7 の既知の入力 2 件（オブジェクトと Proxy）と，2026-10-16 に加えた B24 の既知の入力（自らを持つ提出）も通る |
+| fix/long-totp-secret（2026-10-16 に確かめた） | `totp-register` | B22 | CI の実行 38743594130 と毎日のファジング 38802566900 が `totp-register` で止まった 2 入力（保留された長いシークレットを保存させる）が通る |
 | fix/storage-full（2026-10-14） | `sidebar`，`submission`，`totp-register` | B23 | 既知の入力 3 件が通り，各 60 秒で失敗なし．課題パネルの B23 のテストも通る |
 | fix/expand-folders-once（2026-10-14） | `resources` | P2 | 既知の入力と，P2 を見つけた入力を含む 90 入力が通り，90 秒（556 回）で失敗なし |
 | fix/cache-shape（2026-10-14） | `popup` | B25 | 既知の入力を含む 157 入力が通り，90 秒（1,238 回）で失敗なし．B25 のテスト 2 件も通る |
@@ -936,6 +953,11 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
   - この回が引き継いだコーパス（99 入力）は，CI の設定で 6.3 秒，最大の常駐メモリ 790 MB で通る．同じコーパスから，CI の設定で 20 分（60,430 回）ファジングしても失敗はなく，最大の常駐メモリは 2.6 GB であった（手元では，ヒープを 4 GB，常駐メモリを 6 GB に限った）．
   - 調べる中で，P7 の回避の抜けを見つけた．回避は配列もどきだけを見ていたが，`length` が数のオブジェクトも，それを包む Proxy も，橋渡しを長さまで回す．Proxy の長さはハーネスが前もって読まないため，ループを走る前に止められず，長さ 2^31 では V8 がプロセスごと終わる（P7）．ただし，そうして終わったプロセスの入力は libFuzzer が失敗として残すので，runner を止めた原因とは言えない．回避は，橋渡しが実際に読む採点の要素と，長さまで回る値に限って広げ，既知の入力を 2 件加えた．
   - 限度に達する前にマシンのメモリが尽きないよう，プロセスが持てるメモリを，マシンの全メモリではなく使える量から定めた．あわせて，ファジングの出力をその場でログに流し，1 分ごとにメモリの使用量を書くようにした（「fuzz リポジトリの仕組み」の CI）．
+- 2026-10-15 に push した `c1497f8`（プロセスが持てるメモリと出力の扱いを改めた版）の CI（38743594130）は，各対象 1 分のファジングで `site-contact` と `totp-register` で止まり，同じ版の毎日のファジング（38802566900）は，`popup`，`totp-register`，`grading-bridge` で止まった．出力をその場でログに流すようにしたので，いずれもログから原因を読めた．
+  - `grading-bridge` は，対象のプロセスが 13,185 MB を使ったところで，libFuzzer が限度（12,903 MB）で止め，入力を残した．runner は止められず，見つけたものも保存された．入力は，`submissionId` が自らである提出であった．V8 の `JSON.stringify()` の速い道は循環を 20 万回ごとにしか調べないので，橋渡しが渡した値を，段で長くなる文字列ごと書き出し続けていた（B24）．ハーネスはその速い道を使わないようにした（「fuzz リポジトリの仕組み」の仕事量）．10 月 15 日に runner ごと止められた実行（38718496528）も，同じ形の入力によるとみられる．
+  - `site-contact` は，サーバーの pages.json の `placementId` が `length` を持つオブジェクトのとき，`encodeURIComponent()` の仕事を，そのオブジェクトの `length`（2^53）で数えていた．ハーネスの数え方の誤りであり，文字列を受ける組み込み関数と Web API は，仕様が引数から作る文字列の長さで数えるようにした（同上）．
+  - `totp-register` は，ページの sessionStorage に保留された長いシークレットを登録補助が background に保存させ，`encryptSecret()` が B22 の RangeError を受けた．この対象には B22 の回避が無かったので，加えた．
+  - `popup` は，数百字のシークレットの QR コードを 7 回表示する入力で，線形のコードの上限を超えた．popup は表示のたびに QR コードを作り直す（P9 として載せた）．
 
 ## カバレッジ
 
@@ -1031,6 +1053,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 - [Storage] WHATWG, "Storage Standard," Living Standard（§4.1 Storage endpoints）. https://storage.spec.whatwg.org/
 - [TT] W3C, "Trusted Types," Editor's Draft. https://w3c.github.io/trusted-types/dist/spec/
 - [URL] WHATWG, "URL Standard," Living Standard. https://url.spec.whatwg.org/
+- [V8JSON] V8 project, "src/json/json-stringifier.cc," V8（JSON.stringify の速い道 FastJsonStringifier：replacer と gap が無いときに使い（CanUseFastStringifier），循環はループの 200,000 回（kGlobalInterruptBudget）ごとの CheckCycle() でのみ調べる．2026-10-15 の版で読み，Node 26（V8 14.6）と Edge 155 で振る舞いを確かめた）. https://github.com/v8/v8/blob/3abab2c215e57bfb7704930dc89c019d842641f6/src/json/json-stringifier.cc#L3348-L3386
 - [WCAG22] W3C, "Web Content Accessibility Guidelines (WCAG) 2.2," W3C Recommendation（達成基準 1.4.3 Contrast (Minimum)）. https://www.w3.org/TR/WCAG22/
 - [WebCrypto] W3C, "Web Cryptography Level 2," Editor's Draft（§31.6.4 HMAC の Import Key：鍵のデータの長さが 0 ビットなら DataError を投げる）. https://w3c.github.io/webcrypto/
 - [WebIDL] WHATWG, "Web IDL Standard," Living Standard（反復可能なインターフェースの forEach，keys，values，entries）. https://webidl.spec.whatwg.org/

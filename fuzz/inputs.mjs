@@ -727,6 +727,27 @@ export const INPUTS = [
     },
   },
   {
+    // A submission whose submissionId is the submission itself, as the page
+    // may make it: the bridge takes it for the ID and hands it to
+    // JSON.stringify(), which throws on the cycle (Chrome's V8 only after its
+    // fast path has written it out for 200,000 turns; docs/findings.md, B24).
+    file: "known/grading-bridge/B24-submission-holds-itself",
+    plan: (w) => {
+      bridgePage(w, [{
+        id: "1",
+        prop: () => {
+          w.int(0, 2, 2); w.int(0, 6, 1);
+          w.int(0, w.remaining, 1);
+          w.int(0, 4, 1);
+          w.int(0, w.remaining, 2);
+          w.bool(true); w.pick(BRIDGE_FIELDS, "status"); w.int(0, 7, 1); string(w, "未採点 - 提出済み");
+          w.bool(true); w.pick(BRIDGE_FIELDS, "submissionId"); w.int(0, 7, 7);
+          w.bool(false);
+        },
+      }], ["r"]);
+    },
+  },
+  {
     // The same through a proxy whose trap (has) the bridge passes, with a
     // length of 2^25: the harness cannot read the length of a proxy before
     // the loop runs, and counts the loop once it has run. To a length of
@@ -940,6 +961,20 @@ export const INPUTS = [
       w.bool(true); string(w, "\uffff".repeat(150));
       w.int(0, w.remaining, 0);
       w.int(0, w.remaining, 1); w.int(0, 12, 9); w.int(0, 65535, 1);
+    },
+  },
+  {
+    // The background keeps a base32 secret of 512 characters, and the user
+    // shows its QR code five times, hiding it in between (nine clicks): the
+    // popup asks the background for the secret and makes the code anew each
+    // time it is shown, some 6,300,000 steps a time (docs/findings.md, P9).
+    file: "known/popup/P9-qr-shown-again",
+    plan: (w) => {
+      for (let i = 0; i < 5; i++) w.int(0, 2, 0);
+      w.bool(true); string(w, "JBSWY3DPEHPK3PXP".repeat(32));
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 9);
+      for (let i = 0; i < 9; i++) { w.int(0, 12, 9); w.int(0, 65535, 0); }
     },
   },
   {

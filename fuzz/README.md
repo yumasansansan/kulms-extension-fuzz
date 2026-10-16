@@ -115,6 +115,7 @@ KULMS+ のコードに，外から入ってくる値（シラバスの HTML，Sa
 | `grading-pages` | B16 | ページのクエリ，課題へのリンク，表の提出へのリンクのうち，grading-ta.js がデコードする部分に壊れた `%` の並びがあるページは，流さない |
 | `grading-pages` | B26 | 提出日時の列にセルの無い行で `parseSubmissionListGroups()` が投げる TypeError を，ページの表でも取得した一覧でも数えない |
 | `popup` | P8 | 表示しているコードの 1 秒の更新には，固定の仕事に加えて，表示しているシークレットが 16 字を超える分の仕事（1 字あたりの量を対象が測ったもの）を，入力の上限に加える |
+| `popup` | P9 | 入力の中で QR コードを作ったことのあるシークレットの QR コードを再び作るクリックには，固定の仕事に加えて，そのシークレットで初めて作ったときに測った仕事を，入力の上限に加える |
 | `resources` | P2 | 利用者が何も操作しないうちに，拡張が以前に要求したのと同じフォルダの操作を再び要求した場合，サーバーは 404 で答える |
 | `i18n` | B15 | どのオブジェクトにもあるキー（`constructor`，`toString` など）を引かない |
 | `i18n` | B10 | `$` を含む置換値では，拡張の文の `t()` を呼ばない（値が置換の記法として読まれ，結果が崩れる．置き場所が 2 つある文では，結果と仕事が値の長さの 2 乗や 3 乗で伸びる） |
@@ -124,6 +125,7 @@ KULMS+ のコードに，外から入ってくる値（シラバスの HTML，Sa
 | `sidebar` | B12 | ページの localStorage のツールの設定が，オブジェクトでない値か，オブジェクトでない項目や `hasOwnProperty` というキーを持つ項目を含むなら，置かない（途中で書くときも） |
 | `sidebar`，`submission`，`totp-register` | B23 | 拡張のコードが投げた QuotaExceededError を数えない |
 | `totp-register` | S6 | 鍵にできないほど短いシークレットによる `DataError: Zero-length key is not supported` の未処理の拒否を数えない |
+| `totp-register` | B22 | 登録補助が background に UTF-8 で 32 KiB を超えるシークレットを保存させたとき，`encryptSecret()` が `String.fromCharCode()` で受ける RangeError（background が捕まえて警告する）を数えない |
 | `popup` | S6 | base32 でない文字を含むシークレットを保存したまま「QR」を押す入力は，流さない．8 ビットに満たないシークレットのコードの表示で起きる `DataError: Zero-length key is not supported` の未処理の拒否を数えない |
 | `submission` | B12 | ページの sessionStorage の提出の ID が，JSON で配列でない値なら，置かない（途中で書くときも） |
 | `site-contact` | B20 | 関数が捕まえたプログラムの誤り（警告に書いたものも，catch が受けたものも）を数えない |
