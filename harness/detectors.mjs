@@ -24,7 +24,10 @@
 //     nothing the extension puts in: it is the page's, to let in its own. The
 //     extension can do without any of these (its content scripts' css, the
 //     CSSOM, a script of the page's world that the browser runs), and what it
-//     does with them, a page cannot tell from an attack;
+//     does with them, a page cannot tell from an attack. A <script> of
+//     speculation rules is no script: the HTML Standard runs none of its text
+//     and fetches none of its src, and what it does is have the browser load
+//     pages ahead, which are looked at below as loads;
 //   - an <object>, an <embed> or an <applet>; an iframe's srcdoc;
 //   - an attribute of an event handler (on*), or one whose code changed;
 //   - a URL attribute (href, xlink:href, action, formaction, src, data,
@@ -34,7 +37,8 @@
 //     script, as data: or blob:; an SVG animation that sets a link to one;
 //   - a <base>, a <meta> http-equiv, a <link> that imports or preloads script;
 //   - markup that loads a resource (an image, a frame, a script, a style
-//     sheet, media, a srcset's candidates) from an origin outside the
+//     sheet, media, a srcset's candidates, the pages that speculation rules
+//     have the browser prefetch or prerender) from an origin outside the
 //     extension's host permissions, the page's own and the extension's.
 //   The extension builds its UI with textContent: markup from data that
 //   lands in the page is a DOM XSS, or a leak to wherever it loads from.
@@ -81,6 +85,7 @@ import vm from "node:vm";
 import { matchesPattern } from "./chrome.mjs";
 import { EXT, manifest } from "./paths.mjs";
 import { uncounted } from "./work.mjs";
+import { preparedScript } from "./contexts.mjs";
 
 // A slip of the code, as V8 and the DOM word what the code does not mean to
 // throw, unlike its own errors ("Fetch failed: 400", "登録コースが見つかりま
@@ -177,6 +182,163 @@ function verified(integrity, url, extension) {
   });
 }
 
+// Whether a <script> is one of speculation rules. Such a script runs no
+// script: its text is a set of rules by which the browser loads pages ahead
+// of a navigation, read once, as the script starts (preparedScript() of
+// harness/contexts.mjs, which follows the HTML Standard's "prepare the script
+// element"), and one with a src loads nothing, the standard firing an error
+// at it. One that has not started is taken for what its type attribute says
+// now (stripped of ASCII whitespace, matched ASCII case-insensitively): what
+// it does once it starts is looked at then.
+function isSpeculationRules(el) {
+  const prepared = preparedScript(el);
+  if (prepared) return prepared.type === "speculationrules";
+  return /^[\t\n\f\r ]*speculationrules[\t\n\f\r ]*$/i.test(el.getAttribute("type") || "");
+}
+
+const isMap = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+
+// The URLs that a rule set of speculation rules has the browser prefetch or
+// prerender in `doc`, as the HTML Standard reads it
+// (https://html.spec.whatwg.org/multipage/speculative-loading.html): `text`,
+// the script's text as it started, parsed as JSON, which must be an object,
+// with no tag or one of printable ASCII ("parse a speculation rule set
+// string"); and of each rule in the lists at "prefetch" and "prerender"
+// (Chrome takes both), as "parse a speculation rule" reads it, against
+// `base`, the document's base URL as the script started (the rule set's, and
+// what relative_to "document" names), a list rule's URLs (each a string,
+// those of an HTTP(S) scheme) or a document rule's links: the a and area
+// elements with an href, in the document and its open shadow trees as they
+// are now, whose URL is of an HTTP(S) scheme and which the rule's predicate
+// matches ("parse a document rule predicate": and, or, not, href_matches of
+// URL patterns, selector_matches). The standard also drops a rule for an
+// eagerness, a referrer policy, a tag, a requirement, a No-Vary-Search hint or
+// a target hint that it does not take; this reading keeps such a rule, so that
+// it says more loads than the browser makes, never fewer.
+function speculationLoads({ text, base }, doc) {
+  let set;
+  try {
+    set = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (!isMap(set) || (Object.hasOwn(set, "tag") && !(typeof set.tag === "string" && /^[\x20-\x7e]*$/.test(set.tag)))) return [];
+  const loads = [];
+  for (const type of ["prefetch", "prerender"]) {
+    if (!Object.hasOwn(set, type) || !Array.isArray(set[type])) continue;
+    for (const rule of set[type]) loads.push(...ruleLoads(rule, doc, base));
+  }
+  return loads;
+}
+
+// The URLs that the rule sets of the scripts of speculation rules in
+// `document` have the browser prefetch or prerender, of any origin, as
+// speculationLoads() reads them: what a test looks at.
+export function speculativeLoads(document) {
+  return [...document.querySelectorAll("script")].flatMap((el) => {
+    const prepared = preparedScript(el);
+    return prepared && prepared.rules ? speculationLoads(prepared.rules, document) : [];
+  });
+}
+
+const RULE_KEYS = new Set(["source", "urls", "where", "relative_to", "eagerness", "referrer_policy", "tag", "requires", "expects_no_vary_search", "target_hint"]);
+
+function ruleLoads(rule, doc, base) {
+  if (!isMap(rule) || Object.keys(rule).some((k) => !RULE_KEYS.has(k))) return [];
+  const has = (k) => Object.hasOwn(rule, k);
+  const source = has("source") ? rule.source : has("urls") && !has("where") ? "list" : has("where") && !has("urls") ? "document" : null;
+  if (source === "list") {
+    if (has("where")) return [];
+    if (has("relative_to") && rule.relative_to !== "ruleset" && rule.relative_to !== "document") return [];
+    if (!Array.isArray(rule.urls) || rule.urls.some((u) => typeof u !== "string")) return [];
+    return rule.urls.map((u) => urlOf(u, base)).filter((u) => u && /^https?:$/.test(u.protocol)).map((u) => u.href);
+  }
+  if (source === "document") {
+    if (has("urls") || has("relative_to")) return [];
+    const predicate = has("where") ? predicateOf(rule.where, doc, base) : { and: [] };
+    if (predicate === null) return [];
+    return linksOf(doc).filter((a) => matchesPredicate(predicate, a.element)).map((a) => a.url.href);
+  }
+  return [];
+}
+
+const PREDICATES = ["and", "or", "not", "href_matches", "selector_matches"];
+const PATTERN_KEYS = ["protocol", "username", "password", "hostname", "port", "pathname", "search", "hash", "baseURL"];
+
+// A document rule's predicate, or null where the standard drops the rule.
+function predicateOf(input, doc, base) {
+  if (!isMap(input)) return null;
+  const kinds = PREDICATES.filter((k) => Object.hasOwn(input, k));
+  if (kinds.length !== 1) return null;
+  const [kind] = kinds;
+  const keys = Object.keys(input);
+  if (kind === "and" || kind === "or") {
+    if (keys.length !== 1 || !Array.isArray(input[kind])) return null;
+    const clauses = input[kind].map((c) => predicateOf(c, doc, base));
+    return clauses.includes(null) ? null : { [kind]: clauses };
+  }
+  if (kind === "not") {
+    if (keys.length !== 1) return null;
+    const clause = predicateOf(input.not, doc, base);
+    return clause && { not: clause };
+  }
+  if (kind === "href_matches") {
+    if (keys.some((k) => k !== "href_matches" && k !== "relative_to")) return null;
+    if (Object.hasOwn(input, "relative_to") && input.relative_to !== "ruleset" && input.relative_to !== "document") return null;
+    const patterns = [];
+    for (const raw of Array.isArray(input.href_matches) ? input.href_matches : [input.href_matches]) {
+      try {
+        if (typeof raw === "string") patterns.push(new URLPattern(raw, base));
+        else if (isMap(raw) && Object.entries(raw).every(([k, v]) => PATTERN_KEYS.includes(k) && typeof v === "string")) patterns.push(new URLPattern({ baseURL: base, ...raw }));
+        else return null;
+      } catch {
+        return null;
+      }
+    }
+    return { href: patterns };
+  }
+  if (keys.length !== 1) return null;
+  const selectors = Array.isArray(input.selector_matches) ? input.selector_matches : [input.selector_matches];
+  if (selectors.some((s) => typeof s !== "string")) return null;
+  for (const s of selectors) {
+    try {
+      doc.createDocumentFragment().querySelector(s);
+    } catch {
+      return null;
+    }
+  }
+  return { selectors };
+}
+
+function matchesPredicate(p, el) {
+  if (p.and) return p.and.every((c) => matchesPredicate(c, el));
+  if (p.or) return p.or.some((c) => matchesPredicate(c, el));
+  if (p.not) return !matchesPredicate(p.not, el);
+  if (p.href) return p.href.some((pattern) => pattern.test(linkURL(el).href));
+  return p.selectors.some((s) => el.matches(s));
+}
+
+const linkURL = (el) => urlOf(el.getAttribute("href"), el.ownerDocument.baseURI);
+
+// The links a document rule may load: the a and area elements of the HTML
+// namespace with an href, in the document and its open shadow trees, whose
+// URL is of an HTTP(S) scheme. jsdom renders nothing: every one is taken for
+// one being rendered.
+function linksOf(doc) {
+  const out = [];
+  const visit = (root) => {
+    for (const element of root.querySelectorAll("*")) {
+      if ((element.localName === "a" || element.localName === "area") && element.namespaceURI === "http://www.w3.org/1999/xhtml" && element.hasAttribute("href")) {
+        const url = linkURL(element);
+        if (url && /^https?:$/.test(url.protocol)) out.push({ element, url });
+      }
+      if (element.shadowRoot) visit(element.shadowRoot);
+    }
+  };
+  visit(doc);
+  return out;
+}
+
 // What makes `el` run script, load from elsewhere or send the page
 // elsewhere: short descriptions, the same as long as that does not change
 // (see the top of this file).
@@ -187,7 +349,14 @@ function featuresOf(el, base, own, extension) {
   const shown = (v) => `${JSON.stringify(String(v).slice(0, 80))}#${createHash("sha256").update(String(v)).digest("base64").slice(0, 12)}`;
   const tag = el.localName;
   const attr = (name) => el.getAttribute(name);
-  if (tag === "script") {
+  // A script of speculation rules runs no script and fetches no src: what it
+  // does is have the browser load pages, which are looked at as a load is.
+  const rules = tag === "script" && isSpeculationRules(el);
+  const set = rules ? preparedScript(el)?.rules : null;
+  if (set) {
+    for (const url of speculationLoads(set, el.ownerDocument)) if (!allowedOrigin(originOf(url, base), own, extension)) features.push(`speculation rules that load ${shown(url)}`);
+  }
+  if (tag === "script" && !rules) {
     const src = attr("src");
     if (src === null || el.textContent) features.push(`script of its own text: ${shown(el.textContent)}`);
     if (src !== null && !verified(attr("integrity"), urlOf(src, base), extension)) features.push(`script from ${shown(src)} that no integrity hash verifies`);
@@ -213,6 +382,7 @@ function featuresOf(el, base, own, extension) {
       features.push(`${name}=${shown(value)}`);
       continue;
     }
+    if (rules && name === "src") continue; // fetched by nothing (above)
     if (name === "srcdoc" && (tag === "iframe" || tag === "frame")) features.push(`srcdoc=${shown(value)}`);
     if (FOLLOWED.includes(name) || LOADED.includes(name)) {
       const scheme = schemeOf(value, base);

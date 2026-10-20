@@ -23,9 +23,21 @@
 // - the server's answers to the posts, in turn: a page with a table of such
 //   rows, or any bytes, with any status and type (answer() of fuzz/lib.mjs);
 // - what the user does: a click on an arrow, on a folder's link or on a row,
-//   a key, time going by.
-// Each input opens the page anew, as tree-view.js does its work as the page
-// loads. The page has a clock of its own (harness/clock.mjs), which runs ten
+//   a key, time going by;
+// - Sakai's link that expands every folder, or collapses them, with the
+//   collection ID of the site's root (as Sakai writes it, or any), or none: of
+//   it tree-view.js takes the root it asks the server to expand whole
+//   (doExpandall), before it expands a folder at a time;
+// - what the page's localStorage holds, which the page's own scripts can
+//   write: entries under the prefix of the tree's cache (kulms-tree-cache:),
+//   each of this page and its root, of another page, or any key, and as
+//   tree-view.js writes one (the rows of the table, as Sakai writes them, and
+//   when they were saved), any JSON, or any text; and how much of the storage
+//   the page's own data takes besides: none, all but a few units, or all of
+//   it, so that the extension's own writing may find it full.
+// These last three are read last, so that an input from before v1.22.0 of the
+// extension reads as it did, with none of them. Each input opens the page
+// anew, as tree-view.js does its work as the page loads. The page has a clock of its own (harness/clock.mjs), which runs ten
 // minutes on after the actions.
 //
 // It fails when the scripts throw, when a promise is rejected with nothing to
@@ -43,7 +55,7 @@
 import { Browser, Clock, Net, idle, openTab, uncounted, watch } from "../../harness/index.mjs";
 import { featuresIn } from "../../harness/detectors.mjs";
 import { LMS } from "../../tests/lms.mjs";
-import { answer, bytes, calibrate, fail, json, judge, ladder, open, provider, seen, string, value, warnings } from "../lib.mjs";
+import { answer, bytes, calibrate, fail, json, jsonText, judge, ladder, number, open, provider, seen, string, value, warnings } from "../lib.mjs";
 
 const SCRIPTS = ["src/settings.js", "src/tree-view.js"];
 const URL_OF_PAGE = `${LMS}/portal/site/S/tool/R`;
@@ -53,6 +65,13 @@ const ACTIONS = ["arrow", "link", "row", "key", "time"];
 const KEYS = ["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "Enter"];
 const MINUTE = 60e3;
 const RUN_ON = 10 * MINUTE;
+// The prefix of tree-view.js's cache of the expanded tree in the page's
+// localStorage, and its key for this page and the site's root.
+const CACHE_PREFIX = "kulms-tree-cache:";
+const ROOT = "/group/S/";
+// What a page's localStorage takes, in UTF-16 units of keys and values: as
+// Chrome's, and jsdom's.
+const QUOTA = 5000000;
 
 // As many of make() as the input has bytes for.
 function list(fdp, make) {
@@ -66,6 +85,18 @@ function row(fdp) {
   if (fdp.consumeBoolean()) r.onclick = string(fdp);
   else r.sakai = { action: fdp.consumeBoolean() ? string(fdp) : null, id: string(fdp) };
   return r;
+}
+
+// An entry of the page's localStorage under the prefix of the tree's cache.
+// Its key: null for this page's and its root's, as tree-view.js makes it.
+function cacheEntry(fdp) {
+  const key = fdp.pickValue([() => null, () => `${CACHE_PREFIX}${string(fdp)}`, () => string(fdp)])();
+  const kept = fdp.pickValue([
+    () => ({ rows: list(fdp, row), savedAt: number(fdp) }),
+    () => ({ json: jsonText(value(fdp)) }),
+    () => ({ text: string(fdp) }),
+  ])();
+  return { key, ...kept };
 }
 
 function action(fdp) {
@@ -87,7 +118,13 @@ export function read(fdp) {
   const rows = list(fdp, row);
   const answers = list(fdp, (f) => answer(f, f.consumeBoolean() ? page({ form: null, rows: list(f, row) }) : bytes(f), "text/html"));
   const actions = list(fdp, action);
-  return { settings, form, rows, answers, actions };
+  // Read last (the head of this file).
+  const expandAll = fdp.consumeBoolean() ? { action: fdp.consumeBoolean() ? "doExpandall" : "doUnexpandall", id: fdp.consumeBoolean() ? ROOT : string(fdp) } : null;
+  const cache = list(fdp, cacheEntry);
+  // The units the page's own data leaves free: all of them (none of its
+  // data), a few, or none.
+  const free = fdp.pickValue([() => Infinity, () => fdp.consumeIntegralInRange(0, 65535), () => 0])();
+  return { settings, form, rows, answers, actions, expandAll, cache, free };
 }
 
 // `s` in markup, as a server escapes it: in an attribute value, or as text.
@@ -109,13 +146,17 @@ function rowMarkup(r) {
   return `<tr><td class="checkbox"></td><td class="title">${r.flex ? `<div class="d-flex align-items-center">${inner}</div>` : inner}</td><td class="size">1</td></tr>`;
 }
 
+// Sakai's link that expands every folder (or collapses them), as it writes
+// one, with the collection ID `id`.
+const expandAllMarkup = ({ action, id }) => `<a href="#" onclick="${attribute(`javascript:document.getElementById('sakai_action').value='${action}';document.getElementById('collectionId').value='${id}';document.getElementById('showForm').submit();`)}">${action === "doExpandall" ? "すべて展開" : "すべて折りたたむ"}</a>`;
+
 // A page of the tool, as Sakai writes it.
-function page({ form, rows }) {
+function page({ form, rows, expandAll = null }) {
   const fields = form ? [
     ...(form.sakai ? ['<input type="hidden" name="sakai_action" id="sakai_action" value="">', '<input type="hidden" name="collectionId" id="collectionId" value="">'] : []),
     ...form.fields.map((f) => `<input type="hidden" name="${attribute(f.name)}" value="${attribute(f.value)}">`),
   ].join("") : "";
-  const table = `<table class="resourcesList"><tbody>${rows.map(rowMarkup).join("")}</tbody></table>`;
+  const table = `${expandAll ? expandAllMarkup(expandAll) : ""}<table class="resourcesList"><tbody>${rows.map(rowMarkup).join("")}</tbody></table>`;
   const body = form ? `<form id="showForm" method="post"${form.action === null ? "" : ` action="${attribute(form.action)}"`}>${fields}${table}</form>` : table;
   return `<!doctype html><html><head></head><body>${body}</body></html>`;
 }
@@ -171,6 +212,35 @@ function pick(selector, a) {
   });
 }
 
+// The key of the cache entry `e` (cacheEntry()) in the page's localStorage.
+const cacheKey = (e, input) => (e.key === null ? `${CACHE_PREFIX}${new URL(URL_OF_PAGE).pathname}|${input.expandAll ? input.expandAll.id : ROOT}` : e.key);
+// What the page's localStorage holds of the cache entry `e`.
+const cacheText = (e) => ("rows" in e ? JSON.stringify({ html: e.rows.map(rowMarkup).join(""), savedAt: e.savedAt }) : "json" in e ? e.json : e.text);
+
+// The page's localStorage as the input gives it, before the scripts run: the
+// cache's entries, and the page's own data, which takes what the input does
+// not leave free. An entry past what the storage takes (5,000,000 units, as
+// Chrome's) cannot be there: none is stored, as a browser writes nothing then.
+function store(w, input) {
+  for (const e of input.cache) {
+    try {
+      w.localStorage.setItem(cacheKey(e, input), cacheText(e));
+    } catch (err) {
+      if (!(err && err.name === "QuotaExceededError")) throw err;
+    }
+  }
+  if (input.free !== Infinity) {
+    let used = 0;
+    for (let i = 0; i < w.localStorage.length; i++) {
+      const key = w.localStorage.key(i);
+      used += key.length + w.localStorage.getItem(key).length;
+    }
+    const key = "page-data";
+    const size = QUOTA - used - key.length - input.free;
+    if (size > 0) w.localStorage.setItem(key, "x".repeat(size));
+  }
+}
+
 async function run(data) {
   const input = read(provider(data));
   browser.forget();
@@ -187,7 +257,7 @@ async function run(data) {
     browser.storage.local.load({ "kulms-settings": input.settings });
   });
   const clock = new Clock(Date.UTC(2026, 9, 14, 1, 0));
-  tab = openTab(browser, { url: URL_OF_PAGE, html: page(input), scripts: SCRIPTS, clock, net });
+  tab = openTab(browser, { url: URL_OF_PAGE, html: page(input), scripts: SCRIPTS, clock, net, prepare: (w) => uncounted(() => store(w, input)) });
   // jsdom does not follow links: a click that the extension leaves to the
   // browser goes nowhere, as one that is not followed.
   tab.window.addEventListener("click", (e) => e.preventDefault());
@@ -221,9 +291,28 @@ async function run(data) {
     }
     return out;
   });
+  // Known: S14 (docs/findings.md). While it is open, what tree-view.js puts in
+  // the page as it came from the page's localStorage, the HTML of the tree it
+  // kept there (an entry's html, as loadCache() reads it), is not counted:
+  // the page's scripts can write any markup there, and the script puts it in
+  // the table unchecked, as the finding says.
+  const kept = uncounted(() => {
+    const out = new Set();
+    if (!open("S14")) return out;
+    for (const e of input.cache) {
+      let entry;
+      try {
+        entry = JSON.parse(cacheText(e));
+      } catch {
+        continue;
+      }
+      if (entry && typeof entry.html === "string") for (const f of featuresIn(entry.html, tab.document, new URL(URL_OF_PAGE).origin, `chrome-extension://${browser.id}`)) out.add(f);
+    }
+    return out;
+  });
   const problems = seen(watcher).filter((p) => {
     const m = /^markup that runs script, loads from elsewhere or sends the page elsewhere: [^\n]* \(([^\n]*)\)$/.exec(p);
-    return !(m && own.has(m[1]));
+    return !(m && (own.has(m[1]) || kept.has(m[1])));
   });
   if (problems.length) fail(problems.join("\n"));
   judge();

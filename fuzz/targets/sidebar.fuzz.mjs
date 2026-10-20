@@ -10,10 +10,15 @@
 // the courses' names, sorts the pinned ones and marks the course of the hour,
 // course-click.js opens a course's tools on a click of its row,
 // tool-visibility.js moves the tools a user hides under a toggle,
-// sidebar-resize.js lets the sidebar be dragged wider, and top-favbar.js
-// copies the pinned courses into a bar at the top with a dropdown of their
-// tools. These are the scripts of the manifest that act on the sidebar; the
-// others act elsewhere and have targets of their own. The input gives
+// sidebar-resize.js lets the sidebar be dragged wider, top-favbar.js copies
+// the pinned courses into a bar at the top with a dropdown of their tools,
+// preload.js hides the courses' names until course-name.js has looked at them
+// (and the page until the scripts have set themselves up), and prerender.js
+// puts in speculation rules by which the browser prerenders the pages of the
+// links of the sidebar and of the bar. These are the scripts of the manifest
+// that act on the sidebar; the others act elsewhere and have targets of their
+// own. preload.js and prerender.js do their work as the page loads, which is
+// no input's (below). The input gives
 // - the courses of the pinned list and of the list of all sites, as many as
 //   it has bytes for: each with any ID, name and title, any classes, any of
 //   the parts of Sakai's markup or not, and any tools (any IDs, names and
@@ -58,8 +63,10 @@ import { Browser, Clock, Net, aside, idle, openTab, uncounted, watch } from "../
 import { LMS } from "../../tests/lms.mjs";
 import { calibrate, fail, json, jsonText, judge, ladder, number, open, provider, seen, string, value, warnings } from "../lib.mjs";
 
-// The scripts of the manifest that act on the sidebar, in its order.
-const SCRIPTS = ["src/settings.js", "src/course-name.js", "src/course-click.js", "src/tool-visibility.js", "src/sidebar-resize.js", "src/top-favbar.js"];
+// The scripts of the manifest that act on the sidebar, in the order they run
+// (contentScriptsFor() of harness/contexts.mjs): preload.js at document_start,
+// the rest at document_end.
+const SCRIPTS = ["src/preload.js", "src/settings.js", "src/course-name.js", "src/course-click.js", "src/tool-visibility.js", "src/sidebar-resize.js", "src/top-favbar.js", "src/prerender.js"];
 // A portal page as Sakai lays it out: the sidebar in a grid, a header above,
 // the area of system banners.
 const PAGE = `<!doctype html><html><head></head><body>
@@ -71,9 +78,10 @@ const PAGE = `<!doctype html><html><head></head><body>
 </div></body></html>`;
 // The settings stored when the page loads: every script that acts on the
 // sidebar on, so that each sets itself up.
-const LOADED = { courseNameCleanup: true, pinSort: true, currentPeriodHighlight: true, courseRowClick: true, toolVisibility: true, sidebarResize: true, topFavbar: true, topFavbarSize: "medium", tabColorStyle: "border" };
-// The settings the scripts read as they go.
-const LIVE = Object.keys(LOADED);
+const LOADED = { courseNameCleanup: true, pinSort: true, currentPeriodHighlight: true, courseRowClick: true, toolVisibility: true, sidebarResize: true, topFavbar: true, topFavbarSize: "medium", tabColorStyle: "border", linkPrerender: true };
+// The settings the scripts read as they go; prerender.js reads linkPrerender
+// as the page loads, and not after.
+const LIVE = Object.keys(LOADED).filter((key) => key !== "linkPrerender");
 const CLASSES = ["cs-tab-danger", "cs-tab-warning", "cs-tab-success", "cs-tab-other", "is-current-site"];
 const ACTIONS = ["row", "tool toggle", "other toggle", "bar item", "dropdown", "elsewhere", "key", "resize", "drag", "visible", "time", "pin", "unpin", "settings", "storage"];
 // The keys of the page's localStorage that the extension writes and reads.

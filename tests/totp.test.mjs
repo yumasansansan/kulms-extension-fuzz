@@ -135,6 +135,63 @@ test("S1: the settings panel on the LMS shows the code and the QR without being 
   assert.deepEqual(leaks(ext.browser), []);
 });
 
+// P9 (docs/findings.md): the popup and the settings panel make the QR code of
+// the secret anew each time they show it, work in proportion to the secret's
+// length. Each counts here the codes it makes (qrcode() of the bundled
+// qrcode-gen, which the scripts call by its global name) as it shows the code
+// of a secret three times, hidden in between, and once more after another
+// secret has been saved elsewhere: the second and the third show the code
+// made the first time, the fourth one made of the new secret.
+async function showQRThreeTimesAndAfterAnother({ browser, bg, popup }, w, button, shown) {
+  let made = 0;
+  const qrcode = w.qrcode;
+  w.qrcode = function (...args) {
+    made++;
+    return qrcode.apply(this, args);
+  };
+  const codes = [];
+  for (let i = 0; i < 3; i++) {
+    button.click(); // shows it
+    await idle();
+    codes.push(shown());
+    button.click(); // hides it
+    await idle();
+  }
+  assert.equal(made, 1, `${made} codes made for three shows of one secret`);
+  assert.ok(codes[0] && codes.every((c) => c === codes[0]), "the same code each time");
+  await browser.deliver(popup, [bg], { type: "kulms-totp-save", secret: "GEZDGNBVGY3TQOJQ" });
+  button.click();
+  await idle();
+  assert.equal(made, 2, "the code of the new secret is made");
+  assert.ok(shown() && shown() !== codes[0], "and shown");
+}
+
+test("P9: the popup makes the QR code of a secret once, however often it shows it", { todo: "P9: it makes the code anew each time it shows it" }, async (t) => {
+  const ext = await extension();
+  t.after(() => ext.browser.close());
+  await ext.browser.deliver(ext.popup, [ext.bg], { type: "kulms-totp-save", secret: "JBSWY3DPEHPK3PXP" });
+  const d = ext.popup.document;
+  const shown = () => (d.getElementById("totp-qr-display").style.display === "block" ? d.getElementById("totp-qr-canvas").innerHTML : null);
+  await showQRThreeTimesAndAfterAnother(ext, ext.popup.window, d.getElementById("totp-qrgen-btn"), shown);
+});
+
+test("P9: the settings panel on the LMS makes the QR code of a secret once, however often it shows it", { todo: "P9: it makes the code anew each time it shows it" }, async (t) => {
+  const ext = await extension();
+  t.after(() => ext.browser.close());
+  await ext.browser.deliver(ext.popup, [ext.bg], { type: "kulms-totp-save", secret: "JBSWY3DPEHPK3PXP" });
+  ext.browser.storage.local.load(cached([]));
+  const tab = openCoursePage(ext.browser);
+  const panel = await openPanel(tab);
+  [...panel.querySelectorAll(".kulms-panel-tab")].at(-1).click();
+  await until(() => panel.querySelector(".kulms-totp-actions"));
+  const button = [...panel.querySelectorAll(".kulms-totp-actions .kulms-totp-btn")].find((b) => b.textContent === "QR");
+  const shown = () => {
+    const box = panel.querySelector(".kulms-totp-qrbox");
+    return box && box.style.display !== "none" ? box.innerHTML : null;
+  };
+  await showQRThreeTimesAndAfterAnother(ext, tab.window, button, shown);
+});
+
 // The secrets sent to be saved so far.
 const saved = (browser) => browser.traffic.filter((x) => x.message && x.message.type === "kulms-totp-save").map((x) => x.message.secret);
 

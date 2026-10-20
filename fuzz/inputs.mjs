@@ -788,8 +788,9 @@ export const INPUTS = [
   },
   {
     // Every folder opens as the page loads (autoExpandAll), and the server
-    // answers the post to open the one folder with a listing that shows it
-    // still closed: tree-view.js asks for it again, and again.
+    // answers each post with a listing that shows the one folder still
+    // closed: tree-view.js asks to expand them all (doExpandall, since
+    // v1.22.0), then for the folder, again and again.
     file: "known/resources/P2-folder-stays-closed",
     plan: (w) => {
       for (const on of [false, true, false, false]) { w.bool(true); w.bool(on); }
@@ -801,6 +802,31 @@ export const INPUTS = [
       w.int(0, w.remaining, 1); folder();
       w.int(0, w.remaining, 1); w.bool(true); w.int(0, w.remaining, 1); folder(); answer(w);
       w.int(0, w.remaining, 0);
+    },
+  },
+  {
+    // The page's localStorage holds, under the key of tree-view.js's cache for
+    // this page and the site's root, a tree whose markup runs script (an
+    // image's onerror), as any script of the page may have written it. The
+    // page has Sakai's link that expands every folder and one folder closed,
+    // and every folder opens as the page loads (autoExpandAll): tree-view.js
+    // puts the cached tree in the table as it is, before it asks the server,
+    // which does not answer here, so that the tree stays (docs/findings.md,
+    // S14).
+    file: "known/resources/S14-cached-tree-runs-script",
+    plan: (w) => {
+      for (const on of [false, true, false, false]) { w.bool(true); w.bool(on); }
+      w.bool(true); w.int(0, 2, 1); w.int(0, w.remaining, 0); w.bool(true);
+      w.int(0, w.remaining, 1);
+      w.bool(true); w.bool(false); w.int(0, 4, 0); string(w, "資料"); w.bool(false);
+      w.bool(false); w.bool(false); string(w, "/group/S/f1/");
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 0);
+      w.bool(true); w.bool(true); w.bool(true);
+      w.int(0, w.remaining, 1);
+      w.int(0, 2, 0); w.int(0, 2, 2);
+      string(w, JSON.stringify({ html: '<tr><td class="title"><img src="x" onerror="alert(document.cookie)">資料</td></tr>', savedAt: 1 }));
+      w.int(0, 2, 0);
     },
   },
   {

@@ -18,6 +18,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Browser, Clock, EXT, Net, contentScriptsFor, exposeInternals, idle, installCanvas, measure, openBackground, openBareTab, openPopup, openTab, read, watch } from "../harness/index.mjs";
 import { beginInput, endInput } from "../harness/work.mjs";
+import { speculativeLoads } from "../harness/detectors.mjs";
 import { LMS } from "./lms.mjs";
 
 test("exposing an IIFE's internals moves no line and keeps its directive first", () => {
@@ -235,6 +236,86 @@ test("innerText is as the HTML Standard defines it for a user agent without CSS:
   assert.equal(p.innerHTML, "x<br>y<br>z<br>");
   p.innerText = null;
   assert.equal(p.innerHTML, "");
+});
+
+test("HTMLScriptElement.supports() is as the HTML Standard defines it: true for its four script types, each matched exactly", (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const tab = openTab(browser, { url: `${LMS}/portal`, scripts: [] });
+  const S = tab.window.HTMLScriptElement;
+  for (const type of ["classic", "module", "importmap", "speculationrules"]) assert.equal(S.supports(type), true, type);
+  for (const type of ["Classic", " module", "text/javascript", "", "webbundle"]) assert.equal(S.supports(type), false, JSON.stringify(type));
+  assert.throws(() => S.supports(), tab.window.TypeError);
+  assert.throws(() => S.supports(Symbol("x")), tab.window.TypeError);
+  // A static operation of Web IDL; its length the counting's wrapper does not
+  // keep, as it keeps no other's (harness/install.mjs).
+  const d = Object.getOwnPropertyDescriptor(S, "supports");
+  assert.deepEqual([d.writable, d.enumerable, d.configurable, d.value.name], [true, true, true, "supports"]);
+});
+
+// A script of speculation rules runs no script; the pages it has the browser
+// load are loads (harness/detectors.mjs).
+test("the detectors take a script of speculation rules for the pages it has the browser load, and report those from elsewhere", (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const html = '<body><nav id="n"><a href="/portal/site/A">A</a><a href="https://evil.example/portal/site/B">B</a><a href="mailto:x@example.com">m</a></nav></body>';
+  const tab = openTab(browser, { url: `${LMS}/portal`, scripts: [], html });
+  const w = watch(tab);
+  const d = tab.document;
+  const put = (text, attrs = { type: "speculationrules" }) => {
+    const el = d.createElement("script");
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    el.textContent = text;
+    d.head.append(el);
+  };
+  // A document rule that takes every link of the nav, its type as the
+  // standard tells it (whitespace stripped, the case ignored); a list rule
+  // with a URL from elsewhere, one of the page's origin and one that is not
+  // HTTP(S).
+  put(JSON.stringify({ prerender: [{ where: { selector_matches: "#n a" }, eagerness: "moderate" }] }), { type: " SpeculationRules " });
+  put(JSON.stringify({ prefetch: [{ urls: ["https://evil.example/x", "/portal/y", "data:text/html,z"] }] }));
+  // What the standard drops: text that is not JSON, a set that is not an
+  // object, a rule with a key it does not know, a predicate of two kinds, a
+  // list rule with a where, a source it does not know; and a script of these
+  // rules with a src, which loads nothing.
+  for (const text of ["{", "[]", JSON.stringify({ prefetch: [{ urls: ["https://evil.example/1"], what: 1 }] }),
+    JSON.stringify({ prefetch: [{ where: { href_matches: "/*", selector_matches: "a" } }] }),
+    JSON.stringify({ prefetch: [{ urls: ["https://evil.example/2"], where: {} }] }),
+    JSON.stringify({ prefetch: [{ source: "other", urls: ["https://evil.example/3"] }] })]) put(text);
+  put("", { type: "speculationrules", src: "https://evil.example/rules.json" });
+  // A data block of another type is still a script of its own text.
+  put("plain", { type: "text/plain" });
+  // A script's rules are read once, as it starts (preparedScript() of
+  // harness/contexts.mjs): text or a type given later changes nothing, and a
+  // copy of a script that has started has none. Taken out and put back, it
+  // starts again, and its text then is read.
+  const later = d.createElement("script");
+  later.setAttribute("type", "speculationrules");
+  later.textContent = JSON.stringify({ prefetch: [{ urls: ["/portal/later"] }] });
+  d.head.append(later);
+  later.textContent = JSON.stringify({ prefetch: [{ urls: ["https://evil.example/later"] }] });
+  later.setAttribute("type", "text/javascript");
+  const copy = later.cloneNode(true);
+  copy.setAttribute("type", "speculationrules");
+  d.head.append(copy);
+  const again = d.createElement("script");
+  again.setAttribute("type", "speculationrules");
+  again.textContent = JSON.stringify({ prefetch: [{ urls: ["/portal/again"] }] });
+  d.head.append(again);
+  again.remove();
+  again.textContent = JSON.stringify({ prefetch: [{ urls: ["https://evil.example/again"] }] });
+  d.head.append(again);
+  const problems = w.check().filter((p) => p.startsWith("markup")).join("\n");
+  assert.doesNotMatch(problems, /evil\.example\/later/);
+  assert.doesNotMatch(problems, /script of its own text: "\{\\"prefetch/);
+  assert.match(problems, /speculation rules that load "https:\/\/evil\.example\/again"/);
+  assert.match(problems, /speculation rules that load "https:\/\/evil\.example\/portal\/site\/B"/);
+  assert.match(problems, /speculation rules that load "https:\/\/evil\.example\/x"/);
+  assert.doesNotMatch(problems, /speculation rules that load "https:\/\/lms\./);
+  assert.doesNotMatch(problems, /evil\.example\/[123]"|rules\.json|data:text/);
+  assert.doesNotMatch(problems, /script of its own text: "\{/);
+  assert.match(problems, /script of its own text: "plain"/);
+  assert.deepEqual(speculativeLoads(d).sort(), [`${LMS}/portal/later`, `${LMS}/portal/site/A`, `${LMS}/portal/y`, "https://evil.example/again", "https://evil.example/portal/site/B", "https://evil.example/x"].sort());
 });
 
 test("the HTML parser takes a lone surrogate as a code point of its own, as the HTML Standard's input stream does", (t) => {

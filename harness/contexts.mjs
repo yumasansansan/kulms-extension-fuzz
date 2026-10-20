@@ -70,15 +70,34 @@ import { compare, finished, forIn, handOver, has, instanceOf, isPaused, key, ran
 }
 
 // What jsdom lacks of the platform that the HTML Standard defines for a user
-// agent without CSS, which jsdom is: HTMLElement's innerText
-// (https://html.spec.whatwg.org/multipage/dom.html#the-innertext-idl-attribute).
-// Getting it is the element's descendant text content, as the standard has it
-// "if the user agent is a non-CSS user agent"; setting it replaces the
-// element's children with the rendered text fragment of the value (null as the
-// empty string, [LegacyNullToEmptyString]): its runs of text as Text nodes, and
-// each line break (CR LF, CR or LF) as a <br>. Chrome renders CSS, and leaves
-// out text that is not being rendered; jsdom renders nothing.
+// agent without CSS, which jsdom is:
+// - HTMLElement's innerText
+//   (https://html.spec.whatwg.org/multipage/dom.html#the-innertext-idl-attribute).
+//   Getting it is the element's descendant text content, as the standard has
+//   it "if the user agent is a non-CSS user agent"; setting it replaces the
+//   element's children with the rendered text fragment of the value (null as
+//   the empty string, [LegacyNullToEmptyString]): its runs of text as Text
+//   nodes, and each line break (CR LF, CR or LF) as a <br>. Chrome renders
+//   CSS, and leaves out text that is not being rendered; jsdom renders
+//   nothing.
+// - HTMLScriptElement.supports(type)
+//   (https://html.spec.whatwg.org/multipage/scripting.html#dom-script-supports):
+//   true for the script types the standard's steps list, "classic", "module",
+//   "importmap" and "speculationrules", each matched exactly, as Chrome, which
+//   runs all four, answers; a static operation of Web IDL, its type a
+//   DOMString.
 export function completePlatform(w) {
+  if (!Object.hasOwn(w.HTMLScriptElement, "supports")) {
+    const TYPES = ["classic", "module", "importmap", "speculationrules"];
+    const { supports } = {
+      supports(type) {
+        if (arguments.length < 1) throw new w.TypeError("Failed to execute 'supports' on 'HTMLScriptElement': 1 argument required, but only 0 present.");
+        if (typeof type === "symbol") throw new w.TypeError("Cannot convert a Symbol value to a string");
+        return TYPES.includes(`${type}`);
+      },
+    };
+    Object.defineProperty(w.HTMLScriptElement, "supports", { value: supports, writable: true, enumerable: true, configurable: true });
+  }
   const proto = w.HTMLElement.prototype;
   if (Object.getOwnPropertyDescriptor(proto, "innerText")) return;
   const textContent = Object.getOwnPropertyDescriptor(w.Node.prototype, "textContent").get;
@@ -130,6 +149,61 @@ DocumentImpl.prototype.encodingParseAURL = function (input) {
   if (keptURLs.size > KEPT_URLS) keptURLs.delete(keptURLs.keys().next().value);
   return copyOfURL(url);
 };
+
+// The preparation of a <script> as the HTML Standard has it
+// (https://html.spec.whatwg.org/multipage/scripting.html#prepare-the-script-element),
+// of which jsdom runs classic scripts alone (and runs none here, its
+// runScripts being "outside-only"), kept for what the detectors look at
+// (harness/detectors.mjs): a script starts once, on the events on which jsdom
+// prepares one (_eval(): it becomes connected, a child is inserted in it
+// while it is connected, its src is set while it is connected, the parser is
+// done with it), when it is connected, has a src or a text, and its type
+// string (_getTypeString(), stripped of ASCII whitespace) is a script type:
+// a JavaScript MIME type essence (classic), "module", "importmap" or
+// "speculationrules", each matched ASCII case-insensitively. A script of
+// speculation rules without a src is read then, its text against the
+// document's base URL then, into the rule set the browser follows; changing
+// its text or its type later changes nothing, its removal unregisters the
+// rule set and lets it start again, and a copy of it has started and has no
+// rule set (its cloning steps copy "already started" alone). One with a src
+// has none: the standard fires an error at it.
+const JAVASCRIPT_TYPES = ["application/ecmascript", "application/javascript", "application/x-ecmascript", "application/x-javascript", "text/ecmascript", "text/javascript", "text/javascript1.0", "text/javascript1.1", "text/javascript1.2", "text/javascript1.3", "text/javascript1.4", "text/javascript1.5", "text/jscript", "text/livescript", "text/x-ecmascript", "text/x-javascript"];
+const ScriptImpl = createRequire(import.meta.url)("jsdom/lib/jsdom/living/nodes/HTMLScriptElement-impl.js").implementation;
+const prepared = new WeakMap(); // a script's impl → { type, rules: { text, base } or null }, while it has started
+const asciiLowercase = (s) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+function scriptType(impl) {
+  const t = asciiLowercase(impl._getTypeString());
+  if (JAVASCRIPT_TYPES.includes(t)) return "classic";
+  return ["module", "importmap", "speculationrules"].includes(t) ? t : null;
+}
+const prepareScript = ScriptImpl.prototype._eval;
+ScriptImpl.prototype._eval = function () {
+  if (!prepared.has(this) && this.isConnected) {
+    const src = this.hasAttributeNS(null, "src");
+    const text = this.text;
+    const type = scriptType(this);
+    if ((src || text !== "") && type !== null) {
+      prepared.set(this, { type, rules: type === "speculationrules" && !src ? { text, base: this._ownerDocument.baseURLSerialized() } : null });
+    }
+  }
+  return Reflect.apply(prepareScript, this, []);
+};
+const removeScript = ScriptImpl.prototype._removingSteps;
+ScriptImpl.prototype._removingSteps = function (...args) {
+  if (prepared.get(this)?.rules) prepared.delete(this);
+  return Reflect.apply(removeScript, this, args);
+};
+const cloneScript = ScriptImpl.prototype._cloningSteps;
+ScriptImpl.prototype._cloningSteps = function (copy, ...args) {
+  const p = prepared.get(this);
+  if (p) prepared.set(copy, { type: p.type, rules: null });
+  return cloneScript ? Reflect.apply(cloneScript, this, [copy, ...args]) : undefined;
+};
+
+// What the preparation made of the <script> `el`: its type and, for one of
+// speculation rules, its rule set's text and base URL (or null where it has
+// none); undefined where it has not started.
+export const preparedScript = (el) => prepared.get(idlUtils.implForWrapper(el));
 
 // What the extension's code calls to count its work (harness/work.mjs,
 // harness/install.mjs), in each context.
@@ -540,16 +614,25 @@ function globMatches(glob, url) {
   return new RegExp("^" + [...glob].map((c) => (c === "*" ? ".*" : c === "?" ? "." : c.replace(/[.+^${}()|[\]\\]/g, "\\$&"))).join("") + "$").test(url);
 }
 
-// The scripts manifest.json injects into a frame at `url`, in its order: of
-// the content scripts whose matches it is in, and none of whose
+// When Chrome injects a content script, by its run_at: as the document starts,
+// once it is parsed, or later, once it is idle (the default)
+// (https://developer.chrome.com/docs/extensions/reference/manifest/content-scripts#run_time).
+const RUN_AT = { document_start: 0, document_end: 1, document_idle: 2 };
+
+// The scripts manifest.json injects into a frame at `url`, in the order they
+// run: of the content scripts whose matches it is in, and none of whose
 // exclude_matches; and, where they are given, one of whose include_globs and
-// none of whose exclude_globs.
+// none of whose exclude_globs; those run at document_start first, then those
+// at document_end, then the rest, each in the manifest's order. The harness
+// builds the page first and runs them after: a script run at document_start
+// meets the whole document, where Chrome's meets its root element alone.
 export function contentScriptsFor(url, topFrame = true) {
   return manifest.content_scripts
     .filter((cs) => (topFrame || cs.all_frames) && cs.matches.some((p) => matchesPattern(p, url)) &&
       !(cs.exclude_matches || []).some((p) => matchesPattern(p, url)) &&
       (!cs.include_globs || cs.include_globs.some((g) => globMatches(g, url))) &&
       !(cs.exclude_globs || []).some((g) => globMatches(g, url)))
+    .sort((a, b) => RUN_AT[a.run_at || "document_idle"] - RUN_AT[b.run_at || "document_idle"])
     .flatMap((cs) => cs.js || []);
 }
 

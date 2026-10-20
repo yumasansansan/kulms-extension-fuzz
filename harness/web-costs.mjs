@@ -87,6 +87,18 @@ function childCount(node) {
   return n;
 }
 
+// The children that firstElementChild goes through: up to the first that is
+// an element, or all of them where none is (DOM: "the first child of this
+// that is an element").
+function toFirstElement(node) {
+  let n = 0;
+  for (let c = node && node.firstChild; c; c = c.nextSibling) {
+    n++;
+    if (c.nodeType === ELEMENT) break;
+  }
+  return n;
+}
+
 // How many nodes of `root`'s subtree a search in tree order goes through to
 // reach `target`, or all of them when it is not there.
 function reach(root, target) {
@@ -453,6 +465,7 @@ export const WEB = {
     [`${i}.prototype.querySelector`, (self, [s], r) => queryFirst(self, s, r)],
     [`${i}.prototype.querySelectorAll`, (self, [s]) => queryAll(self, s)],
     [`${i}.prototype.children (get)`, (self, a, r) => (liveView(r, self, true), 0)],
+    [`${i}.prototype.firstElementChild (get)`, (self) => toFirstElement(self)],
     [`${i}.prototype.getElementsByTagName`, (self, [name], r) => (liveView(r, self, false), textUnits(name))],
   ])),
   // The element and its ancestors, matched up to the one found (DOM: the
@@ -569,6 +582,7 @@ export const WEB = {
     return tokens.length * (1 + self.length) + units(self.value) + (el ? mutated(el) : 0);
   }])),
   "DOMTokenList.prototype.contains": (self, [t]) => self.length * (1 + stringUnits(t)),
+  "DOMTokenList.prototype.supports": (self, [t]) => textUnits(t), // the token lowercased and looked up among the attribute's supported tokens, or a TypeError where it has none
   "DOMTokenList.prototype.toString": (self, a, r) => units(r),
   "Element.prototype.classList (set)": (self, [v]) => attributeSet(self, v), // [PutForwards=value]
   "DOMTokenList.prototype.length (get)": NOTHING,
@@ -682,6 +696,7 @@ export const WEB = {
   "HTMLAnchorElement.prototype.text (set)": { before: (self) => subtreeSize(self), after: (self, [v]) => textUnits(v) + mutated(self) },
   "HTMLScriptElement.prototype.text (get)": textOf,
   "HTMLScriptElement.prototype.text (set)": { before: (self) => subtreeSize(self), after: (self, [v]) => textUnits(v) + mutated(self) },
+  "HTMLScriptElement.supports": (self, [type]) => textUnits(type), // its type made a string, matched against four
   "HTMLTitleElement.prototype.text (get)": textOf,
   "HTMLTitleElement.prototype.text (set)": { before: (self) => subtreeSize(self), after: (self, [v]) => textUnits(v) + mutated(self) },
   "HTMLFormElement.prototype.submit": (self) => subtreeSize(self),

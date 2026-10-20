@@ -28,6 +28,7 @@ export const OPEN = new Set([
   "S10", // the extension puts in pages <script> and <style> with neither a nonce nor an integrity hash
   "S11", // the extension passes strings to sinks of Trusted Types (innerHTML, DOMParser, a script's src)
   "S12", // the extension reads responses that a redirect brought from where TLS does not vouch for them
+  "S14", // tree-view.js puts in the table, unchecked, the HTML of the tree it kept in the page's localStorage
   "B4", // tool-visibility.js reprocesses the sidebar every 200 ms for as long as the page is open
   "B10", // t() expands replacement patterns in what it puts in a placeholder
   "B12", // values the page writes to its Web Storage make the extension throw
