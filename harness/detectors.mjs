@@ -14,7 +14,10 @@
 //
 // - markup: what the document, its open shadow roots and the documents of its
 //   frames gained, on an element new or old, that runs script, loads from
-//   elsewhere or sends the page elsewhere:
+//   elsewhere or sends the page elsewhere; and what the extension put into
+//   them at any time before the check, though it took it out again, or made
+//   in them without putting it in, where the element acts out of the
+//   document (an image, a video, an audio; recorder() below):
 //   - a <script> of its own text, or one whose src the harness cannot verify
 //     against an integrity hash: one of sha256, sha384 or sha512 that matches
 //     the file, which the harness can tell only of the extension's own files;
@@ -80,11 +83,12 @@
 //   that vouches for their data, and only as far as where it came from.
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import vm from "node:vm";
 import { matchesPattern } from "./chrome.mjs";
 import { EXT, manifest } from "./paths.mjs";
-import { uncounted } from "./work.mjs";
+import { isPaused, uncounted } from "./work.mjs";
 import { preparedScript } from "./contexts.mjs";
 
 // A slip of the code, as V8 and the DOM word what the code does not mean to
@@ -339,14 +343,41 @@ function linksOf(doc) {
   return out;
 }
 
+// A value in a description: the start of it, escaped to one line, and a
+// hash of all of it, by which descriptions are told apart.
+const shown = (v) => `${JSON.stringify(String(v).slice(0, 80))}#${createHash("sha256").update(String(v)).digest("base64").slice(0, 12)}`;
+
+// Whether featuresOf() looks at an attribute of this name (lowercased), by
+// itself: what the recorder below keeps of each value it is given.
+const telling = (name) => name.startsWith("on") || name === "srcdoc" || name === "srcset" || name === "imagesrcset" || FOLLOWED.includes(name) || LOADED.includes(name);
+
+// What the attribute `name` (lowercased) of value `value` makes an element of
+// tag `tag` do (featuresOf()); `rules` for a script of speculation rules.
+function attributeFeatures(tag, name, value, base, own, extension, rules) {
+  const features = [];
+  if (name.startsWith("on")) return [`${name}=${shown(value)}`];
+  if (rules && name === "src") return features; // fetched by nothing (featuresOf())
+  if (name === "srcdoc" && (tag === "iframe" || tag === "frame")) features.push(`srcdoc=${shown(value)}`);
+  if (FOLLOWED.includes(name) || LOADED.includes(name)) {
+    const scheme = schemeOf(value, base);
+    if (scheme === "javascript:" || scheme === "vbscript:") features.push(`${name}=${shown(value)}`);
+    else if ((scheme === "data:" || scheme === "blob:") && (FRAMES.has(tag) || tag === "script")) features.push(`${name}=${shown(value)}`);
+  }
+  if (LOADED.includes(name) && !allowedOrigin(originOf(value, base), own, extension)) features.push(`loads ${name}=${shown(value)}`);
+  if (name === "srcset" || name === "imagesrcset") {
+    for (const candidate of value.split(",")) {
+      const url = candidate.trim().split(/\s+/)[0];
+      if (url && !allowedOrigin(originOf(url, base), own, extension)) features.push(`loads ${name} ${shown(url)}`);
+    }
+  }
+  return features;
+}
+
 // What makes `el` run script, load from elsewhere or send the page
 // elsewhere: short descriptions, the same as long as that does not change
 // (see the top of this file).
 function featuresOf(el, base, own, extension) {
   const features = [];
-  // A value in a description: the start of it, escaped to one line, and a
-  // hash of all of it, by which descriptions are told apart.
-  const shown = (v) => `${JSON.stringify(String(v).slice(0, 80))}#${createHash("sha256").update(String(v)).digest("base64").slice(0, 12)}`;
   const tag = el.localName;
   const attr = (name) => el.getAttribute(name);
   // A script of speculation rules runs no script and fetches no src: what it
@@ -375,28 +406,7 @@ function featuresOf(el, base, own, extension) {
     }
     if (attr("href") !== null && !allowedOrigin(originOf(attr("href"), base), own, extension)) features.push(`loads link ${shown(attr("href"))}`);
   }
-  for (const a of el.attributes) {
-    const name = a.name.toLowerCase();
-    const value = a.value;
-    if (name.startsWith("on")) {
-      features.push(`${name}=${shown(value)}`);
-      continue;
-    }
-    if (rules && name === "src") continue; // fetched by nothing (above)
-    if (name === "srcdoc" && (tag === "iframe" || tag === "frame")) features.push(`srcdoc=${shown(value)}`);
-    if (FOLLOWED.includes(name) || LOADED.includes(name)) {
-      const scheme = schemeOf(value, base);
-      if (scheme === "javascript:" || scheme === "vbscript:") features.push(`${name}=${shown(value)}`);
-      else if ((scheme === "data:" || scheme === "blob:") && (FRAMES.has(tag) || tag === "script")) features.push(`${name}=${shown(value)}`);
-    }
-    if (LOADED.includes(name) && !allowedOrigin(originOf(value, base), own, extension)) features.push(`loads ${name}=${shown(value)}`);
-    if (name === "srcset" || name === "imagesrcset") {
-      for (const candidate of value.split(",")) {
-        const url = candidate.trim().split(/\s+/)[0];
-        if (url && !allowedOrigin(originOf(url, base), own, extension)) features.push(`loads ${name} ${shown(url)}`);
-      }
-    }
-  }
+  for (const a of el.attributes) features.push(...attributeFeatures(tag, a.name.toLowerCase(), a.value, base, own, extension, rules));
   if (ANIMATIONS.has(tag) && /^(?:xlink:)?href$/i.test(attr("attributeName") || "")) {
     for (const name of ["to", "from", "values", "by"]) {
       const value = attr(name);
@@ -452,6 +462,124 @@ export function featuresIn(html, document, own, extension) {
     for (const el of t.content.querySelectorAll("*")) for (const f of featuresOf(el, document.baseURI, own, extension)) out.add(f);
     return out;
   });
+}
+
+// --- What the extension does to the elements of a watched page.
+//
+// The document at the check, compared with the snapshot, does not show markup
+// that the extension puts in and takes out again before the check, nor markup
+// it makes in the page's document without ever putting it in. A browser acts
+// on both: a <script> runs as it is put in, though it be taken out after
+// (the HTML Standard's "prepare the script element"), and an <img> loads its
+// image and runs the handlers of its load and its error from the moment its
+// src is set, in the document or not ("update the image data"), as a media
+// element runs its load algorithm as its src is set; so that innerHTML of a
+// <div> never put in the page runs an onerror that the markup holds. So the
+// elements that the extension's code (not the harness's: uncounted()) puts
+// into a watched document (jsdom's insertion, _insert()), or gives an
+// attribute while they are in it (_attributeChangeSteps()), are kept, and so
+// are those it gives an attribute out of the document that act out of it (an
+// image, a video, an audio), with each value they were given of an attribute
+// that featuresOf() looks at; at the check, what they did (recorder()'s
+// said()) is reported with what the document holds then. Keeping, not
+// looking, while the input runs keeps the watch from slowing the fuzzing:
+// an element is looked at once, however often it is touched.
+const jsdomRequire = createRequire(import.meta.url);
+const NodeImpl = jsdomRequire("jsdom/lib/jsdom/living/nodes/Node-impl.js").implementation;
+const ElementImpl = jsdomRequire("jsdom/lib/jsdom/living/nodes/Element-impl.js").implementation;
+const idlUtils = jsdomRequire("jsdom/lib/generated/idl/utils.js");
+const ACTING_OUT_OF_DOCUMENT = new Set(["img", "video", "audio"]);
+const recorders = new WeakMap(); // a document's impl → what the watch on it keeps (recorder())
+const documentOf = (impl) => (impl.nodeType === 9 ? impl : impl._ownerDocument);
+
+const insertNode = NodeImpl.prototype._insert;
+NodeImpl.prototype._insert = function (nodeImpl, ...rest) {
+  const kept = isPaused() ? undefined : recorders.get(documentOf(this));
+  // A fragment's children move out of it as it is put in.
+  const nodes = kept ? (nodeImpl.nodeType === 11 ? [...nodeImpl._children()] : [nodeImpl]) : null;
+  const out = Reflect.apply(insertNode, this, [nodeImpl, ...rest]);
+  if (nodes && this.isConnected) uncounted(() => { for (const n of nodes) kept.inserted(n); });
+  return out;
+};
+const changeAttribute = ElementImpl.prototype._attributeChangeSteps;
+ElementImpl.prototype._attributeChangeSteps = function (localName, oldValue, value, namespace) {
+  const out = Reflect.apply(changeAttribute, this, [localName, oldValue, value, namespace]);
+  const kept = isPaused() ? undefined : recorders.get(documentOf(this));
+  if (kept) uncounted(() => kept.changed(this, localName, value, namespace));
+  return out;
+};
+
+// What a watch keeps of the elements the extension touches: those it put into
+// the document (inserted()), with every value it gave there an attribute that
+// featuresOf() looks at (changed()), and the images, videos and audios it
+// gave an attribute out of the document. What they did, said() says at the
+// check, once: featuresOf() of each that is no longer in the document as it
+// was found (`found`, from carriers()), and of every value it kept.
+function recorder(own, extension) {
+  const touched = new Set();
+  const values = new Map(); // an element → the [name, value] it was given, of the names telling() takes
+  const watched = {
+    inserted(impl) {
+      for (const d of impl._shadowIncludingInclusiveDescendants()) {
+        if (d.nodeType !== 1) continue;
+        const el = idlUtils.wrapperForImpl(d);
+        if (el) touched.add(el);
+        // A frame put in: its document is watched too.
+        if (el && (d._localName === "iframe" || d._localName === "frame")) {
+          let inner;
+          try {
+            inner = el.contentDocument;
+          } catch {
+            inner = null;
+          }
+          if (inner) watchDocument(inner, watched);
+        }
+      }
+    },
+    changed(impl, localName, value, namespace) {
+      const el = idlUtils.wrapperForImpl(impl);
+      if (!el || (!impl.isConnected && !(el.namespaceURI === "http://www.w3.org/1999/xhtml" && ACTING_OUT_OF_DOCUMENT.has(el.localName)))) return;
+      touched.add(el);
+      if (value === null) return;
+      const attribute = impl._attributeList.find((a) => a._localName === localName && a._namespace === namespace);
+      const name = attribute ? attribute._qualifiedName.toLowerCase() : localName;
+      if (!telling(name)) return;
+      if (!values.has(el)) values.set(el, []);
+      values.get(el).push([name, value]);
+    },
+    said(found) {
+      const out = new Map();
+      const add = (el, features) => {
+        if (!features.length) return;
+        if (!out.has(el)) out.set(el, new Set());
+        for (const f of features) out.get(el).add(f);
+      };
+      for (const el of touched) {
+        const base = el.ownerDocument.baseURI;
+        if (found.has(el)) add(el, found.get(el));
+        else if (!(el.isConnected && el.getRootNode() === el.ownerDocument)) add(el, featuresOf(el, base, own, extension));
+        const rules = el.localName === "script" && isSpeculationRules(el);
+        for (const [name, value] of values.get(el) || []) add(el, attributeFeatures(el.localName, name, value, base, own, extension, rules));
+      }
+      return out;
+    },
+  };
+  return watched;
+}
+
+// Has `kept` keep what the extension does to `document` and the documents of
+// its frames.
+function watchDocument(document, kept) {
+  recorders.set(idlUtils.implForWrapper(document), kept);
+  for (const frame of document.querySelectorAll("iframe, frame")) {
+    let inner;
+    try {
+      inner = frame.contentDocument;
+    } catch {
+      inner = null;
+    }
+    if (inner) watchDocument(inner, kept);
+  }
 }
 
 function describe(el) {
@@ -588,6 +716,8 @@ function watching(context) {
   const styled = () => (document && context.styledByMarkup
     ? new Set([...document.querySelectorAll("[style]")].filter((el) => context.styledByMarkup.has(el)))
     : new Set());
+  const kept = recorder(own, extension);
+  if (document) watchDocument(document, kept);
   const before = {
     carriers: document ? carriers(document, own, extension) : null,
     styled: styled(),
@@ -607,7 +737,11 @@ function watching(context) {
       // since (Browser.forget(), Net.forget()).
       const since = (log, n) => (context.browser.forgotten !== before.forgotten ? log : log.slice(n));
       if (document) {
-        for (const [el, features] of carriers(document, own, extension)) {
+        // What the document holds now, and what the elements the extension
+        // touched said as it touched them (recorder()).
+        const found = carriers(document, own, extension);
+        for (const [el, said] of kept.said(found)) found.set(el, [...new Set([...(found.get(el) || []), ...said])]);
+        for (const [el, features] of found) {
           const had = before.carriers.get(el) || [];
           for (const f of features) {
             if (!had.includes(f)) problems.push(`markup that runs script, loads from elsewhere or sends the page elsewhere: ${describe(el)} (${f})`);

@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { Browser, Clock, EXT, Net, contentScriptsFor, exposeInternals, idle, installCanvas, measure, openBackground, openBareTab, openPopup, openTab, read, watch } from "../harness/index.mjs";
-import { beginInput, endInput } from "../harness/work.mjs";
+import { beginInput, endInput, uncounted } from "../harness/work.mjs";
 import { speculativeLoads } from "../harness/detectors.mjs";
 import { LMS } from "./lms.mjs";
 
@@ -474,6 +474,38 @@ test("the detectors see markup that runs script, a polluted prototype and an err
   assert.match(problems, /<a href="javascript:alert\(1\)">/);
   assert.match(problems, /Object\.prototype gained polluted/);
   assert.match(problems, /boom/);
+});
+
+// What the extension's markup does though it is gone by the check, or was
+// never put in the page (recorder() of harness/detectors.mjs).
+test("the detectors see markup the extension put in and took out, and an image it made out of the page, but not what the harness does", (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const tab = openTab(browser, { url: `${LMS}/portal`, scripts: [], html: '<body><table><tbody id="t"></tbody></table></body>' });
+  const w = watch(tab);
+  const d = tab.document;
+  // Put in and replaced, as a cached tree is by the fresh one.
+  d.getElementById("t").innerHTML = '<tr><td><img src="x" onerror="alert(1)">cached</td></tr>';
+  d.getElementById("t").innerHTML = "<tr><td>fresh</td></tr>";
+  // Made in a <div> never put in the page: the image loads all the same.
+  d.createElement("div").innerHTML = '<img src="x" onerror="alert(2)">';
+  // A <script> put in and taken out at once: it ran.
+  const script = d.createElement("script");
+  script.textContent = "alert(3)";
+  d.body.append(script);
+  script.remove();
+  // A handler on an element never put in that does nothing out of the page,
+  // and what the harness does itself, are not the extension's.
+  d.createElement("div").innerHTML = '<p onclick="alert(4)">p</p>';
+  uncounted(() => {
+    d.body.insertAdjacentHTML("beforeend", '<img id="harness" src="x" onerror="alert(5)">');
+    d.getElementById("harness").remove();
+  });
+  const problems = w.check().filter((p) => p.startsWith("markup")).join("\n");
+  assert.match(problems, /onerror="alert\(1\)"/);
+  assert.match(problems, /onerror="alert\(2\)"/);
+  assert.match(problems, /script of its own text: "alert\(3\)"/);
+  assert.doesNotMatch(problems, /alert\((?:4|5)\)/);
 });
 
 // What each detector sees that the first test does not show (harness/detectors.mjs).
