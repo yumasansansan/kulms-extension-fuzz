@@ -64,6 +64,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [B24](#b24) | 低 | TA 採点支援のページ側の橋渡しが，ページのオブジェクトが投げる例外で止まり，文字列でない ID や名前をそのまま渡す | ファズ | 対応中（[fix/grading-bridge-values](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-bridge-values)） | |
 | [B25](#b25) | 低 | 保存された課題のキャッシュが拡張の書く形でないと，課題パネルと popup の描画が止まる | ファズ | 対応中（[fix/cache-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/cache-shape)） | |
 | [B26](#b26) | 低 | TA 採点支援が，提出日時の列にセルの無い行で，提出一覧の読み取りを止める | 再現・ファズ | 対応中（[fix/grading-list-short-rows](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-list-short-rows)） | |
+| [B27](#b27) | 低 | 上部のピン留めバーが，サイト ID に壊れた `%` の並びがある科目のクリックで URIError を投げ，ツールの一覧を開けない | ファズ | 未着手 | |
 | [P1](#p1) | **高** | 課題取得の N+1 と，タブごとの短い間隔での再取得（LMS への負荷） | 読解 | 未着手 | [#32](https://github.com/Radian0523/kulms-extension/issues/32), [#27](https://github.com/Radian0523/kulms-extension/issues/27) |
 | [P2](#p2) | 中 | フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行い，開かないフォルダを何度も要求し直す | 読解・ファズ | 対応中（一部：[fix/expand-folders-once](https://github.com/yumasansansan/kulms-extension/tree/fix/expand-folders-once)） | [#62](https://github.com/Radian0523/kulms-extension/issues/62) |
 | [P3](#p3) | 中 | `document.body` 全体を監視する MutationObserver が多く，重い | 読解 | 未着手 | |
@@ -555,6 +556,16 @@ specification: the GNU General Public License, version 3 or any later version
 - 対応: そのようにした（[fix/grading-list-short-rows](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-list-short-rows)）．
 - テスト: `fuzz/known/grading-pages/B26-row-short-of-submit-column`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/grading-ta.test.mjs` の「B26」．
 
+### B27
+**上部のピン留めバーが，サイト ID に壊れた `%` の並びがある科目のクリックで URIError を投げ，ツールの一覧を開けない**（低・ファズ）
+
+- 場所: [src/top-favbar.js:93-97](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/src/top-favbar.js#L93-L97)（`getSiteIdFromUrl()`），[:211-214](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/src/top-favbar.js#L211-L214)（`openDropdownFor()`），[:227-238](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/src/top-favbar.js#L227-L238)（`onBarClick()`）
+- 何が起きるか: 上部のピン留めバーは，サイドバーのピン留めした科目のリンクを写して項目を作る．科目の行のクリックでツールを開く設定が有効なとき，項目のクリックはリンクへの移動を止め，リンクの URL からサイト ID を取り出して，その科目のツールの一覧（ドロップダウン）を開く．取り出した ID は，`decodeURIComponent()` で例外を受けずにデコードする．ID に，後に 2 桁の 16 進数が続かない `%` や，UTF-8 にならないバイトの並び（`%E0%A4` など）があると，URIError になる [[ECMA-262]](#参考文献)．URL の解析はそのような `%` をそのまま残す [[URL]](#参考文献) ため，ページのリンクにあれば項目のリンクにも残る．このとき，ドロップダウンは開かず，移動も止めたままなので，クリックは何も起こさない．例外はクリックの処理の中で受けられず，ページのコンソールと `window.onerror` に出る．Sakai が作るサイト ID（UUID や，KULMS の `2026-110-1001-000` の形）には `%` が無いため，通常のページでは起きない．
+- 根拠: 2026-10-16 の毎日のファジング（38959386385）で，ファズ対象 `sidebar` が，ID に `%E0%A4%A` を含む科目で見つけた．上流の v1.22.0（`2f7c918`）にも同じコードがある．
+- 直し方: デコードできないときは，元の文字列を ID として使う（B16 と同じ）．
+- 対応: 未着手．
+- テスト: `fuzz/known/sidebar/B27-malformed-percent-site`（ID の末尾が `%` の科目．`tests/fuzz-inputs.test.mjs` が todo として流す）．
+
 ## 速度・負荷
 
 ### P1
@@ -868,6 +879,7 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
 | P7 | `grading-bridge` | 求めがあり，橋渡しが読む採点の要素の値が，`Array.from()` が長さまで回る値（配列でも Map でもなく，反復子を持たず，`length` が数のもの．罠が橋渡しを通す Proxy で包んだものも）で，持つ要素より大きい長さを言うなら，その入力は走らせない（2026-10-15 まで，配列もどきだけを見ていた） |
 | P8 | `popup` | 表示しているコードの 1 秒の更新には，固定の仕事（16 字のシークレットで測ったもの）に加えて，表示しているシークレットが 16 字を超える分の仕事（1 字あたりの量を対象が測ったもの）を，入力の上限に加える |
 | P9 | `popup` | 入力の中で QR コードを作ったことのあるシークレットの QR コードを再び作るクリックには，固定の仕事に加えて，そのシークレットで初めて作ったときに測った仕事を，入力の上限に加える |
+| B27 | `sidebar` | ピン留めバーの項目のクリックで，`top-favbar.js` の `getSiteIdFromUrl()` がサイト ID をデコードして投げる URIError を数えない |
 | P2 | `resources` | 利用者が何も操作しないうちに，拡張が以前に要求したのと同じフォルダの操作を再び要求した場合，サーバーは 404 で答える |
 
 S2，S8，S9 の正規表現は，以前は入力を切って避けていた（サイト情報のページを 512 バイト，KULASIS のページを 16,384 バイトで）．現在は入力を切らず，正規表現のみを線形のエンジンに移す．線形のエンジンは同じ一致を入力長に比例する時間で見つけるので，ほかの部分の遅さは，そのまま数えて判定できる．
@@ -958,6 +970,9 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
   - `site-contact` は，サーバーの pages.json の `placementId` が `length` を持つオブジェクトのとき，`encodeURIComponent()` の仕事を，そのオブジェクトの `length`（2^53）で数えていた．ハーネスの数え方の誤りであり，文字列を受ける組み込み関数と Web API は，仕様が引数から作る文字列の長さで数えるようにした（同上）．
   - `totp-register` は，ページの sessionStorage に保留された長いシークレットを登録補助が background に保存させ，`encryptSecret()` が B22 の RangeError を受けた．この対象には B22 の回避が無かったので，加えた．
   - `popup` は，数百字のシークレットの QR コードを 7 回表示する入力で，線形のコードの上限を超えた．popup は表示のたびに QR コードを作り直す（P9 として載せた）．
+- 2026-10-16 に push した `205e6c5` の CI（38916378946）は通った．同じ版の毎日のファジング（38959386385）は，`grading-pages` と `sidebar` で止まった．その後の 3 回（39063563307，39159694668，39329795043）は，前の回に止まった入力がなお止まるため，この 2 対象をファジングせずに止まった．
+  - `grading-pages` は，対象がページの役で sessionStorage に書く状態の文字列が，段で長くなって保存領域の上限（500 万コード単位）を超え，その書き込みが QuotaExceededError を投げた．拡張ではなく対象の誤りであり，ほかの対象と同じく，保存領域に入らない値は書かないようにした（ブラウザも書かない）．
+  - `sidebar` は，上部のピン留めバーが，サイト ID に壊れた `%` の並びがある科目のクリックで投げる URIError を見つけた（B27 として載せ，回避と既知の入力を加えた）．
 
 ## カバレッジ
 
@@ -998,6 +1013,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 1. **fuzz リポジトリの土台**（済み）: submodule（kulms-extension の fork），ハーネス，テスト，ファズ対象，`ci.yml`，`fuzz.yml`．
 2. **修正と上流への PR**: データ消失（B1，B2．v1.21.1 で取り込まれた）→ セキュリティ（S1〜S8）→ 不具合 → 負荷（P1〜P6）の順に直す．修正には，このリポジトリの回帰テストを付ける．
 3. **挙動が変わるもの**（S1 の表示場所，P1 の取得間隔とリクエスト数，B2 の仕様，P2 の API）は，先に上流で Issue を立てる．
+4. **Chrome の `JSON.stringify()` の速い道の仕事を数える**: ハーネスは V8 の速い道を使わず，規格の手順だけを数えている（「fuzz リポジトリの仕組み」の仕事量）．速い道は循環をループの 20 万回ごとにしか調べず，その間，循環する値を書き出し続ける [[V8JSON]](#参考文献)．そのため，循環する値では，数えた仕事は Chrome の上限にならない（B24）．速い道を使う呼び出し（replacer も gap も無いもの）に循環する値が渡されたとき，循環を見つけるまでに速い道が書き出す分を，その呼び出しの仕事に加える．
 
 ## このリポジトリの方針
 

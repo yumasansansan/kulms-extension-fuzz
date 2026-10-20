@@ -398,7 +398,16 @@ async function run(data) {
     }
     const key = keyOf(w, g);
     const stored = cacheText(input.stored, g ? g.options.map((o) => o.value) : []);
-    if (key !== null && stored !== null) w.sessionStorage.setItem(key, stored);
+    // Statuses past what the page's storage takes (5,000,000 units, as
+    // Chrome's) cannot be there: none are stored. An input's rungs make the
+    // text that long (daily run 38959386385, whose write threw).
+    if (key !== null && stored !== null) {
+      try {
+        w.sessionStorage.setItem(key, stored);
+      } catch (e) {
+        if (!(e && e.name === "QuotaExceededError")) throw e;
+      }
+    }
     // jsdom does not follow links: a click that leaves to a link is kept as a
     // navigation, after asking the page whether it may be unloaded, as
     // harness/contexts.mjs keeps one a script asks for.
@@ -473,9 +482,18 @@ async function run(data) {
         break;
       }
       case "storage": {
+        // What does not fit the storage, with what the extension wrote there,
+        // is not written, as a browser writes nothing then.
         const key = uncounted(() => keyOf(w, g));
         const stored = cacheText(a.cache, g ? g.options.map((o) => o.value) : []);
-        if (key !== null) uncounted(() => (stored === null ? w.sessionStorage.removeItem(key) : w.sessionStorage.setItem(key, stored)));
+        if (key !== null) uncounted(() => {
+          try {
+            if (stored === null) w.sessionStorage.removeItem(key);
+            else w.sessionStorage.setItem(key, stored);
+          } catch (e) {
+            if (!(e && e.name === "QuotaExceededError")) throw e;
+          }
+        });
         break;
       }
       case "resize": w.dispatchEvent(new w.Event("resize")); break;

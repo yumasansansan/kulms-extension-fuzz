@@ -124,6 +124,7 @@ KULMS+ のコードに，外から入ってくる値（シラバスの HTML，Sa
 | `sidebar` | B4 | tool-visibility.js が DOM の変化から 200 ms 後に設定する再処理を，設定させない．再処理は，ページを組んだ後と各操作の後に，対象が自分で呼ぶ |
 | `sidebar` | B12 | ページの localStorage のツールの設定が，オブジェクトでない値か，オブジェクトでない項目や `hasOwnProperty` というキーを持つ項目を含むなら，置かない（途中で書くときも） |
 | `sidebar`，`submission`，`totp-register` | B23 | 拡張のコードが投げた QuotaExceededError を数えない |
+| `sidebar` | B27 | ピン留めバーの項目のクリックで，`top-favbar.js` の `getSiteIdFromUrl()` がサイト ID をデコードして投げる URIError を数えない |
 | `totp-register` | S6 | 鍵にできないほど短いシークレットによる `DataError: Zero-length key is not supported` の未処理の拒否を数えない |
 | `totp-register` | B22 | 登録補助が background に UTF-8 で 32 KiB を超えるシークレットを保存させたとき，`encryptSecret()` が `String.fromCharCode()` で受ける RangeError（background が捕まえて警告する）を数えない |
 | `popup` | S6 | base32 でない文字を含むシークレットを保存したまま「QR」を押す入力は，流さない．8 ビットに満たないシークレットのコードの表示で起きる `DataError: Zero-length key is not supported` の未処理の拒否を数えない |

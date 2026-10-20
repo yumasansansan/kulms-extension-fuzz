@@ -224,6 +224,14 @@ function setsOffB12(text) {
   return Object.values(config).some((entry) => entry && (typeof entry !== "object" || Object.hasOwn(entry, "hasOwnProperty")));
 }
 
+// The URIError that B27 makes, as the detectors tell it: top-favbar.js decodes
+// the site ID of the link of a bar's item (getSiteIdFromUrl()) as the user
+// clicks the item to open its dropdown, and decodeURIComponent() throws on an
+// ID that holds a % not followed by two hex digits, or bytes that are not
+// UTF-8. The frames of decodeURIComponent() are the engine's and the harness's
+// wrapper of it.
+const B27 = /: URIError: URI malformed\n(?:\s+at decodeURIComponent [^\n]*\n)+\s+at getSiteIdFromUrl /;
+
 // The element `a.at` picks of those `selector` finds, or null. Finding what
 // the user clicks is the target's work, not the extension's.
 function pick(selector, a) {
@@ -387,7 +395,12 @@ async function run(data) {
   // that the extension's code lets out is not counted: tool-visibility.js and
   // sidebar-resize.js, the scripts here that write the page's localStorage,
   // do not meet a storage that the page has filled, as the finding says.
-  const problems = seen(watcher).filter((p) => !(open("B23") && /: QuotaExceededError: /.test(p)));
+  // Known: B27. While it is open, the URIError that top-favbar.js lets out as
+  // it decodes the site ID of a bar's item is not counted: the page's links
+  // may hold any ID, and the script decodes it without catching what
+  // decodeURIComponent() throws, as the finding says (daily run 38959386385).
+  const problems = seen(watcher).filter((p) => !(open("B23") && /: QuotaExceededError: /.test(p)) &&
+    !(open("B27") && B27.test(p)));
   if (problems.length) fail(problems.join("\n"));
   judge();
 }

@@ -583,6 +583,27 @@ export const INPUTS = [
     },
   },
   {
+    // One pinned course whose site ID ends in a % that no two hex digits
+    // follow, with a tool, and a click on its item of the bar: top-favbar.js
+    // decodes the ID of the item's link to open the dropdown of its tools,
+    // and decodeURIComponent() throws a URIError (docs/findings.md, B27).
+    file: "known/sidebar/B27-malformed-percent-site",
+    plan: (w) => {
+      sidebarPage(w, {
+        free: Infinity,
+        pinned: [() => {
+          string(w, "2026-110-1001-000%"); string(w, "[2026前期月１]線形代数"); w.bool(false);
+          w.int(0, w.remaining, 0);
+          for (const part of [true, true, true, true, true, false]) w.bool(part);
+          w.int(0, 2, 0); w.bool(true);
+          w.int(0, w.remaining, 1); string(w, "t1"); string(w, "概要"); w.bool(false);
+        }],
+        sites: [],
+        actions: [() => { w.int(0, 14, 3); w.int(0, 65535, 0); }],
+      });
+    },
+  },
+  {
     // A sidebar of two pinned courses and one more, each with tools, its
     // names as KULMS writes them, and what a user does: open the bar's
     // dropdown, move a tool under the toggle, drag the sidebar, let a minute
