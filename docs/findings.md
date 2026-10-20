@@ -252,7 +252,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 暗号学的な検証について: KULMS（Sakai）も KULASIS も，応答に署名を付与しない．したがって，拡張が依拠できる暗号学的な保証は TLS [[RFC8446]](#参考文献) のみであり，TLS が保証するのはデータの送信元のサーバーである．最終的な取得元が https であり，期待するホストであることを確かめれば，TLS による保証をそのまま利用できる．Chrome の拡張は，ホスト権限を宣言したホストとスキームに限り CORS を経ずに取得できる [[ChromeNetwork]](#参考文献) が，取得元の証明書そのものを参照する API は持たない．Firefox では，`webRequest.onHeadersReceived` の blocking リスナーの中で `webRequest.getSecurityInfo()` を呼ぶことにより，証明書チェーンを取得できる [[MDN-getSecurityInfo]](#参考文献)．これを用いれば，大学のホストの証明書（または発行者）を固定（ピン留め）できる．
 - 根拠: コードを読んだ．ハーネスの fetch は，Fetch 標準のリダイレクトの扱い（HTTP fetch と HTTP-redirect fetch），redirect-taint，CORS の判定 [[Fetch]](#参考文献) と，Chrome の拡張の取得の扱い [[ChromeNetwork]](#参考文献) に従い，content script の http への要求は混在コンテンツとして止める [[MixedContent]](#参考文献)．そのうえで，リダイレクトで別のオリジンや http から届いた応答の本文を拡張が読んだ場合に失敗とする（2026-10-14．[harness/net.mjs](../harness/net.mjs)）．ファズ対象 `site-contact` で確かめた（pages.json の取得が外部へリダイレクトされ，転送先が CORS で読み取りを許可した場合に，background はそれを LMS の応答として読む）．
 - 直し方: リダイレクトを想定しない取得には `redirect: "error"` を指定する．ログアウトの検知のためにリダイレクトを扱う `sakaiGet()` は，`redirect: "manual"` を指定して opaque-redirect の応答 [[Fetch]](#参考文献) をログアウトとみなすか，`res.url` のオリジンが `https://lms.gakusei.kyoto-u.ac.jp` であることを確かめてから使用する．
-- 対応: 応答を使う前に，最終的な取得元のオリジン（スキームとホスト）が求めた先と同じであることを確かめ，違えば取得の失敗として扱う（7 か所．[fix/redirect-origin](https://github.com/yumasansansan/kulms-extension/tree/fix/redirect-origin)）．2026-10-20 に v1.22.0 を取り込み，フォルダの取得の確かめを，取得を移した `fetchFolderAction()` に当て直した（「すべて展開」もここを通る）．
+- 対応: 応答を使う前に，最終的な取得元のオリジン（スキームとホスト）が求めた先と同じであることを確かめ，違えば取得の失敗として扱う（7 か所．[fix/redirect-origin](https://github.com/yumasansansan/kulms-extension/tree/fix/redirect-origin)）．2026-10-20 に，ブランチを v1.22.0 の上に作り直し，フォルダの取得の確かめを，取得を移した `fetchFolderAction()` に当て直した（「すべて展開」もここを通る）．
 - テスト: `fuzz/known/site-contact/S12-redirect-elsewhere`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
 ### S13
@@ -631,7 +631,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: `expandAllFolders()` は，閉じたフォルダの先頭を 1 つずつ開く．そのたびにページ全体を POST で取り直し，一覧の tbody を丸ごと置き換えて，置き換えた一覧全体から次の閉じたフォルダを探す．どのフォルダを要求したかを記録していないため，サーバーの答えがまだそのフォルダを閉じたまま示していると（開けなかったときなど），同じフォルダを 30 回まで要求し直す．フォルダが多いと，POST のたびに一覧全体を解析し直すので，仕事は一覧の大きさの最大 30 倍になる．v1.22.0 は，先に Sakai の「すべて展開」（doExpandall）を 1 回送り，それでも閉じたフォルダが残ると，1 つずつ開く．この 1 つずつ開く処理は変わっておらず，答えがフォルダを閉じたまま示すと，同じフォルダを 30 回まで要求し直す．
 - 根拠: 読解．ファズ対象 `resources` が，答えがフォルダを閉じたまま示す入力で，同じ POST を 30 回送り，一覧を 30 回解析し直すのを見つけた（2026-10-14．1 回 19,309 歩で，入力 250 単位の線形の上限 605,692 歩を超えた）．対象は，利用者が何も操作しないうちに拡張が同じフォルダを 2 度要求した場合に失敗とする．v1.22.0 でも，既知の入力は 29 回の求め直しで止まる（2026-10-20）．
 - 直し方: Sakai の `/direct/content/site/{siteId}.json` なら，ツリー全体を 1 回で取れるはず（KULMS で使えるかは要確認）．それを取得して拡張の側で描画する．現在の設計を保つ場合は，要求したフォルダ（collectionId）を記録し，同じフォルダを 2 度は要求しない．
-- 対応: 要求したフォルダを記録し，まだ要求していない閉じたフォルダのみを開くようにした（[fix/expand-folders-once](https://github.com/yumasansansan/kulms-extension/tree/fix/expand-folders-once)）．2026-10-20 に v1.22.0 を取り込み，同じ修正を，一括展開の後の 1 つずつ開く処理に当て直した．ツリー全体を 1 回で取る方法は，上流 Issue で扱う．
+- 対応: 要求したフォルダを記録し，まだ要求していない閉じたフォルダのみを開くようにした（[fix/expand-folders-once](https://github.com/yumasansansan/kulms-extension/tree/fix/expand-folders-once)）．2026-10-20 に，ブランチを v1.22.0 の上に作り直し，同じ修正を，一括展開の後の 1 つずつ開く処理に当て直した．ツリー全体を 1 回で取る方法は，上流 Issue で扱う．
 - テスト: `fuzz/known/resources/P2-folder-stays-closed`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
 ### P3
@@ -955,8 +955,8 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 | fix/web-storage-values の続く修正（2026-10-14） | `submission`，`sidebar` | B12 | 既知の入力（提出の ID が配列でない）とシードが通る |
 | fix/totp-key-once（2026-10-14） | `popup` | P8 | 150 秒（1,687 入力）で失敗なし．`tests/large.test.mjs` の P8 の 2 件が通り，テスト全体も失敗 0．ほかの修正ブランチと衝突なく合わさる（上流が v1.21.1 で自ら直した B5 と B6 の fix/build-contents は，v1.21.1 を基にしたどのブランチとも build.sh で衝突するため除く） |
 | fix/qr-code-once（2026-10-20．v1.22.0 を基にした） | `popup` | P9 | `tests/totp.test.mjs` の P9 の 2 件と既知の入力，毎日のファジング 38802566900 が P9 で止まった入力が，探しても通る．テスト全体も失敗 0．上流の ESLint の警告は変わらない |
-| fix/expand-folders-once の v1.22.0 の取り込み（2026-10-20） | `resources` | P2 | 既知の入力，シード，毎日のファジングのコーパスの 93 入力が，探しても通る（v1.22.0 では既知の入力が 29 回の求め直しで止まる）．テスト全体も失敗 0 |
-| fix/redirect-origin の v1.22.0 の取り込み（2026-10-20） | 取得を行う 5 対象 | S12 | 既知の入力，シード，毎日のファジングのコーパスの 500 入力が，探しても通る．テスト全体も失敗 0 |
+| fix/expand-folders-once の v1.22.0 の上への作り直し（2026-10-20） | `resources` | P2 | 既知の入力，シード，毎日のファジングのコーパスの 93 入力が，探しても通る（v1.22.0 では既知の入力が 29 回の求め直しで止まる）．180 秒（358 回）で失敗なし．テスト全体も失敗 0 |
+| fix/redirect-origin の v1.22.0 の上への作り直し（2026-10-20） | 取得を行う 5 対象 | S12 | 既知の入力，シード，毎日のファジングのコーパスの 500 入力が，探しても通る．テスト全体も失敗 0 |
 | fix/grading-list-short-rows（2026-10-14） | `grading-pages` | B26 | 既知の入力とシードとコーパスの 84 入力が通る．`tests/grading-ta.test.mjs` の B26 のテストが通り，テスト全体も失敗 0．ほかの修正ブランチと衝突なく合わさる（fix/build-contents を除く．上と同じ理由） |
 | fix/validate-totp-secret の続く修正（2026-10-14） | `totp-register` | S6 | 既知の入力とシードを含む 55 入力が通る．同日に加えた更新時の移行の修正は，`tests/totp.test.mjs` の S6 のテスト（更新時の移行）が通り，ほかの 29 本と衝突なく合わさる（`git merge-tree`） |
 | fix/validate-totp-secret の 2 つめの続く修正（2026-10-14） | `popup`，`totp-register` | S6 | `popup` の S6 の既知の入力 2 件と，毎日のファジング（38474299674）が `popup` で止まった入力と，`totp-register` の既知の入力が通る．`tests/totp.test.mjs` の S6 のテスト 5 件が通る．ほかの修正ブランチとは，fix/totp-code-from-background とだけ src/auth-totp.js で衝突する（上の S6 の「対応」） |
