@@ -830,6 +830,59 @@ export const INPUTS = [
     },
   },
   {
+    // The page's localStorage holds an entry under the prefix of tree-view.js's
+    // cache whose text is "null", as any script of the page may have written
+    // it. The page has Sakai's link that expands every folder and no folder
+    // closed, and every folder opens as the page loads (autoExpandAll):
+    // tree-view.js saves the tree at once, and pruneCache() reads savedAt of
+    // what JSON.parse() makes of each entry, null for that one, and catches the
+    // TypeError (docs/findings.md, B30).
+    file: "known/resources/B30-cache-entry-null",
+    plan: (w) => {
+      for (const on of [false, true, false, false]) { w.bool(true); w.bool(on); }
+      w.bool(true); w.int(0, 2, 1); w.int(0, w.remaining, 0); w.bool(true);
+      w.int(0, w.remaining, 1);
+      w.bool(true); w.bool(false); w.int(0, 4, 4); string(w, "シラバス.pdf"); w.bool(false);
+      w.bool(false); w.bool(false); string(w, "/group/S/syllabus.pdf");
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 0);
+      w.bool(true); w.bool(true); w.bool(true);
+      w.int(0, w.remaining, 1);
+      w.int(0, 2, 1); string(w, "old"); w.int(0, 2, 2); string(w, "null");
+      w.int(0, 2, 0);
+    },
+  },
+  {
+    // The page's localStorage holds the trees of 19 other pages of Resources,
+    // as tree-view.js writes them, and under the cache's prefix one more entry
+    // whose savedAt is an object whose own toString is not a function, as
+    // JSON gives it and as any script of the page may have written it. The
+    // page has Sakai's link that expands every folder and no folder closed,
+    // and every folder opens as the page loads (autoExpandAll): tree-view.js
+    // saves the tree at once, and pruneCache(), which then finds more than its
+    // 20 entries, sorts them by savedAt, cannot make that one a number, and
+    // catches the TypeError (docs/findings.md, B30).
+    file: "known/resources/B30-saved-at-unconvertible",
+    plan: (w) => {
+      for (const on of [false, true, false, false]) { w.bool(true); w.bool(on); }
+      w.bool(true); w.int(0, 2, 1); w.int(0, w.remaining, 0); w.bool(true);
+      w.int(0, w.remaining, 1);
+      w.bool(true); w.bool(false); w.int(0, 4, 4); string(w, "シラバス.pdf"); w.bool(false);
+      w.bool(false); w.bool(false); string(w, "/group/S/syllabus.pdf");
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 0);
+      w.bool(true); w.bool(true); w.bool(true);
+      w.int(0, w.remaining, 20);
+      for (let i = 1; i <= 19; i++) {
+        w.int(0, 2, 1); string(w, `/portal/site/S${i}/tool/R|/group/S${i}/`);
+        w.int(0, 2, 0); w.int(0, w.remaining, 0); number(w, 1792540000000 + i);
+      }
+      w.int(0, 2, 1); string(w, "/portal/site/T/tool/R|/group/T/");
+      w.int(0, 2, 2); string(w, '{"html":"","savedAt":{"toString":0}}');
+      w.int(0, 2, 0);
+    },
+  },
+  {
     // pages.json comes by a redirect from an origin the extension has no host
     // permission for, whose server lets it read the answer (CORS: the
     // request's origin, which the redirect hid, "null", with credentials):

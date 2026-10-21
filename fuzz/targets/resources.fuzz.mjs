@@ -212,6 +212,15 @@ function pick(selector, a) {
   });
 }
 
+// The TypeErrors that B30 makes, as the detectors tell them: pruneCache()
+// reads savedAt of what JSON.parse() makes of each entry under the cache's
+// prefix, which is null for an entry of the text "null", and, when it finds
+// more than its 20 entries, sorts them by savedAt, which throws on a savedAt
+// that cannot be made a number (an object whose own toString is not a
+// function, or an array that holds one, as JSON gives them); it catches what
+// either throws.
+const B30 = /^a slip the extension caught at src\/tree-view\.js:\d+ in pruneCache [^\n]*: TypeError: (?:Cannot read properties of null \(reading 'savedAt'\)|Cannot convert object to primitive value)/;
+
 // The key of the cache entry `e` (cacheEntry()) in the page's localStorage.
 const cacheKey = (e, input) => (e.key === null ? `${CACHE_PREFIX}${new URL(URL_OF_PAGE).pathname}|${input.expandAll ? input.expandAll.id : ROOT}` : e.key);
 // What the page's localStorage holds of the cache entry `e`.
@@ -310,9 +319,16 @@ async function run(data) {
     }
     return out;
   });
+  // Known: B30. While it is open, the TypeErrors that pruneCache() catches as
+  // it reads the entries under the cache's prefix are not counted: savedAt of
+  // an entry whose text is "null" (CI runs 39404471638 and 39437098916, daily
+  // run 39495354410), and a savedAt that cannot be made a number, which the
+  // sort of more than 20 entries meets. The page's scripts can write any entry
+  // there, and the script does not look at what an entry is before it reads
+  // it, as the finding says.
   const problems = seen(watcher).filter((p) => {
     const m = /^markup that runs script, loads from elsewhere or sends the page elsewhere: [^\n]* \(([^\n]*)\)$/.exec(p);
-    return !(m && (own.has(m[1]) || kept.has(m[1])));
+    return !(m && (own.has(m[1]) || kept.has(m[1]))) && !(open("B30") && B30.test(p));
   });
   if (problems.length) fail(problems.join("\n"));
   judge();

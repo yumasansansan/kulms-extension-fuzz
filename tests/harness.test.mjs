@@ -548,6 +548,8 @@ test("the detectors see what changes on an old element, scripts and styles with 
   const cssom = d.createElement("span");
   cssom.style.color = "green";
   d.body.append(cssom);
+  // innerHTML gives the element's children, not its own attributes.
+  cssom.innerHTML = "<i>i</i>";
   // Markup of a policy's TrustedHTML, which a page that requires Trusted Types
   // takes, from a policy that keeps only text; an empty string, which it does
   // not take; a policy that lets anything through, and a default policy.
@@ -598,6 +600,48 @@ test("the detectors see what changes on an old element, scripts and styles with 
   assert.match(problems, /a slip the extension caught at Promise\.allSettled\(\).*y is not a function/);
   assert.match(problems, /a request to https:\/\/evil\.example\/leak\?x=1, outside the extension's host permissions/);
   assert.doesNotMatch(problems, /var page/, "the page's own script is not reported");
+});
+
+// jsdom's selector engine reads `host` of the node a query starts from and of
+// each node above it, and on a link that getter parses the link's URL anew,
+// however long it is: what the harness does as nodes are put in finds scripts
+// and style attributes by name (harness/contexts.mjs).
+test("what the harness does as links are put in a page reads none of their URLs, and finds the scripts and styles under them", async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const tab = openTab(browser, { url: `${LMS}/portal`, scripts: [], html: '<body><div id="d"></div></body>' });
+  const watcher = watch(tab);
+  const w = tab.window;
+  let reads = 0;
+  for (const C of [w.HTMLAnchorElement, w.HTMLAreaElement]) {
+    for (const key of ["href", "origin", "protocol", "username", "password", "host", "hostname", "port", "pathname", "search", "hash"]) {
+      const d = Object.getOwnPropertyDescriptor(C.prototype, key);
+      Object.defineProperty(C.prototype, key, { ...d, get() { reads++; return Reflect.apply(d.get, this, []); } });
+    }
+  }
+  const d = tab.document;
+  // Markup put in a link, links with a style attribute put in by markup, and
+  // a link holding a script of the extension's own file put in by the DOM.
+  const a = d.createElement("a");
+  a.setAttribute("href", "/portal/site/S1");
+  d.getElementById("d").append(a);
+  a.innerHTML = '<span style="color: red">線形代数</span>';
+  a.insertAdjacentHTML("afterend", '<a href="/portal/site/S2" style="color: blue"><b>解析</b></a><map><area href="/portal/site/S3"></map>');
+  const holder = d.createElement("a");
+  holder.setAttribute("href", "/portal/site/S4");
+  const script = d.createElement("script");
+  script.setAttribute("src", w.chrome.runtime.getURL("src/grading-ta-page.js"));
+  holder.append(script);
+  const loaded = new Promise((resolve) => script.addEventListener("load", resolve));
+  d.getElementById("d").append(holder);
+  await loaded;
+  await idle();
+  assert.equal(reads, 0, "no URL of a link is read");
+  const problems = watcher.check().join("\n");
+  assert.match(problems, /an inline style that markup or setAttribute\(\) gave.*<span style="color: red">/);
+  assert.match(problems, /an inline style that markup or setAttribute\(\) gave.*<a href="\/portal\/site\/S2" style="color: blue">/);
+  assert.doesNotMatch(problems, /<a href="\/portal\/site\/S1">/, "innerHTML gives the link its children, not a style");
+  assert.match(problems, /script from "chrome-extension:\/\/\w+\/src\/grading-ta-page\.js"#\S+ that no integrity hash verifies/);
 });
 
 // chrome.tabs as Chrome's documentation has it

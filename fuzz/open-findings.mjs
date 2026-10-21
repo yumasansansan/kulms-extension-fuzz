@@ -45,6 +45,7 @@ export const OPEN = new Set([
   "B25", // a stored cache of assignments that is not shaped as the extension writes it stops the popup
   "B26", // a row of a list of submissions with no cell at the column of the submission time stops the reading of the list
   "B27", // the top bar throws a URIError on a click of a pinned course whose site ID holds a %-sequence that cannot be decoded
+  "B30", // pruneCache() catches the TypeErrors of entries of the tree's cache that are not as tree-view.js writes them
   "P2", // expandAllFolders() asks again for a folder the server shows still closed, up to 30 times, and goes through the whole listing each time
   "P6", // the background builds its Shift_JIS table on its first search, about 156,000 steps
   "P7", // the page bridge loops to an array-like's length, not to what it holds

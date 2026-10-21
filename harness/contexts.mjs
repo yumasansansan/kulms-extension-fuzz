@@ -282,11 +282,24 @@ function watchCatching(context, realm, target) {
 // without 'unsafe-inline' blocks, unlike a style the CSSOM sets: a clone or
 // an imported copy of a marked element is marked too. What the harness does
 // itself (uncounted()) marks nothing (harness/detectors.mjs).
+//
+// The style attribute is the one of no namespace named style. What the
+// harness looks for under a node that was put in, here and in
+// loadExtensionScripts(), it finds by name, not by a selector: jsdom's
+// selector engine reads `host` of the node a query starts from and of each
+// node above it, and on a link (<a>, <area>) that getter parses the link's URL
+// anew, however long it is. Nothing of that is counted, but it takes time: on
+// an input of sidebar with long links, one that the daily run 39495354410
+// kept as slow, the look for scripts took 213 of the 518 seconds it ran.
 function watchInlineStyles(context, w) {
   const styled = (context.styledByMarkup = new WeakSet());
+  const markUnder = (root) => {
+    const under = root.nodeType === 1 ? root.getElementsByTagName("*") : root.querySelectorAll ? root.querySelectorAll("*") : [];
+    for (const el of under) if (el.hasAttributeNS(null, "style")) styled.add(el);
+  };
   const markTree = (root) => {
-    if (root && root.nodeType === 1 && root.hasAttribute("style")) styled.add(root);
-    if (root && root.querySelectorAll) for (const el of root.querySelectorAll("[style]")) styled.add(el);
+    if (root.nodeType === 1 && root.hasAttributeNS(null, "style")) styled.add(root);
+    markUnder(root);
   };
   const markNew = (parent, before) => {
     if (!parent) return;
@@ -316,7 +329,8 @@ function watchInlineStyles(context, w) {
   for (const proto of [w.Element.prototype, w.ShadowRoot.prototype]) {
     wrapSetter(proto, "innerHTML", (node, call) => {
       call();
-      if (!harness()) uncounted(() => markTree(node));
+      // innerHTML gives the element its children, not its own attributes.
+      if (!harness()) uncounted(() => markUnder(node));
     });
   }
   wrapSetter(w.Element.prototype, "outerHTML", (el, call) => {
@@ -866,6 +880,7 @@ function openWindow(browser, context, html, url, clock = null) {
 // and run nowhere in the harness.
 function loadExtensionScripts(browser, context, w) {
   const base = `chrome-extension://${browser.id}/`;
+  const HTML = "http://www.w3.org/1999/xhtml";
   const begun = new WeakSet(); // a script element runs once, though it be put in again
   const load = (script, rel) => tracked(new Promise((resolve) => setTimeout(resolve, 0)).then(() => {
     const file = path.join(EXT, rel);
@@ -883,7 +898,10 @@ function loadExtensionScripts(browser, context, w) {
   new w.MutationObserver((records) => uncounted(() => {
     for (const r of records) {
       for (const node of r.addedNodes) {
-        const scripts = node.nodeName === "SCRIPT" ? [node] : node.querySelectorAll ? [...node.querySelectorAll("script")] : [];
+        // The script elements of the HTML namespace put in, found by name, not
+        // by a selector (as in watchInlineStyles()).
+        const scripts = node.namespaceURI === HTML && node.localName === "script" ? [node]
+          : node.getElementsByTagNameNS ? [...node.getElementsByTagNameNS(HTML, "script")] : [];
         for (const script of scripts) {
           const src = script.getAttribute("src");
           if (src === null || begun.has(script)) continue;
