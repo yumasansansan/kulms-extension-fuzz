@@ -644,6 +644,16 @@ test("what the harness does as links are put in a page reads none of their URLs,
   assert.match(problems, /script from "chrome-extension:\/\/\w+\/src\/grading-ta-page\.js"#\S+ that no integrity hash verifies/);
 });
 
+test("the detectors tell a lone surrogate in a value from the U+FFFD that UTF-8 makes of it, past the start they show", (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const start = "x".repeat(100);
+  const tab = openTab(browser, { url: `${LMS}/portal`, scripts: [], html: `<body><a id="a" href="#" onclick="f('${start}\uFFFD')">a</a></body>` });
+  const watcher = watch(tab);
+  tab.document.getElementById("a").setAttribute("onclick", `f('${start}\uDD2F')`);
+  assert.match(watcher.check().join("\n"), /<a id="a" href="#" onclick="f\('x+"> \(onclick="f\('x+"#\S+\)/, "the handler's code changed");
+});
+
 // chrome.tabs as Chrome's documentation has it
 // (https://developer.chrome.com/docs/extensions/reference/api/tabs), and
 // activeTab (https://developer.chrome.com/docs/extensions/develop/concepts/activeTab).

@@ -291,12 +291,17 @@ async function run(data) {
     const [action, id] = JSON.parse(again[0]);
     fail(`the extension asked the server again, before the user did anything, for ${JSON.stringify(action)} of the folder ${JSON.stringify(id)}, which it had asked for before (${again.length} times again in all)`);
   }
-  // The server's own markup, which the page shows as it came.
+  // The server's own markup, which the page shows as it came: the text that
+  // tree-view.js reads of an answer, its bytes decoded as UTF-8 (fetch()'s
+  // text()). The harness's network sends a string body as its UTF-8, in
+  // which a lone surrogate is U+FFFD (harness/net.mjs): the page has U+FFFD
+  // there, not the surrogate (CI's run 39563165870 stopped on a handler of a
+  // folder's link of Sakai's that held one).
   const own = uncounted(() => {
     const out = new Set();
     for (const a of answers) {
-      const body = typeof a.body === "string" ? a.body : new TextDecoder().decode(Uint8Array.from(a.body || []));
-      for (const f of featuresIn(body, tab.document, new URL(URL_OF_PAGE).origin, `chrome-extension://${browser.id}`)) out.add(f);
+      const bytes = typeof a.body === "string" ? new TextEncoder().encode(a.body) : Uint8Array.from(a.body || []);
+      for (const f of featuresIn(new TextDecoder().decode(bytes), tab.document, new URL(URL_OF_PAGE).origin, `chrome-extension://${browser.id}`)) out.add(f);
     }
     return out;
   });

@@ -539,6 +539,29 @@ export const INPUTS = [
     },
   },
   {
+    // A page of Resources with its form and one folder, and every folder opens
+    // as the page loads (autoExpandAll). The server answers the post with the
+    // folder open and, under it, an open folder whose collection ID holds a
+    // lone surrogate, which the server's UTF-8 cannot carry: the page has
+    // U+FFFD there (the harness's network sends a string body as TextEncoder
+    // writes it), in the onclick of the folder's link, and that is the
+    // server's own markup as the page shows it (CI run 39563165870).
+    file: "seeds/resources/answer-lone-surrogate",
+    plan: (w) => {
+      for (const on of [false, true, false, false]) { w.bool(true); w.bool(on); }
+      w.bool(true); w.int(0, 2, 1); w.int(0, w.remaining, 0); w.bool(true);
+      const folder = (mark, id) => {
+        w.bool(true); w.bool(false); w.int(0, 4, mark); string(w, "資料"); w.bool(false);
+        w.bool(false); w.bool(false); string(w, id);
+      };
+      w.int(0, w.remaining, 1); folder(0, "/group/S/f1/");
+      w.int(0, w.remaining, 1); w.bool(true);
+      w.int(0, w.remaining, 2); folder(1, "/group/S/f1/"); folder(1, "/group/S/f1/f2\uDD2F/");
+      answer(w);
+      w.int(0, w.remaining, 0);
+    },
+  },
+  {
     // The page to submit レポート1, its form with the assignment's reference,
     // the post button, the panel of attachments and its file input; the user
     // drops a PDF on the zone and posts.

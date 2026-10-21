@@ -344,8 +344,11 @@ function linksOf(doc) {
 }
 
 // A value in a description: the start of it, escaped to one line, and a
-// hash of all of it, by which descriptions are told apart.
-const shown = (v) => `${JSON.stringify(String(v).slice(0, 80))}#${createHash("sha256").update(String(v)).digest("base64").slice(0, 12)}`;
+// hash of all of it, by which descriptions are told apart. The hash is of its
+// UTF-16 code units, as a DOM string holds them: of its UTF-8, a lone
+// surrogate would be the U+FFFD that UTF-8 makes of it, and two values that
+// differ only there, past the start shown, would be told for one.
+const shown = (v) => `${JSON.stringify(String(v).slice(0, 80))}#${createHash("sha256").update(Buffer.from(String(v), "utf16le")).digest("base64").slice(0, 12)}`;
 
 // Whether featuresOf() looks at an attribute of this name (lowercased), by
 // itself: what the recorder below keeps of each value it is given.
