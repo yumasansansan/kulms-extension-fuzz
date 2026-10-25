@@ -37,7 +37,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [S10](#s10) | 低 | ページに `<script>` と `<style>` を入れる | 読解・再現 | 未着手 | |
 | [S11](#s11) | 低 | Trusted Types を求めるページで，innerHTML などに文字列を渡す | 読解・再現 | 未着手 | |
 | [S12](#s12) | 低 | 取得したデータを，リダイレクトの行き先を確かめずに使用する | 読解・ファズ | 対応中（[fix/redirect-origin](https://github.com/yumasansansan/kulms-extension/tree/fix/redirect-origin)） | |
-| [S13](#s13) | 低 | ランディングページに CSP などの守りが無く，GitHub Pages ではヘッダーを付けられない | 取得・ブラウザ | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)．埋め込みの禁止などはヘッダーが要る） | |
+| [S13](#s13) | 低 | ランディングページに CSP などの守りが無く，GitHub Pages ではヘッダーを付けられない | 取得・ブラウザ | 修正済（[#77](https://github.com/Radian0523/kulms-extension/pull/77)，[`507fc96`](https://github.com/Radian0523/kulms-extension/commit/507fc96a81f57b5e23c8507303a2c4cfa26703a3)．meta 要素の CSP と Referrer-Policy．埋め込みの禁止などはヘッダーが要り，GitHub Pages では与えられない） | |
 | [S14](#s14) | 中 | 授業資料のツリーのキャッシュを，ページから書き換えられる localStorage に HTML のまま置き，検証せずに表へ入れる | 読解・ファズ | 未着手 | |
 | [B1](#b1) | **高** | 複数タブを開いていると，メモ・完了チェック・非表示が消える | 再現 | 修正済（[#75](https://github.com/Radian0523/kulms-extension/pull/75)，v1.21.1） | |
 | [B2](#b2) | 中 | 非表示にした課題が 30 日後に一覧へ戻る | 再現 | 修正済（[#76](https://github.com/Radian0523/kulms-extension/pull/76)，v1.21.1） | [#74](https://github.com/Radian0523/kulms-extension/issues/74) |
@@ -85,13 +85,13 @@ specification: the GNU General Public License, version 3 or any later version
 | [M5](#保守性) | — | 動かないコード（textbooks.js の設定確認，popup.js の SVG 走査，assignments.js の状態のバッジ） | 読解 | 対応中（[fix/dead-code](https://github.com/yumasansansan/kulms-extension/tree/fix/dead-code)） | |
 | [M6](#保守性) | — | 上流の CI の Auto Assign が，フォークからの PR で必ず失敗する | CI | 対応中（[fix/auto-assign-forks](https://github.com/yumasansansan/kulms-extension/tree/fix/auto-assign-forks)） | |
 | [D1](#d1) | 低 | プライバシーポリシーの TOTP の記述が実装と合わない | 読解 | 対応中（[fix/privacy-storage](https://github.com/yumasansansan/kulms-extension/tree/fix/privacy-storage)） | |
-| [D2](#d2) | 低 | ランディングページが画面の大きさに合わせて伸び縮みせず，狭い画面で内容がはみ出す | ブラウザ | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)） | |
-| [D3](#d3) | 低 | 高さの低い画面で，スクロールで現れる節が透明のまま残る | ブラウザ | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)） | |
-| [D4](#d4) | 低 | 文字と背景のコントラスト比が WCAG 2.2 の AA に届かない（応援のボタンは 1.07:1） | ブラウザ | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)） | |
-| [D5](#d5) | 低 | 機能のカルーセルで「次へ」「前へ」を続けて押すと，押した回数だけ進まない | ブラウザ | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)） | |
-| [D6](#d6) | 低 | スクリーンショットが PNG だけで重い（9 枚で 947,698 バイト） | ブラウザ | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)） | |
-| [D7](#d7) | 低 | ヘッダーの飾りの円が，ヘッダーの下端で切れる | ブラウザ | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)） | |
-| [D8](#d8) | 低 | 多要素認証の案内と設定手順の PDF へのリンクが切れている | 取得 | PR 中（[#77](https://github.com/Radian0523/kulms-extension/pull/77)） | |
+| [D2](#d2) | 低 | ランディングページが画面の大きさに合わせて伸び縮みせず，狭い画面で内容がはみ出す | ブラウザ | 修正済（[#77](https://github.com/Radian0523/kulms-extension/pull/77)，[`507fc96`](https://github.com/Radian0523/kulms-extension/commit/507fc96a81f57b5e23c8507303a2c4cfa26703a3)） | |
+| [D3](#d3) | 低 | 高さの低い画面で，スクロールで現れる節が透明のまま残る | ブラウザ | 修正済（[#77](https://github.com/Radian0523/kulms-extension/pull/77)，[`507fc96`](https://github.com/Radian0523/kulms-extension/commit/507fc96a81f57b5e23c8507303a2c4cfa26703a3)） | |
+| [D4](#d4) | 低 | 文字と背景のコントラスト比が WCAG 2.2 の AA に届かない（応援のボタンは 1.07:1） | ブラウザ | 修正済（[#77](https://github.com/Radian0523/kulms-extension/pull/77)，[`507fc96`](https://github.com/Radian0523/kulms-extension/commit/507fc96a81f57b5e23c8507303a2c4cfa26703a3)） | |
+| [D5](#d5) | 低 | 機能のカルーセルで「次へ」「前へ」を続けて押すと，押した回数だけ進まない | ブラウザ | 修正済（[#77](https://github.com/Radian0523/kulms-extension/pull/77)，[`507fc96`](https://github.com/Radian0523/kulms-extension/commit/507fc96a81f57b5e23c8507303a2c4cfa26703a3)） | |
+| [D6](#d6) | 低 | スクリーンショットが PNG だけで重い（9 枚で 947,698 バイト） | ブラウザ | 修正済（[#77](https://github.com/Radian0523/kulms-extension/pull/77)，[`507fc96`](https://github.com/Radian0523/kulms-extension/commit/507fc96a81f57b5e23c8507303a2c4cfa26703a3)） | |
+| [D7](#d7) | 低 | ヘッダーの飾りの円が，ヘッダーの下端で切れる | ブラウザ | 修正済（[#77](https://github.com/Radian0523/kulms-extension/pull/77)，[`507fc96`](https://github.com/Radian0523/kulms-extension/commit/507fc96a81f57b5e23c8507303a2c4cfa26703a3)） | |
+| [D8](#d8) | 低 | 多要素認証の案内と設定手順の PDF へのリンクが切れている | 取得 | 修正済（[#77](https://github.com/Radian0523/kulms-extension/pull/77)，[`507fc96`](https://github.com/Radian0523/kulms-extension/commit/507fc96a81f57b5e23c8507303a2c4cfa26703a3)） | |
 | [D9](#d9) | 低 | ダウンロードボタンのアイコンが，各ブラウザとストアのものと違う | ブラウザ | 未着手（上流の作者と相談する） | |
 
 ## 問題ではないもの：TOTP の HMAC-SHA-1
@@ -269,8 +269,9 @@ specification: the GNU General Public License, version 3 or any later version
 - 前提: ページは入力を表示せず，ログインやフォームのような，利用者を欺いて操作させる価値のあるものを持たない．そのため，直ちに害が及ぶ経路は見つかっていない．
 - 根拠: 公開中のサイトの応答ヘッダーを取得して確かめた（2026-10-14）．ヘッドレスの Edge 155 と Firefox 158 で，別のオリジンのページから iframe で埋め込んだ．meta 要素で与えた frame-ancestors と X-Frame-Options は無視され（ページは表示され，Edge はコンソールにエラーを出す），レスポンスヘッダーで与えたものだけが埋め込みを止めた．
 - 直し方: インラインのスクリプトとスタイルを外部のファイルに移し，meta 要素で CSP と Referrer-Policy を与える．meta 要素で与えられないものは，ヘッダーを付けられる層（独自ドメインと CDN，または `_headers` などを読むホスティング）を前に置かない限り与えられない．その場合はサイトの URL が変わるので，拡張の `manifest.json` の `homepage_url`，`src/assignments.js`，`popup.html`，README，ストアの掲載情報も変える必要がある．埋め込みを JavaScript で検知して隠す方法は，埋め込む側がそのフレームのスクリプトを止めれば働かない [[OWASP-Clickjacking]](#参考文献)．
-- 対応: 4 ページのスタイルとスクリプトを `docs/assets/site.css` と `site.js` に移した．meta 要素では，CSP（`default-src 'none'`，自身のスクリプト，スタイル，画像のみを許可，`base-uri` と `form-action` は `'none'`，`upgrade-insecure-requests`，Trusted Types を必須とする．スクリプトの無い 2 ページは `script-src 'none'`）と Referrer-Policy を与えた（[#77](https://github.com/Radian0523/kulms-extension/pull/77)）．SRI [[SRI]](#参考文献) とハッシュによるスクリプトの許可は導入していない．CSS や JS を変えるたびにハッシュの更新が必要であり，Pages のキャッシュ（10 分）の間に HTML と食い違うと，ファイルが読み込まれなくなるためである．
+- 対応: 4 ページのスタイルとスクリプトを `docs/assets/site.css` と `site.js` に移した．meta 要素では，CSP（`default-src 'none'`，自身のスクリプト，スタイル，画像のみを許可，`base-uri` と `form-action` は `'none'`，`upgrade-insecure-requests`，Trusted Types を必須とする．スクリプトの無い 2 ページは `script-src 'none'`）と Referrer-Policy を与えた（[#77](https://github.com/Radian0523/kulms-extension/pull/77)．2026-10-23 に上流に取り込まれた）．SRI [[SRI]](#参考文献) とハッシュによるスクリプトの許可は導入していない．CSS や JS を変えるたびにハッシュの更新が必要であり，Pages のキャッシュ（10 分）の間に HTML と食い違うと，ファイルが読み込まれなくなるためである．
 - テスト: ブラウザで，文字列の innerHTML への代入，差し込んだインラインのスクリプト，style 属性，ほかのオリジンの画像が拒まれることを確かめた．
+- 取り込まれた後の確認（2026-10-24）: 公開中の 4 ページは，head の meta 要素で CSP と Referrer-Policy を持ち，インラインのスクリプト，style 要素，style 属性，イベントハンドラーの属性を持たない．Chromium で開くと，文字列の innerHTML への代入（Trusted Types），差し込んだインラインのスクリプト，ほかのオリジンの画像が拒まれ，ページ自体の読み込みでは違反が出ない．応答ヘッダーは取り込む前と同じであり，応答ヘッダーだけを調べる検査（Security Headers など）では，CSP は無いと出る．
 
 ### S14
 **授業資料のツリーのキャッシュを，ページから書き換えられる localStorage に HTML のまま置き，検証せずに表へ入れる**（中・読解・ファズ）
