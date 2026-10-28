@@ -85,20 +85,6 @@ function message(fdp) {
   }
 }
 
-// Known: S7 (docs/findings.md). The messages the listeners throw on while it
-// is open: null (what JSON makes of undefined too), a type that is truthy and
-// not a string, a fetchTextbooks whose courseName is truthy and not a string,
-// or whose siteId or lectureCode is a value that String() cannot convert (an
-// object with a toString or valueOf of its own that is not a function).
-function knownToThrowS7(m) {
-  if (m === null || m === undefined) return true;
-  if (typeof m !== "object") return false;
-  if (m.type && typeof m.type !== "string") return true;
-  if (m.action !== "fetchTextbooks") return false;
-  const convertible = (v) => { try { String(v); return true; } catch { return false; } };
-  return (!!m.courseName && typeof m.courseName !== "string") || [m.siteId, m.lectureCode].some((v) => !!v && !convertible(v));
-}
-
 // What the input gives the target, as fuzz/lib.mjs reads it (fuzz/inputs.mjs
 // checks its seeds and known inputs against this).
 export function read(fdp) {
@@ -168,9 +154,6 @@ async function run(data) {
   ({ body, replies } = input);
   const sent = json(m);
   if (!sent.sendable) return;
-  // Known: S7. While it is open, the messages it throws on are left out, so
-  // that the fuzzing goes on to what is not known yet.
-  if (open("S7") && knownToThrowS7(sent.value)) return;
   // Known: B22 (docs/findings.md). While it is open, no secret longer than
   // LONG_SECRET is saved, by the message or as the store the input begins
   // with: the input is left out.

@@ -99,7 +99,6 @@ KULMS+ のコードに，外から入ってくる値（シラバスの HTML，Sa
 
 | 対象 | ID | 避けているもの |
 |---|---|---|
-| `background-message` | S7 | リスナーが例外を投げるメッセージ．null（undefined も JSON では null），真で文字列でない `type`，真で文字列でない `courseName` の `fetchTextbooks`，`String()` が変換できない `siteId` や `lectureCode` の `fetchTextbooks` |
 | `background-message` | S1 | content script への応答にシークレットがあるかを見ない（LMS の設定パネルが受け取るため） |
 | `background-message` | B20 | `fetchSakaiSiteContact()` が捕まえたプログラムの誤り（警告に書いたものも，catch が受けたものも）を数えない |
 | `background-message` | S2，S8，S9 | これらの正規表現を V8 の線形エンジンで動かし，進んだ長さで数える（入力は切らない） |

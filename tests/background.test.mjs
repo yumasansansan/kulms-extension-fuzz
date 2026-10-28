@@ -105,7 +105,7 @@ test("S4: numeric character references in the syllabus are decoded", { todo: "S4
   assert.equal(book.title, "𠮷野家のⅠ巻");
 });
 
-test("S7: the message listeners survive messages of any shape", { todo: "S7: null and {type: 1} throw a TypeError" }, async (t) => {
+test("S7: the message listeners survive messages of any shape", async (t) => {
   const { browser, bg } = background();
   t.after(() => browser.close());
   // Sent from a content script of the LMS, which can send any JSON.

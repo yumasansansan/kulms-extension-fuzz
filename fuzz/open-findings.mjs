@@ -22,7 +22,6 @@ export const OPEN = new Set([
   "S1", // the plaintext TOTP secret reaches content scripts
   "S2", // the site contact regex is cubic
   "S6", // the popup saves secrets no code can be made from
-  "S7", // the message listeners throw on messages that are not objects
   "S8", // the syllabus parser's regular expressions are quadratic
   "S9", // the regular expressions of course names, TOTP secrets and folders are quadratic
   "S10", // the extension puts in pages <script> and <style> with neither a nonce nor an integrity hash

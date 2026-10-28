@@ -29,9 +29,9 @@ specification: the GNU General Public License, version 3 or any later version
 | [S2](#s2) | 中 | サイト連絡先の正規表現が入力長の 3 乗で遅くなる（ReDoS） | 再現・計測 | PR 中（[#81](https://github.com/Radian0523/kulms-extension/pull/81)） | |
 | [S3](#s3) | 低 | TOTP 登録補助がシークレットをページの sessionStorage に置く | 読解 | 未着手 | |
 | [S4](#s4) | 低 | シラバスの実体参照を二重にデコードし，数値参照は捨てる | 再現 | PR 中（[#83](https://github.com/Radian0523/kulms-extension/pull/83)） | |
-| [S5](#s5) | 低 | 使っていないホスト権限 `radian0523.github.io` | 読解 | PR 中（[#85](https://github.com/Radian0523/kulms-extension/pull/85)） | |
+| [S5](#s5) | 低 | 使っていないホスト権限 `radian0523.github.io` | 読解 | 修正済（[#85](https://github.com/Radian0523/kulms-extension/pull/85)，[`cea1506`](https://github.com/Radian0523/kulms-extension/commit/cea15066ff947348e20a98544f284370aef4f7ec)） | |
 | [S6](#s6) | 低 | 不正な TOTP シークレットを保存できる | 再現・ファズ | 対応中（[fix/validate-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/validate-totp-secret)） | |
-| [S7](#s7) | 低 | 形の崩れたメッセージで onMessage リスナーが例外を投げる | 再現 | PR 中（[#84](https://github.com/Radian0523/kulms-extension/pull/84)） | |
+| [S7](#s7) | 低 | 形の崩れたメッセージで onMessage リスナーが例外を投げる | 再現 | 修正済（[#84](https://github.com/Radian0523/kulms-extension/pull/84)，[`3e98079`](https://github.com/Radian0523/kulms-extension/commit/3e9807953b3d6fdc7b345414b0291e8a36dad097)） | |
 | [S8](#s8) | 低 | シラバス解析の正規表現が入力長の 2 乗で遅くなる | 再現・計測 | PR 中（[#83](https://github.com/Radian0523/kulms-extension/pull/83)） | |
 | [S9](#s9) | 低 | 科目名，TOTP のシークレット，フォルダを読む正規表現が入力長の 2 乗で遅くなる | 解析・再現・計測 | 対応中（[fix/backtracking-regexes](https://github.com/yumasansansan/kulms-extension/tree/fix/backtracking-regexes)．ログインページの分は S1 の前半の [#80](https://github.com/Radian0523/kulms-extension/pull/80)） | |
 | [S10](#s10) | 低 | ページに `<script>` と `<style>` を入れる | 読解・再現 | 未着手 | |
@@ -84,7 +84,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [M3](#保守性) | — | テストが無く，CI は PR 時の ESLint のみ．IIFE 構造でテストしにくい | 読解 | 未着手 | |
 | [M4](#保守性) | — | Safari の Resources がコミットされた複製で，本体から遅れる | 読解 | 未着手 | |
 | [M5](#保守性) | — | 動かないコード（textbooks.js の設定確認，popup.js の SVG 走査，assignments.js の状態のバッジ） | 読解 | 対応中（[fix/dead-code](https://github.com/yumasansansan/kulms-extension/tree/fix/dead-code)） | |
-| [M6](#保守性) | — | 上流の CI の Auto Assign が，フォークからの PR で必ず失敗する | CI | PR 中（[#79](https://github.com/Radian0523/kulms-extension/pull/79)） | |
+| [M6](#保守性) | — | 上流の CI の Auto Assign が，フォークからの PR で必ず失敗する | CI | 修正済（[#79](https://github.com/Radian0523/kulms-extension/pull/79)，[`67de527`](https://github.com/Radian0523/kulms-extension/commit/67de52714b631ce9ceebe3a39dffa83568ec454c)） | |
 | [D1](#d1) | 低 | プライバシーポリシーの TOTP の記述が実装と合わない | 読解 | 対応中（[fix/privacy-storage](https://github.com/yumasansansan/kulms-extension/tree/fix/privacy-storage)） | |
 | [D2](#d2) | 低 | ランディングページが画面の大きさに合わせて伸び縮みせず，狭い画面で内容がはみ出す | ブラウザ | 修正済（[#77](https://github.com/Radian0523/kulms-extension/pull/77)，[`507fc96`](https://github.com/Radian0523/kulms-extension/commit/507fc96a81f57b5e23c8507303a2c4cfa26703a3)） | |
 | [D3](#d3) | 低 | 高さの低い画面で，スクロールで現れる節が透明のまま残る | ブラウザ | 修正済（[#77](https://github.com/Radian0523/kulms-extension/pull/77)，[`507fc96`](https://github.com/Radian0523/kulms-extension/commit/507fc96a81f57b5e23c8507303a2c4cfa26703a3)） | |
@@ -162,7 +162,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 場所: [manifest.json:22](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/manifest.json#L22)
 - 何が起きるか: v1.20.0 で Tips を消してから，`https://radian0523.github.io/*` へ通信するコードは無い（`<a href>` のリンクだけが残っている）．
 - 直し方: 権限を外す．権限を減らす更新では，利用者に再承認を求める警告は出ない．
-- 対応: [fix/drop-unused-host-permission](https://github.com/yumasansansan/kulms-extension/tree/fix/drop-unused-host-permission)．2026-10-25 に上流へ PR を送った（[#85](https://github.com/Radian0523/kulms-extension/pull/85)）．
+- 対応: [fix/drop-unused-host-permission](https://github.com/yumasansansan/kulms-extension/tree/fix/drop-unused-host-permission)．2026-10-25 に上流へ PR を送った（[#85](https://github.com/Radian0523/kulms-extension/pull/85)）．2026-10-27 に上流に取り込まれた（[`cea1506`](https://github.com/Radian0523/kulms-extension/commit/cea15066ff947348e20a98544f284370aef4f7ec)）．
 
 ### S6
 **不正な TOTP シークレットを保存できる**（低・再現・ファズ）
@@ -190,7 +190,7 @@ specification: the GNU General Public License, version 3 or any later version
   - `{action: "fetchTextbooks", siteId: {toString: 0}}`（`String()` が変換できない．ファズ対象 `background-message` が見つけた）
 - 影響: 送信できるのは拡張の文脈に限られるため，堅牢化の範囲の問題である．
 - 直し方: メッセージの形を確かめる．オブジェクトであること，`type` と文字列の項目が文字列であること．`String()` で受けるだけでは足りない（`toString` が関数でないオブジェクトでは，`String()` も例外を投げる）．
-- 対応: メッセージが無いときと，`type` が文字列でないときは，関係のないメッセージとして扱う．`fetchTextbooks` の項目は，文字列でなければ空として扱う（[fix/message-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/message-shape)）．2026-10-25 に上流へ PR を送った（[#84](https://github.com/Radian0523/kulms-extension/pull/84)）．
+- 対応: メッセージが無いときと，`type` が文字列でないときは，関係のないメッセージとして扱う．`fetchTextbooks` の項目は，文字列でなければ空として扱う（[fix/message-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/message-shape)）．2026-10-25 に上流へ PR を送った（[#84](https://github.com/Radian0523/kulms-extension/pull/84)）．2026-10-27 に上流に取り込まれた（[`3e98079`](https://github.com/Radian0523/kulms-extension/commit/3e9807953b3d6fdc7b345414b0291e8a36dad097)）．
 - テスト: `tests/background.test.mjs` の「S7」．
 
 ### S8
@@ -734,7 +734,7 @@ specification: the GNU General Public License, version 3 or any later version
 - **M3**: テストが無く，CI は PR 時の ESLint だけ．関数が IIFE に閉じており，chrome API と DOM に依存するため，単体ではテストしにくい．
 - **M4**: `safari/KULMS+ Extension/Resources/` がコミットされた複製で，本体から遅れる．`087452e` では `src/assignments.js` と `src/submit-detect.js` が古いままだった．v1.21.1 では，上流が src に揃え（[`97a8746`](https://github.com/Radian0523/kulms-extension/commit/97a87462f3ab2950867ef53c2171713a77a7b3a8)），CONTRIBUTING.md に，`./build.sh safari` で生成される複製であるため直接編集しないよう記した．複製をコミットする形は変わらない．
 - **M5**: 動かないコードがある．[src/textbooks.js:7](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/textbooks.js#L7) は，設定を読み込む前に設定を確かめている．[popup.js:901-917](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/popup.js#L901-L917) の SVG 走査は，作った画像を使っていない．[src/assignments.js:478-496](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/assignments.js#L478-L496) の `getStatusBadgeClass()` と `getStatusLabel()` はどこからも呼ばれず，`isGraded()` はこの 2 つからのみ呼ばれる（2026-10-14．カバレッジで見つけ，呼び出しが無いことをコードで確かめた）． 対応: 3 か所を取り除き，`getStatusLabel()` からのみ使われていた翻訳のキー 3 つ（`statusSubmitted`，`statusGraded`，`statusNotSubmitted`）も en と ja から取り除いた．textbooks.js には，教科書を出すかどうかは設定を読み込んでから assignments.js が決めることを，コメントで残した（[fix/dead-code](https://github.com/yumasansansan/kulms-extension/tree/fix/dead-code)．2026-10-14）．上流の ESLint の警告は 46 件から 42 件に減った．減ったのは，取り除いたコードに対する no-unused-vars の 4 件である．
-- **M6**: 上流の CI の Auto Assign（[.github/workflows/ci.yml:17-31](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/.github/workflows/ci.yml#L17-L31)）は，PR が開かれたときに，上流の所有者を担当者として付ける．しかし，フォークからの PR では，`permissions` に `pull-requests: write` を書いても GITHUB_TOKEN は読み取りの権限しか持たない [[GitHubActionsEvents]](#参考文献)．そのため，403（Resource not accessible by integration）で必ず失敗する（[#75](https://github.com/Radian0523/kulms-extension/pull/75)，[#76](https://github.com/Radian0523/kulms-extension/pull/76)，[#77](https://github.com/Radian0523/kulms-extension/pull/77) の記録で確かめた）．PR の内容の検査（ESLint）とは関係しない．直し方は，フォークからの PR ではこのジョブを飛ばすか，担当者を付ける処理を，PR のコードを取り出さない `pull_request_target` のワークフローに分けることである． 対応: 担当者を付ける処理を，`pull_request_target` で動く `auto-assign.yml` に移した．このジョブは PR のコードを取り出さず，実行もせず，PR から届く値をスクリプトに埋め込まないので，信頼できないコードを `pull_request_target` で動かす危険 [[GitHubActionsEvents]](#参考文献) には当たらない．`ci.yml` に残る ESLint のジョブには，読み取りの権限だけを与えた（[fix/auto-assign-forks](https://github.com/yumasansansan/kulms-extension/tree/fix/auto-assign-forks)．2026-10-14）．2026-10-25 に，担当者を，`actions/github-script` ではなく，ランナーにある `gh` で REST API を呼んで付けるようにし（PR の番号などは環境変数で渡す），ジョブに 5 分の時間の上限を付けた．同日に PR を送った（[#79](https://github.com/Radian0523/kulms-extension/pull/79)）．`pull_request_target` は既定のブランチにあるワークフローで動くため，実際の動作は，取り込まれた後に開かれる PR で確かめる．
+- **M6**: 上流の CI の Auto Assign（[.github/workflows/ci.yml:17-31](https://github.com/Radian0523/kulms-extension/blob/20d7da3b9193960a2a1b38f1281e2e12c8155817/.github/workflows/ci.yml#L17-L31)）は，PR が開かれたときに，上流の所有者を担当者として付ける．しかし，フォークからの PR では，`permissions` に `pull-requests: write` を書いても GITHUB_TOKEN は読み取りの権限しか持たない [[GitHubActionsEvents]](#参考文献)．そのため，403（Resource not accessible by integration）で必ず失敗する（[#75](https://github.com/Radian0523/kulms-extension/pull/75)，[#76](https://github.com/Radian0523/kulms-extension/pull/76)，[#77](https://github.com/Radian0523/kulms-extension/pull/77) の記録で確かめた）．PR の内容の検査（ESLint）とは関係しない．直し方は，フォークからの PR ではこのジョブを飛ばすか，担当者を付ける処理を，PR のコードを取り出さない `pull_request_target` のワークフローに分けることである． 対応: 担当者を付ける処理を，`pull_request_target` で動く `auto-assign.yml` に移した．このジョブは PR のコードを取り出さず，実行もせず，PR から届く値をスクリプトに埋め込まないので，信頼できないコードを `pull_request_target` で動かす危険 [[GitHubActionsEvents]](#参考文献) には当たらない．`ci.yml` に残る ESLint のジョブには，読み取りの権限だけを与えた（[fix/auto-assign-forks](https://github.com/yumasansansan/kulms-extension/tree/fix/auto-assign-forks)．2026-10-14）．2026-10-25 に，担当者を，`actions/github-script` ではなく，ランナーにある `gh` で REST API を呼んで付けるようにし（PR の番号などは環境変数で渡す），ジョブに 5 分の時間の上限を付けた．同日に PR を送った（[#79](https://github.com/Radian0523/kulms-extension/pull/79)）．2026-10-27 に上流に取り込まれた（[`67de527`](https://github.com/Radian0523/kulms-extension/commit/67de52714b631ce9ceebe3a39dffa83568ec454c)）．`pull_request_target` は既定のブランチにあるワークフローで動くため，実際の動作は，取り込まれた後に開かれる PR で確かめる．
 
 ## ドキュメント
 
@@ -915,7 +915,6 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
 |---|---|---|
 | S1 | `background-message` | content script への応答にシークレットがあるかを見ない（LMS の設定パネルが受け取るため） |
 | S2 | `site-contact`，`background-message` | その正規表現を V8 の線形エンジンで動かし，進んだ長さで数える（入力は切らない） |
-| S7 | `background-message` | リスナーが例外を投げる形のメッセージを送らない |
 | S8 | `syllabus-detail`，`syllabus-search`，`background-message` | その正規表現を V8 の線形エンジンで動かす（同上） |
 | S9 | `assignments`，`background-message` | その正規表現を V8 の線形エンジンで動かす（同上） |
 | B10 | `i18n` | `$` を含む置換値では，拡張の文の `t()` を呼ばない（値が置換の記法として読まれ，結果が崩れる．置き場所が 2 つある文では，結果と仕事が値の長さの 2 乗や 3 乗で伸びる） |
@@ -1064,6 +1063,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
   - ページのリンクを押す対象は，jsdom がリンクの移動を実装していない（移動すると「実装されていない」という誤りを出す）ため，すべてのクリックの既定の動作を取り消していた．拡張がリンクを押しうる `totp-register` と `resources` では，`javascript:` のリンクのクリックだけは取り消さないようにした（`fuzz/lib.mjs` の `cancelFollowing()`）．
   - 対象は，検出器を `openTab()` の後に作っていた．`openTab()` は content script をその場で同期的に動かすので，content script が動き始めるときに同期的にしたこと（誤り，マークアップ，移動）は，検出器の基準の側に入っていた．登録補助は，コードを作るところのほかはすべて同期的に行う．`openTab()` に，content script を動かす直前に呼ぶ `beforeScripts` を加え，`totp-register` は検出器と警告の記録をそこで作るようにした．ほかの対象は，次に同じように直す．
   - これらの後，`totp-register` のシード，既知の入力，毎日のファジングのコーパスと残した入力の 71 入力のうち 25 入力が，B31 の報告だけで止まった（シードの `registration` を含む）．B31 を避けると 71 入力すべてが通る．`resources` の 127 入力は，`javascript:` のリンクを取り消さないようにしても，すべて通った．
+- 2026-10-27 に，上流が #79（M6），#85（S5），#84（S7）を取り込んだ（main は `3e98079`）．2026-10-28 に，サブモジュールを `3e98079` に進め，S5，S7，M6 を修正済にした．S7 は，テストの todo を外し，`fuzz/open-findings.mjs` から外して，`background-message` の回避（リスナーが例外を投げる形のメッセージを送らないこと）をやめた．S7 の既知の入力は無い．テスト 313 件（205 件が通り，108 件が todo）で失敗は 0 件であり，回避をやめた `background-message` のシード，既知の入力，毎日のファジングのコーパスと残した入力の 170 入力も，時間の判定を外して再生し，すべて通った．
 
 ## カバレッジ
 
