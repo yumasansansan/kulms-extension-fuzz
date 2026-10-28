@@ -57,7 +57,7 @@ import { FuzzedDataProvider } from "@jazzer.js/core";
 import { BACKTRACKING } from "../harness/backtrack.mjs";
 import { EXTENSION_ID } from "../harness/chrome.mjs";
 import { avoidBacktracking } from "../harness/install.mjs";
-import { LINEAR, addUnits, beginInput, endInput, idle, work } from "../harness/work.mjs";
+import { LINEAR, addUnits, beginInput, endInput, idle, uncounted, work } from "../harness/work.mjs";
 import { open } from "./open-findings.mjs";
 import { isSlip } from "../harness/detectors.mjs";
 
@@ -905,6 +905,29 @@ export function seen(watcher) {
     !(open("S10") && /^markup that runs script, loads from elsewhere or sends the page elsewhere: <(?:script|style)\b[^\n]*\((?:script from "chrome-extension:\/\/[^/"\s]+\/[^"\n]*"#\S+ that no integrity hash verifies|style: "(?:[^"\\\n]|\\.)*"#\S+)\)$/.test(p)) &&
     !(open("S11") && /^a string passed to [^\n]*, which a page that requires Trusted Types refuses /.test(p)) &&
     !(open("S12") && /^the body of a response that a redirect brought from [^\n]*, which is not over https from an origin of the extension's host permissions, read in /.test(p)));
+}
+
+// Has the window `w` cancel what a click on its page would do, as the
+// targets that click a page's links do: jsdom does not follow links, and
+// reports one that is followed as not implemented, so a click that the
+// extension leaves to the browser goes nowhere, as one that is not followed.
+// A click on a link (a or area of the HTML namespace) to a javascript: URL is
+// let be: the harness takes it as Chrome does, blocking and reporting one the
+// extension's code makes (harness/contexts.mjs), and the page's own scripts,
+// which would run one the user makes, run nowhere here.
+export function cancelFollowing(w) {
+  w.addEventListener("click", (e) => uncounted(() => {
+    for (let n = e.target; n; n = n.parentNode) {
+      if (n.nodeType !== 1 || n.namespaceURI !== "http://www.w3.org/1999/xhtml" || (n.localName !== "a" && n.localName !== "area") || !n.hasAttribute("href")) continue;
+      let url = null;
+      try {
+        url = new w.URL(n.getAttribute("href"), w.document.baseURI);
+      } catch { /* no URL: nothing to follow */ }
+      if (url && url.protocol === "javascript:") return;
+      break;
+    }
+    e.preventDefault();
+  }));
 }
 
 // A value as a failure message shows it: JSON where JSON can write it (a

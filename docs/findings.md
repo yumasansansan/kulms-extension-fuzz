@@ -69,6 +69,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [B28](#b28) | 中 | ページの先読みが，ツールのリンク（tool-reset）にマウスを乗せただけで，そのツールの状態を初期化させる | 再現・読解 | 未着手 | |
 | [B29](#b29) | 低 | ページの先読みが，マウスを乗せただけの科目の訪問を Sakai に記録させる | 再現・読解 | 未着手 | |
 | [B30](#b30) | 低 | 授業資料のツリーのキャッシュを 20 件に抑える処理が，項目の形を確かめず，TypeError を捕まえて黙って続ける | ファズ・読解 | 未着手 | |
+| [B31](#b31) | 低 | TOTP の登録補助が，QR を読めないときに `javascript:` のリンクを押し，拡張の CSP に拒まれてエラーになる | ブラウザ・再現 | 対応中（[fix/totp-register-fallback](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-register-fallback)） | |
 | [P1](#p1) | **高** | 課題取得の N+1 と，タブごとの短い間隔での再取得（LMS への負荷） | 読解 | 未着手 | [#32](https://github.com/Radian0523/kulms-extension/issues/32), [#27](https://github.com/Radian0523/kulms-extension/issues/27) |
 | [P2](#p2) | 中 | フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行い，開かないフォルダを何度も要求し直す | 読解・ファズ | 対応中（一部：[fix/expand-folders-once](https://github.com/yumasansansan/kulms-extension/tree/fix/expand-folders-once)） | [#62](https://github.com/Radian0523/kulms-extension/issues/62) |
 | [P3](#p3) | 中 | `document.body` 全体を監視する MutationObserver が多く，重い | 読解 | 未着手 | |
@@ -621,6 +622,17 @@ specification: the GNU General Public License, version 3 or any later version
 - 対応: 未着手．
 - テスト: `fuzz/known/resources/B30-cache-entry-null` と `B30-saved-at-unconvertible`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
+### B31
+**TOTP の登録補助が，QR を読めないときに `javascript:` のリンクを押し，拡張の CSP に拒まれてエラーになる**（低・ブラウザ・再現）
+
+- 場所: [src/auth-totp-register.js:105-119](https://github.com/Radian0523/kulms-extension/blob/3e9807953b3d6fdc7b345414b0291e8a36dad097/src/auth-totp-register.js#L105-L119)（`getSecretFromPageText()`），[:71-103](https://github.com/Radian0523/kulms-extension/blob/3e9807953b3d6fdc7b345414b0291e8a36dad097/src/auth-totp-register.js#L71-L103)（`scanQRFromPage()`）
+- 何が起きるか: 登録補助は，京大の認証システムの TOTP の登録の画面（`/user/index.php?app=qrsecret`）で，まず `<img>` の QR からシークレットを読む．読めなければ，テキストに「QR」を含み，href に「void」を含むリンク（「QRコードを読み込めない場合」．先は `javascript:void(0)`）を `click()` で押し，現れたテキストから読む．content script がリンクを押すと，`javascript:` の URL への移動は，移動を始めた世界（content script）の CSP で調べられる．拡張の CSP には `'unsafe-inline'` が無いので，ブラウザは移動を拒み，違反を拡張のエラーとして記録する [[CSP3]](#参考文献)．ページ自身のクリック処理は動くので，テキストは現れ，シークレットは読める．したがって登録はできるが，利用者が登録するたびに，拡張のエラーの一覧に違反が残る．
+  - 2026-10-28 に，実際の画面（`app=qrsecret&st=ga`）を Microsoft Edge 156（Chromium 156）で開いたとき，QR の読み取りがシークレットを得られず，この経路でエラーが出た（「Running the JavaScript URL violates the following Content Security Policy directive 'script-src 'self' 'wasm-unsafe-eval' 'inline-speculation-rules' ...'」）．QR を `<img>` から読めなかった理由は確かめていない．その画面は，ワンタイムパスワードの再設定の途中にしか出ないためである．
+- 根拠: 上の，実際の画面での観察．ハーネスに，拡張のコードが始めた `javascript:` の URL への移動を Chrome と同じく拒んで報告するモデルを加え，同じ形のページで再現した．
+- 直し方: リンクを押すときは，ページのクリック処理は動かしたまま，既定の動作（移動）を取り消す．
+- 対応: そのようにした（[fix/totp-register-fallback](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-register-fallback)）．
+- テスト: `fuzz/known/totp-register/B31-text-link-javascript`（`tests/fuzz-inputs.test.mjs` が todo として流す）．シードの `seeds/totp-register/registration` も同じ形のページである．
+
 ## 速度・負荷
 
 ### P1
@@ -840,6 +852,7 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
   - 誰も受けない例外と Promise の拒否．
   - 拡張が握りつぶしたプログラムの誤り: 拡張のすべての catch 節と，拡張が Promise に渡す拒否の処理に，受けたものを渡す呼び出しを行を動かさずに差し込み（harness/source.mjs），Promise.all，allSettled，any，race が値として返したり捨てたりする拒否も見る．TypeError などの文言（`Cannot read properties`，`is not a function`，`Cannot destructure` など）のものを失敗とする．JSON の構文の誤り，URL でない文字列，壊れた %-エンコードのように，データを読むコードが受けるはずの誤りは除く．
   - 通信: 拡張の host_permissions，そのコンテキストのオリジン，拡張自身のいずれでもない宛先への要求．
+  - `javascript:` の URL への移動: 拡張のコードが，リンクの `click()` か location の設定で始めた `javascript:` の URL への移動．Chrome は，移動を始めた世界の CSP でこれを調べ，拡張の CSP には `'unsafe-inline'` が無いので，移動を拒んで拡張のエラーとして記録する [[CSP3]](#参考文献)．jsdom はページのスクリプトを動かさないので，そのような URL を黙って捨てる．ハーネスは Chrome と同じく拒み，報告する．利用者が押したリンクは，ページの CSP のもとで動くので数えない（2026-10-28 に加えた）．
   - 保証の無い応答: https で host_permissions のオリジンから来たものでも，拡張自身のものでもない応答の本文を，拡張が読むこと（2026-10-14 に加えた）．KULMS と KULASIS は応答に署名しないため，データを保証するのは TLS [[RFC8446]](#参考文献) のみであり，TLS が保証するのは送信元である．応答が拡張に届くかどうかは，ハーネスの fetch が，Fetch 標準のリダイレクトの扱い，redirect-taint，CORS の判定 [[Fetch]](#参考文献) と，Chrome の拡張の取得の扱い [[ChromeNetwork]](#参考文献) に従って決める．content script の http への要求は，混在コンテンツとして止める [[MixedContent]](#参考文献)．
 - **仕事量**（[harness/work.mjs](../harness/work.mjs)）: 遅さは時計で判定せず，拡張がした仕事を数えて判定する（2026-10-07 に作り直した）．
   - 拡張のコードは，関数の呼び出し，ループの 1 周，値をたどる構文（コードに書かれていない文字列どうしの比較，実行時に作るキー，オブジェクトの展開，プロトタイプチェーンをたどる演算子）を数える．組み込み関数と Web API は，標準（ECMAScript [[ECMA-262]](#参考文献)，DOM [[DOM]](#参考文献)，HTML [[HTML]](#参考文献)，URL [[URL]](#参考文献) など）の手順の歩数で数える（[harness/costs.mjs](../harness/costs.mjs)，[harness/web-costs.mjs](../harness/web-costs.mjs)）．標準が上限だけを求めるものはその上限，エンジンに任せるものは Chrome のやり方で数える．DOM は標準の手順どおりに数えるので，Chrome が索引で速く済ませるもの（getElementById など）もツリーをたどる分を数え，数は Chrome にとっての上限になる．正規表現は，V8 と答えを突き合わせながら，バックトラックするエンジンの歩数で数える（[harness/backtrack.mjs](../harness/backtrack.mjs)）．そのエンジンは，戻る先の選択肢を，固定の大きさのブロック（Int32Array）の連なりに積む．貪欲なループは 1 単位ごとに 4 つの数を積み，配列は約 1.3 億要素までしか持てないので，最上段の長いリンクで足りなくなったためである．
@@ -938,6 +951,7 @@ JS はメモリ安全であるため，ASan や MSan が検出する種類の不
 | S14 | `resources` | ページの localStorage に置かれたツリーのキャッシュの HTML のうち，tree-view.js がそのまま表に入れたものを数えない |
 | P2 | `resources` | 利用者が何も操作しないうちに，拡張が以前に要求したのと同じフォルダの操作を再び要求した場合，サーバーは 404 で答える |
 | B30 | `resources` | ページの localStorage のツリーのキャッシュの項目を読む `pruneCache()` が捕まえる TypeError（テキストが `null` の項目の `savedAt` の読み取りと，20 件を超えたときの並べ替えでの，数にできない `savedAt` の比較）を数えない |
+| B31 | `totp-register` | 登録補助の `getSecretFromPageText()` が押すリンクの `javascript:` の URL への移動（Chrome が拡張の CSP で拒むもの）を数えない |
 
 S2，S8，S9 の正規表現は，以前は入力を切って避けていた（サイト情報のページを 512 バイト，KULASIS のページを 16,384 バイトで）．現在は入力を切らず，正規表現のみを線形のエンジンに移す．線形のエンジンは同じ一致を入力長に比例する時間で見つけるので，ほかの部分の遅さは，そのまま数えて判定できる．
 
@@ -1045,6 +1059,11 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
   - 検出器の報告は，値の先頭 80 字とハッシュで値を区別するが，ハッシュを UTF-8 から取っていたので，孤立したサロゲートと U+FFFD の違いが先頭 80 字より後ろにあると，違う値を同じものとみなしていた（今回の入力では違いが先頭 80 字の中にあり，一致しなかった）．拡張がページのハンドラーの値をそう書き換えても見落とすので，ハッシュを UTF-16 の符号単位から取るようにした．
   - サーバーの答えに孤立したサロゲートがある形をシードに加えた（`seeds/resources/answer-lone-surrogate`）．直す前の対象は，直した検出器のもとで，このシードと 39563165870 の入力で止まる．
   - `sidebar` のジョブは 77 分かかった．前の回が遅いとして残した 543 バイトの入力の再生に 32 分かかったが（手元では 292 秒），このジョブの runner は，canary を回す速さが毎日の実行（39495354410）の runner の約 4 分の 1 であった（毎秒約 1.4 万回と約 5.8 万回）．runner の遅さによるものとみられる．
+- 2026-10-28 に，#80 を実際のブラウザで確かめる中で，B31 を見つけた．ファジングがこれまで見落としていた理由は 3 つある．
+  - ハーネスは，拡張のコードが始めた `javascript:` の URL への移動を，Chrome のように拒んで報告していなかった．jsdom はページのスクリプトを動かさないので，そのような URL を黙って捨てる．ハーネスに，Chrome と同じく拒んで報告するモデルを加えた（「fuzz リポジトリの仕組み」の検出器）．
+  - ページのリンクを押す対象は，jsdom がリンクの移動を実装していない（移動すると「実装されていない」という誤りを出す）ため，すべてのクリックの既定の動作を取り消していた．拡張がリンクを押しうる `totp-register` と `resources` では，`javascript:` のリンクのクリックだけは取り消さないようにした（`fuzz/lib.mjs` の `cancelFollowing()`）．
+  - 対象は，検出器を `openTab()` の後に作っていた．`openTab()` は content script をその場で同期的に動かすので，content script が動き始めるときに同期的にしたこと（誤り，マークアップ，移動）は，検出器の基準の側に入っていた．登録補助は，コードを作るところのほかはすべて同期的に行う．`openTab()` に，content script を動かす直前に呼ぶ `beforeScripts` を加え，`totp-register` は検出器と警告の記録をそこで作るようにした．ほかの対象は，次に同じように直す．
+  - これらの後，`totp-register` のシード，既知の入力，毎日のファジングのコーパスと残した入力の 71 入力のうち 25 入力が，B31 の報告だけで止まった（シードの `registration` を含む）．B31 を避けると 71 入力すべてが通る．`resources` の 127 入力は，`javascript:` のリンクを取り消さないようにしても，すべて通った．
 
 ## カバレッジ
 

@@ -205,6 +205,43 @@ ScriptImpl.prototype._cloningSteps = function (copy, ...args) {
 // none); undefined where it has not started.
 export const preparedScript = (el) => prepared.get(idlUtils.implForWrapper(el));
 
+// A navigation to a javascript: URL that the extension's code starts, by
+// activating a link (click()) or by setting the location: Chrome checks the
+// URL against the Content Security Policy of the world that starts the
+// navigation, and the extension's policy (of its content scripts' world and
+// of its pages) has no 'unsafe-inline', so Chrome blocks the navigation and
+// reports the violation as an error of the extension ("Running the JavaScript
+// URL violates the following Content Security Policy directive 'script-src
+// 'self' ...'"; https://w3c.github.io/webappsec-csp/#should-block-navigation-request).
+// A link that the user follows runs under the page's policy. jsdom, which
+// runs no script of a page, would drop the URL unseen: the harness reports
+// one the extension's code starts (not one of uncounted()) as Chrome does, an
+// error of the context, and does not navigate. Each window's document is
+// noted as it opens (openWindow()). Code of the extension that runs in the
+// page's world (the bridge of grading-ta.js) is under the page's policy in
+// Chrome; it starts no navigation.
+const navigating = new WeakMap(); // a window's document impl → { browser, context }
+function blockedJavaScriptURL(documentImpl, url) {
+  const where = navigating.get(documentImpl);
+  if (!where || isPaused()) return false;
+  const shown = JSON.stringify(url.length > 80 ? `${url.slice(0, 80)}…` : url);
+  where.browser.report(where.context, new Error(`Running the JavaScript URL ${shown} violates the Content Security Policy of the extension, and Chrome blocks it`), "navigation");
+  return true;
+}
+for (const file of ["HTMLAnchorElement-impl.js", "HTMLAreaElement-impl.js"]) {
+  const Impl = createRequire(import.meta.url)(`jsdom/lib/jsdom/living/nodes/${file}`).implementation;
+  const follow = Impl.prototype._followAHyperlink;
+  Impl.prototype._followAHyperlink = function (...args) {
+    const url = uncounted(() => {
+      if (this._cannotNavigate()) return null;
+      const href = this.getAttributeNS(null, "href");
+      return href === null ? null : this._ownerDocument.encodingParseAURL(href);
+    });
+    if (url && url.scheme === "javascript" && blockedJavaScriptURL(this._ownerDocument, uncounted(() => whatwgURL.serializeURL(url)))) return undefined;
+    return Reflect.apply(follow, this, args);
+  };
+}
+
 // What the extension's code calls to count its work (harness/work.mjs,
 // harness/install.mjs), in each context.
 const COUNTING = {
@@ -715,6 +752,7 @@ function openWindow(browser, context, html, url, clock = null) {
   virtualConsole.on("jsdomError", (e) => browser.report(context, e.type === "unhandled-exception" && "cause" in e ? e.cause : e, "script"));
   const dom = new JSDOM(html, { url, runScripts: "outside-only", pretendToBeVisual: true, virtualConsole });
   const w = dom.window;
+  navigating.set(idlUtils.implForWrapper(w.document), { browser, context });
   context.global = w;
   context.realm = w;
   context.window = w;
@@ -850,6 +888,7 @@ function openWindow(browser, context, html, url, clock = null) {
   const location = idlUtils.implForWrapper(w.location);
   const navigate = location._locationObjectNavigate.bind(location);
   location._locationObjectNavigate = (url, flags = {}) => {
+    if (url.scheme === "javascript" && blockedJavaScriptURL(idlUtils.implForWrapper(w.document), uncounted(() => whatwgURL.serializeURL(url)))) return undefined;
     if (url.scheme === "javascript" || whatwgURL.serializeURL(url, true) === whatwgURL.serializeURL(idlUtils.implForWrapper(w.document)._URL, true)) {
       return navigate(url, flags);
     }
@@ -924,8 +963,11 @@ function loadExtensionScripts(browser, context, w) {
 // manifest gives that URL (or `scripts`, when given), after `prepare(window)`
 // has had its turn. A frame of a tab is opened with `frameOf` set to the
 // tab's context. Given `clock` (harness/clock.mjs), the page's timers and
-// time are its.
-export function openTab(browser, { url, html = EMPTY_PAGE, net = new Net(), scripts, frameOf = null, prepare, clock = null } = {}) {
+// time are its. The scripts start before openTab() returns, and do at once
+// what they do before their first wait: `beforeScripts(context)`, called
+// after prepare() and before them, is where a watcher (harness/detectors.mjs)
+// is made that sees that too.
+export function openTab(browser, { url, html = EMPTY_PAGE, net = new Net(), scripts, frameOf = null, prepare, beforeScripts, clock = null } = {}) {
   const top = frameOf ? (frameOf.frameOf || frameOf) : null;
   const context = browser.register({
     kind: "tab",
@@ -949,6 +991,7 @@ export function openTab(browser, { url, html = EMPTY_PAGE, net = new Net(), scri
     func: (source, from) => context.evaluate(injectedText(source, from)),
   };
   if (prepare) prepare(w);
+  if (beforeScripts) beforeScripts(context);
   for (const rel of scripts || contentScriptsFor(url, !top)) run(context, rel);
   return context;
 }

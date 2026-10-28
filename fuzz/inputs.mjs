@@ -1033,6 +1033,25 @@ export const INPUTS = [
     },
   },
   {
+    // The page that registers a TOTP secret, as the server's was on
+    // 2026-10-28: jsQR finds nothing in its QR code, and the link that shows
+    // the secret as text ("QRコードを読み込めない場合") goes to
+    // javascript:void(0). The helper clicks it, which the page's own script
+    // answers by showing the secret; Chrome blocks the navigation to the
+    // link's javascript: URL under the extension's policy and reports it as
+    // an error of the extension (docs/findings.md, B31).
+    file: "known/totp-register/B31-text-link-javascript",
+    plan: (w) => {
+      w.bool(true);
+      w.int(0, w.remaining, 0);
+      w.int(0, w.remaining, 1); w.bool(true); w.bool(true); w.bool(true); w.int(0, 2, 1); string(w, "JBSWY3DPEHPK3PXP");
+      w.int(0, w.remaining, 1); w.int(1, 4096, 4); bytes(w, new Array(64).fill(255)); w.int(0, 2, 0);
+      w.bool(true);
+      w.bool(false);
+      w.int(0, 2, 0);
+    },
+  },
+  {
     // The registration page says its secret is "A": the helper takes it, and
     // making a key of it fails.
     file: "known/totp-register/S6-short-secret",

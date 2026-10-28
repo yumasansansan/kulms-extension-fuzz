@@ -55,7 +55,7 @@
 import { Browser, Clock, Net, idle, openTab, uncounted, watch } from "../../harness/index.mjs";
 import { featuresIn } from "../../harness/detectors.mjs";
 import { LMS } from "../../tests/lms.mjs";
-import { answer, bytes, calibrate, fail, json, jsonText, judge, ladder, number, open, provider, seen, string, value, warnings } from "../lib.mjs";
+import { answer, bytes, calibrate, cancelFollowing, fail, json, jsonText, judge, ladder, number, open, provider, seen, string, value, warnings } from "../lib.mjs";
 
 const SCRIPTS = ["src/settings.js", "src/tree-view.js"];
 const URL_OF_PAGE = `${LMS}/portal/site/S/tool/R`;
@@ -268,8 +268,10 @@ async function run(data) {
   const clock = new Clock(Date.UTC(2026, 9, 14, 1, 0));
   tab = openTab(browser, { url: URL_OF_PAGE, html: page(input), scripts: SCRIPTS, clock, net, prepare: (w) => uncounted(() => store(w, input)) });
   // jsdom does not follow links: a click that the extension leaves to the
-  // browser goes nowhere, as one that is not followed.
-  tab.window.addEventListener("click", (e) => e.preventDefault());
+  // browser goes nowhere, as one that is not followed, but one on a link to a
+  // javascript: URL is taken as Chrome takes it (cancelFollowing() of
+  // fuzz/lib.mjs).
+  cancelFollowing(tab.window);
   const watcher = watch(tab);
   const log = warnings(tab);
   await idle();

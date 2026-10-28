@@ -42,7 +42,7 @@
 // of the input, or passes what linear code does with an input of its size
 // (ladder() and judge() of fuzz/lib.mjs, harness/work.mjs).
 import { Browser, aside, idle, installCanvas, openBackground, openTab, uncounted, watch } from "../../harness/index.mjs";
-import { bytes, calibrate, fail, judge, ladder, open, provider, seen, string, warnings } from "../lib.mjs";
+import { bytes, calibrate, cancelFollowing, fail, judge, ladder, open, provider, seen, string, warnings } from "../lib.mjs";
 
 const AUTH = "https://auth.iimc.kyoto-u.ac.jp";
 const SCRIPTS = ["src/auth-totp-register.js"];
@@ -72,6 +72,11 @@ function utf8Length(v) {
 // The slip that B22 makes, as the detectors tell it: the RangeError, its stack
 // in encryptSecret() or in the harness's String.fromCharCode() that it calls.
 const B22_SLIP = /^a slip the extension caught at background\.js:\d+ [^\n]*: RangeError: Maximum call stack size exceeded\n(?:\s+at String\.fromCharCode [^\n]*\n)?\s+at encryptSecret /;
+// The navigation that B31 makes, as the detectors tell it: the helper's
+// getSecretFromPageText() clicks the link that shows the secret as text, on
+// the server's page a link to javascript:void(0), and Chrome blocks the
+// navigation under the extension's policy (harness/contexts.mjs).
+const B31 = /^navigation in tab [^\n]*: Error: Running the JavaScript URL "[^\n]*" violates the Content Security Policy of the extension, and Chrome blocks it\n(?:\s+at [^\n]*\n)*?\s+at getSecretFromPageText \([^\n]*src\/auth-totp-register\.js:/;
 
 // As many of make() as the input has bytes for.
 function list(fdp, make) {
@@ -159,9 +164,10 @@ async function run(data) {
   });
   const prepare = (w) => uncounted(() => {
     // jsdom does not follow links: a click that the extension leaves to the
-    // browser goes nowhere, as one that is not followed. What a link shows,
-    // the page's own script puts in.
-    w.addEventListener("click", (e) => e.preventDefault());
+    // browser goes nowhere, as one that is not followed, but one on a link
+    // to a javascript: URL is taken as Chrome takes it (cancelFollowing() of
+    // fuzz/lib.mjs). What a link shows, the page's own script puts in.
+    cancelFollowing(w);
     input.links.forEach((l, i) => {
       if (l.shows === null) return;
       w.document.getElementById(`link-${i}`).addEventListener("click", () => {
@@ -210,9 +216,11 @@ async function run(data) {
   }
   if (!url.startsWith(`${AUTH}/`)) url = `${AUTH}/`;
   const kept = uncounted(() => input.pending);
-  tab = openTab(browser, { url, html: page(input), scripts: SCRIPTS, prepare });
-  const watcher = watch(tab);
-  const log = warnings(tab);
+  // The helper does at once, as it starts, all but the making of the code:
+  // the watcher and the log are made before it starts (openTab()).
+  let watcher = null;
+  let log = null;
+  tab = openTab(browser, { url, html: page(input), scripts: SCRIPTS, prepare, beforeScripts: (context) => { watcher = watch(context); log = warnings(context); } });
   await idle();
   uncounted(() => {
     const field = tab.document.getElementById("code");
@@ -237,9 +245,15 @@ async function run(data) {
   // save a secret longer than LONG_SECRET (CI run 38743594130 and daily run
   // 38802566900: a secret the page's sessionStorage held, saved on a page that
   // says the registration is done).
+  // Known: B31. While it is open, the navigation to the javascript: URL of
+  // the link that shows the secret as text, which the helper clicks when it
+  // reads no QR code and which Chrome blocks under the extension's policy, is
+  // not counted (seen on the server's page on 2026-10-28; the seed
+  // "registration" makes it).
   const problems = seen(watcher).filter((p) => !(open("B23") && /: QuotaExceededError: /.test(p)) &&
     !(open("S6") && /^unhandled rejection: DataError: Zero-length key is not supported/.test(p)) &&
-    !(open("B22") && savedLong && B22_SLIP.test(p)));
+    !(open("B22") && savedLong && B22_SLIP.test(p)) &&
+    !(open("B31") && B31.test(p)));
   if (problems.length) fail(problems.join("\n"));
   judge();
 }

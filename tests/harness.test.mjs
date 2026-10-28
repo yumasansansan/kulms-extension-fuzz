@@ -654,6 +654,37 @@ test("the detectors tell a lone surrogate in a value from the U+FFFD that UTF-8 
   assert.match(watcher.check().join("\n"), /<a id="a" href="#" onclick="f\('x+"> \(onclick="f\('x+"#\S+\)/, "the handler's code changed");
 });
 
+// Chrome checks a navigation to a javascript: URL against the policy of the
+// world that starts it, and the extension's has no 'unsafe-inline'
+// (harness/contexts.mjs).
+test("a javascript: URL the extension's code navigates to is blocked and reported as Chrome reports it, and one the user follows is not", async (t) => {
+  const browser = new Browser();
+  t.after(() => browser.close());
+  const html = '<body><a id="js" href="javascript:void(0)">QR</a><a id="cancelled" href="javascript:void(1)">x</a>' +
+    '<a id="fragment" href="#x">x</a><map name="m"><area id="area" href="javascript:void(2)"></map></body>';
+  const tab = openTab(browser, { url: `${LMS}/portal`, scripts: [], html });
+  const watcher = watch(tab);
+  const d = tab.document;
+  let handled = 0;
+  uncounted(() => {
+    d.getElementById("js").addEventListener("click", () => handled++);
+    d.getElementById("cancelled").addEventListener("click", (e) => e.preventDefault());
+  });
+  // The user's click, then the extension's: on the link, on one whose click
+  // the page cancels, on a link within the document, on an area; and the
+  // location set.
+  uncounted(() => d.getElementById("js").click());
+  d.getElementById("js").click();
+  d.getElementById("cancelled").click();
+  d.getElementById("fragment").click();
+  d.getElementById("area").click();
+  tab.window.location.href = "javascript:void(3)";
+  await idle();
+  assert.equal(handled, 2, "the page's own handler runs for both clicks");
+  assert.deepEqual(watcher.check().join("\n").match(/Running the JavaScript URL "[^"]*"/g),
+    ['Running the JavaScript URL "javascript:void(0)"', 'Running the JavaScript URL "javascript:void(2)"', 'Running the JavaScript URL "javascript:void(3)"']);
+});
+
 // chrome.tabs as Chrome's documentation has it
 // (https://developer.chrome.com/docs/extensions/reference/api/tabs), and
 // activeTab (https://developer.chrome.com/docs/extensions/develop/concepts/activeTab).
