@@ -70,7 +70,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [B29](#b29) | 低 | ページの先読みが，マウスを乗せただけの科目の訪問を Sakai に記録させる | 再現・読解 | 未着手 | |
 | [B30](#b30) | 低 | 授業資料のツリーのキャッシュを 20 件に抑える処理が，項目の形を確かめず，TypeError を捕まえて黙って続ける | ファズ・読解 | 未着手 | |
 | [B31](#b31) | 低 | TOTP の登録補助が，QR を読めないときに `javascript:` のリンクを押し，拡張の CSP に拒まれてエラーになる | ブラウザ・再現 | 対応中（[fix/totp-register-fallback](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-register-fallback)） | |
-| [B32](#b32) | 低 | TA 採点支援が，ページの sessionStorage に置いた状態の時刻を確かめず，数にできない値で状態の表示を止める | 読解・再現 | 未着手 | |
+| [B32](#b32) | 低 | TA 採点支援が，ページの sessionStorage に置いた状態の時刻を確かめず，数にできない値で状態の表示を止める | 読解・再現 | 対応中（[fix/grading-cache-time](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-cache-time)） | |
 | [P1](#p1) | **高** | 課題取得の N+1 と，タブごとの短い間隔での再取得（LMS への負荷） | 読解 | 未着手 | [#32](https://github.com/Radian0523/kulms-extension/issues/32), [#27](https://github.com/Radian0523/kulms-extension/issues/27) |
 | [P2](#p2) | 中 | フォルダ自動展開が，ページ全体の POST を最大 30 回直列に行い，開かないフォルダを何度も要求し直す | 読解・ファズ | 対応中（一部：[fix/expand-folders-once](https://github.com/yumasansansan/kulms-extension/tree/fix/expand-folders-once)） | [#62](https://github.com/Radian0523/kulms-extension/issues/62) |
 | [P3](#p3) | 中 | `document.body` 全体を監視する MutationObserver が多く，重い | 読解 | 未着手 | |
@@ -645,7 +645,7 @@ specification: the GNU General Public License, version 3 or any later version
   - 時刻が数にならない値（文字列や，`toString` を自分に持たないオブジェクト）では，引き算は NaN になり，返却からの時間の判定が偽になるだけで，止まらない．拡張自身は時刻を `Date.now()` の数で書くので，この形の項目を書くのはページのスクリプトである．
 - 根拠: 2026-10-28 の CI（40626078453）での `grading-pages` の失敗（B18）を調べる中で，同じ警告に至る別の経路として，コードを読んで見つけた．`mergeStatusCache()` を直接呼ぶテストと，ファズ対象 `grading-pages` の入力（下の既知の入力）で再現した．B18 を直したブランチ（fix/grading-ta-input）の拡張でも，この入力は止まる．
 - 直し方: 項目の時刻は，有限の数であるときに限りその値を使い，それ以外は 0（最も古い）とする．置いた状態は，ほかの欄も含めて，拡張が書く形に揃えてから使う（B25 の `normalizeCache()` と同様）．状態を拡張のストレージ（`chrome.storage`）に置けば，ページのスクリプトは書けなくなるが（B12 と S14 の直し方と同じ），ストレージの破損に備えて，同じ確かめは要る．
-- 対応: 未着手．
+- 対応: 項目の時刻は，数であるときに限りその値を使い，それ以外は 0 とみなすようにした（[fix/grading-cache-time](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-cache-time)）．有限でない数（JSON は `1e400` を Infinity として返す）は，返却からの時間の比較が偽になるので，返却した状態として残らない．ほかの欄は，比較と JSON への書き出しにしか使われず，止まらないため，揃えていない．
 - テスト: `fuzz/known/grading-pages/B32-cached-at-unconvertible`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/grading-ta.test.mjs` の「B32」（自分の `toString` を持つオブジェクト，それを含む配列，数でない文字列の時刻）．時刻が有限の数でなければ 0 とみなす仮の修正を当てた拡張では，どちらも通ることを確かめた．
 
 ## 速度・負荷
@@ -1008,6 +1008,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 | fix/validate-totp-secret の続く修正（2026-10-14） | `totp-register` | S6 | 既知の入力とシードを含む 55 入力が通る．同日に加えた更新時の移行の修正は，`tests/totp.test.mjs` の S6 のテスト（更新時の移行）が通り，ほかの 29 本と衝突なく合わさる（`git merge-tree`） |
 | fix/validate-totp-secret の 2 つめの続く修正（2026-10-14） | `popup`，`totp-register` | S6 | `popup` の S6 の既知の入力 2 件と，毎日のファジング（38474299674）が `popup` で止まった入力と，`totp-register` の既知の入力が通る．`tests/totp.test.mjs` の S6 のテスト 5 件が通る．ほかの修正ブランチとは，fix/totp-code-from-background とだけ src/auth-totp.js で衝突する（上の S6 の「対応」） |
 | 27 本すべて（2026-10-14） | — | — | 上の 5 本と 2 本の続く修正を含む修正ブランチ 27 本の 351 組は，どれも衝突なく合わさる（`git merge-tree`）．v1.21.1 を基にした 5 本では，テストは失敗 0 で，それぞれの問題の todo が通る |
+| fix/grading-cache-time（2026-11-01．`3e98079` を基にした） | `grading-pages` | B32 | 既知の入力，シード，40626078453 の入力が，探しても通り，シードから 120 秒（789 回）で失敗なし（時間の判定は外した）．`tests/grading-ta.test.mjs` の B32 のテストが通り，テスト全体も失敗 0 で，新たに通る todo は B32 の 2 件のみ．上流の ESLint の警告は変わらない．未取り込みの修正ブランチ 32 本のいずれとも，main と合わせるときに無い衝突は生じない（`git merge-tree`） |
 
 段で判定するようにした後のファジング（2026-10-07）:
 
