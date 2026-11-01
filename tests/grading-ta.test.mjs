@@ -8,7 +8,8 @@
 //
 // The TA's grading support (grading-ta.js), with what reaches it from the page:
 // the submissions that the bridge in the page's world sends, which a script of
-// the page can forge, and the links of the page.
+// the page can forge, the links of the page, and the statuses it keeps in the
+// page's sessionStorage, which a script of the page can write.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Browser, openTab, until } from "../harness/index.mjs";
@@ -60,4 +61,21 @@ test("B26: a row of the list of submissions with no cell at the column of the su
     <tbody><tr><td><a href="${link}">学生A</a></td><td>未採点 - 提出済み</td></tr></tbody></table>`;
   const map = g.parseSubmissionList(new tab.window.DOMParser().parseFromString(html, "text/html"));
   assert.deepEqual(JSON.parse(JSON.stringify(map)), { "0a1b": { name: "学生A", status: "未採点 - 提出済み", kind: "pendingGrade", submitTime: "", source: "submissionList" } });
+});
+
+// What the extension keeps of a submission returned on the page, as a script
+// of the page can write it in the page's sessionStorage: its time an object of
+// its own toString (JSON gives an object one only by that key), an array that
+// holds one, or what is not a number. Such a time is no time at all, and the
+// status the extension has just read, worked out from the grader's fields,
+// stands.
+test("B32: a status kept in the page's sessionStorage whose time cannot be made a number is taken as long gone", { todo: "B32: shouldKeepReturnedCache() takes the time from the clock's, which throws on it" }, async (t) => {
+  const { tab, g } = await grader(t);
+  const read = { name: "学生A", status: "採点済み", kind: "graded", submitTime: "", source: "originalSubmissions", statusSource: "derived" };
+  for (const cachedAt of [{ toString: 0 }, [{ toString: 0 }], "2026/10/10 12:00"]) {
+    const kept = { name: "学生A", status: "返却済み", kind: "returned", submitTime: "", source: "localReturn", statusSource: "localAction", cachedAt };
+    tab.window.sessionStorage.setItem("kulms-ta-status-map:S:A", JSON.stringify({ version: 1, map: { "0a1b": kept } }));
+    const map = g.mergeStatusCache({ siteId: "S", assignmentId: "A" }, { "0a1b": { ...read } });
+    assert.deepEqual(JSON.parse(JSON.stringify(map)), { "0a1b": read }, JSON.stringify(cachedAt));
+  }
 });

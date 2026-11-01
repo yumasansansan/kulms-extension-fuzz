@@ -169,24 +169,73 @@ function gradingName(w, name) {
 function gradingLink(w, { site, assignment, tool, hex }) {
   w.bool(true); string(w, site); string(w, assignment); string(w, tool); gradingId(w, hex);
 }
+// A field that the target reads as given, by write(), or as any value JSON
+// carries: the value of `any` under `key`, when it has one.
+function gradingField(w, any, key, write) {
+  if (Object.hasOwn(any, key)) { w.bool(false); value(w, any[key]); } else { w.bool(true); write(); }
+}
 // A submission of the grader: of the student `of`, named `name`, its status
-// `status`, submitted or not, graded or not; every field as Sakai gives it.
-function gradingSubmission(w, { of, name, status, submitted, graded }) {
-  w.bool(true); w.bool(true); w.int(0, 255, of);
-  w.bool(true); string(w, name);
-  w.bool(true); w.bool(true); w.pick(GRADING_STATUSES, status);
-  w.bool(true); string(w, submitted ? "2026/10/10 12:00" : "");
-  w.bool(true); w.bool(submitted);
-  w.bool(true); w.bool(false);
-  w.bool(true); w.bool(false);
-  w.bool(true); string(w, graded ? "85" : "");
-  w.bool(true); w.bool(graded);
-  w.bool(true); w.bool(false);
+// `status`, submitted or not, graded or not; every field as Sakai gives it,
+// but those of `any`, each the value there in its place.
+function gradingSubmission(w, { of, name, status, submitted, graded }, any = {}) {
+  gradingField(w, any, "id", () => { w.bool(true); w.int(0, 255, of); });
+  gradingField(w, any, "firstSubmitterName", () => string(w, name));
+  gradingField(w, any, "status", () => { w.bool(true); w.pick(GRADING_STATUSES, status); });
+  gradingField(w, any, "submittedTime", () => string(w, submitted ? "2026/10/10 12:00" : ""));
+  gradingField(w, any, "submitted", () => w.bool(submitted));
+  gradingField(w, any, "draft", () => w.bool(false));
+  gradingField(w, any, "hasHistory", () => w.bool(false));
+  gradingField(w, any, "grade", () => string(w, graded ? "85" : ""));
+  gradingField(w, any, "graded", () => w.bool(graded));
+  gradingField(w, any, "returned", () => w.bool(false));
+}
+// A status that the extension keeps in the page's sessionStorage, of the
+// student `of`: its name, its status (one of the target's STATUSES), kind,
+// submission time, source and source of the status, kept `ago` ms before the
+// page opens; every field as the extension writes it, but those of `any`,
+// each the value there in its place.
+const KEPT_KINDS = ["pendingGrade", "inProgress", "notSubmitted", "graded", "returned", "unknown"];
+const KEPT_SOURCES = ["submissionList", "originalSubmissions", "localReturn"];
+const KEPT_STATUS_SOURCES = ["explicit", "derived", "localAction"];
+function gradingKept(w, of, { name, status, kind, submitTime, source, statusSource, ago }, any = {}) {
+  w.bool(true); w.int(0, 255, of);
+  w.bool(true);
+  gradingField(w, any, "name", () => string(w, name));
+  gradingField(w, any, "status", () => { w.bool(true); w.pick(GRADING_STATUSES, status); });
+  gradingField(w, any, "kind", () => w.pick(KEPT_KINDS, kind));
+  gradingField(w, any, "submitTime", () => string(w, submitTime));
+  gradingField(w, any, "source", () => w.pick(KEPT_SOURCES, source));
+  gradingField(w, any, "statusSource", () => w.pick(KEPT_STATUS_SOURCES, statusSource));
+  gradingField(w, any, "cachedAt", () => w.int(0, 10 * 60e3, ago));
 }
 function gradingAction(w, kind, at = 0) {
   w.pick(GRADING_ACTIONS, kind); w.int(0, 65535, at);
 }
 const GRADING_PAGE = { site: "2026-110-1001-000", assignment: "a1b2c3d4", tool: "sakai.assignment.grades" };
+// The grader of GRADING_PAGE's assignment, at its page, as Sakai draws it but
+// for its panel, its count of what is graded, its button to the next
+// submission and its link back to the list, which it has none of: its
+// students `students` (each the hex of an ID and a name), none of them
+// selected, and the submissions it holds, which `submissions` writes. No
+// other control, no table and no answer of the server follow.
+function gradingGraderPage(w, students, submissions) {
+  const { site, assignment, tool } = GRADING_PAGE;
+  w.int(0, 2, 0); string(w, site); string(w, assignment); string(w, tool); gradingId(w, students[0][0]);
+  w.bool(true);
+  w.int(0, 1, 0);
+  w.int(0, 2, 0); string(w, assignment);
+  w.bool(false);
+  w.int(0, 1, 0);
+  w.int(0, w.remaining, students.length);
+  for (const [hex, name] of students) { gradingId(w, hex); gradingName(w, name); }
+  w.bool(false);
+  w.bool(false);
+  w.bool(true); submissions();
+  w.bool(false);
+  w.int(0, w.remaining, 0);
+  w.int(0, w.remaining, 0);
+  w.int(0, w.remaining, 0);
+}
 
 const BRIDGE_FIELDS = ["id", "submissionId", "reference", "firstSubmitterName", "status", "submissionStatus", "submittedTime",
   "submitted", "draft", "hasHistory", "grade", "graded", "returned", "length"];
@@ -1267,19 +1316,71 @@ export const INPUTS = [
       answer(w);
       w.int(0, 3, 1);
       w.int(0, w.remaining, 1);
-      w.bool(true); w.int(0, 255, 1);
-      w.bool(true);
-      string(w, "学生B");
-      w.bool(true); w.pick(GRADING_STATUSES, "返却済み");
-      w.int(0, 5, 4);
-      string(w, "2026/10/10 12:00");
-      w.int(0, 2, 2);
-      w.int(0, 2, 2);
-      w.int(0, 10 * 60e3, 60e3);
+      gradingKept(w, 1, { name: "学生B", status: "返却済み", kind: "returned", submitTime: "2026/10/10 12:00", source: "localReturn", statusSource: "localAction", ago: 60e3 });
       w.int(0, w.remaining, 0);
       w.bool(true);
       w.int(0, w.remaining, 1);
       gradingAction(w, "time"); w.int(0, 10 * 60e3, 1000);
+    },
+  },
+  {
+    // The grader of two students, whose submissions are the first's, graded,
+    // and the second's, waiting for a grade, whose ID is an object of the one
+    // key "of", whose value cannot be made a number: a value the page can
+    // hold, which the target once took for its own way of naming a student
+    // and threw on (CI run 40626078453, while looking into it). Nothing is
+    // done on the page.
+    file: "seeds/grading-pages/submission-id-of",
+    plan: (w) => {
+      gradingGraderPage(w, [["0a1b2c3d", "学生A"], ["1a2b3c4d", "学生B"]], () => {
+        w.int(0, w.remaining, 2);
+        gradingSubmission(w, { of: 0, name: "学生A", status: "採点済み", submitted: true, graded: true });
+        gradingSubmission(w, { of: 1, name: "学生B", status: "未採点 - 提出済み", submitted: true, graded: false }, { id: { of: { toString: 0 } } });
+      });
+      w.int(0, 3, 0);
+      w.int(0, w.remaining, 0);
+      w.bool(false);
+      w.int(0, w.remaining, 0);
+    },
+  },
+  {
+    // The grader of two students, whose submissions are the first's, graded,
+    // and the second's, waiting for a grade, whose ID is an object of its own
+    // toString (JSON gives an object one only by that key). Nothing is done
+    // on the page.
+    file: "known/grading-pages/B18-submission-id-unconvertible",
+    plan: (w) => {
+      gradingGraderPage(w, [["0a1b2c3d", "学生A"], ["1a2b3c4d", "学生B"]], () => {
+        w.int(0, w.remaining, 2);
+        gradingSubmission(w, { of: 0, name: "学生A", status: "採点済み", submitted: true, graded: true });
+        gradingSubmission(w, { of: 1, name: "学生B", status: "未採点 - 提出済み", submitted: true, graded: false }, { id: { toString: 0 } });
+      });
+      w.int(0, 3, 0);
+      w.int(0, w.remaining, 0);
+      w.bool(false);
+      w.int(0, w.remaining, 0);
+    },
+  },
+  {
+    // The grader of two students, whose submissions are the first's, graded,
+    // and the second's, graded with no status, whose status the extension
+    // works out from its fields. The page's sessionStorage keeps the second's
+    // as the extension keeps a submission returned on the page a minute
+    // before, but for its time, an object of its own toString. Nothing is
+    // done on the page.
+    file: "known/grading-pages/B32-cached-at-unconvertible",
+    plan: (w) => {
+      gradingGraderPage(w, [["0a1b2c3d", "学生A"], ["1a2b3c4d", "学生B"]], () => {
+        w.int(0, w.remaining, 2);
+        gradingSubmission(w, { of: 0, name: "学生A", status: "採点済み", submitted: true, graded: true });
+        gradingSubmission(w, { of: 1, name: "学生B", status: "採点済み", submitted: true, graded: true }, { status: "" });
+      });
+      w.int(0, 3, 1);
+      w.int(0, w.remaining, 1);
+      gradingKept(w, 1, { name: "学生B", status: "返却済み", kind: "returned", submitTime: "2026/10/10 12:00", source: "localReturn", statusSource: "localAction", ago: 60e3 }, { cachedAt: { toString: 0 } });
+      w.int(0, w.remaining, 0);
+      w.bool(false);
+      w.int(0, w.remaining, 0);
     },
   },
 ];

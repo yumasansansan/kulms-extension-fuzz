@@ -39,8 +39,9 @@
 //   a page of such tables, or any bytes, with any status and type (answer()
 //   of fuzz/lib.mjs);
 // - what the page's sessionStorage holds under the extension's key of the
-//   page's assignment: nothing, statuses as the extension keeps them, or any
-//   JSON or text;
+//   page's assignment: nothing, statuses as the extension keeps them (each
+//   field as the extension writes it, or any value JSON carries), or any JSON
+//   or text;
 // - what the user answers each time the extension asks whether to leave a
 //   grade unsaved, and after the answers the input gives;
 // - what the user does: a click on a jump button, the choice of another
@@ -65,7 +66,7 @@
 // fuzz/lib.mjs, harness/work.mjs).
 import { Browser, Clock, Net, idle, openTab, uncounted, watch } from "../../harness/index.mjs";
 import { LMS } from "../../tests/lms.mjs";
-import { answer, bytes, calibrate, fail, json, judge, ladder, open, provider, seen, string, value, warnings } from "../lib.mjs";
+import { answer, bytes, calibrate, fail, json, judge, ladder, open, provider, seen, string, unconvertible, value, warnings } from "../lib.mjs";
 
 const SCRIPTS = ["src/settings.js", "src/grading-ta.js"];
 const MINUTE = 60e3;
@@ -90,6 +91,18 @@ function list(fdp, make) {
 
 // One of `words`, as Sakai writes them, or any string.
 const word = (fdp, words) => (fdp.consumeBoolean() ? fdp.pickValue(words) : string(fdp));
+
+// The student `of` of the grader's list (the `of`-th, round the list): the
+// ID of a submission, or the key of a status the extension keeps, as the
+// target puts it in the page. Of a class of its own, so that no value JSON
+// carries is taken for one: such a value may be an object of the one key
+// "of", and one whose "of" cannot be made a number would throw in the
+// target where it finds the student.
+class Of {
+  constructor(of) {
+    this.of = of;
+  }
+}
 
 // An ID as Sakai gives a submission one (lowercase hex and dashes), or any
 // string.
@@ -135,7 +148,7 @@ const control = (fdp) => (fdp.consumeBoolean() ? { input: true } : { button: wor
 function submission(fdp) {
   const or = (make) => (fdp.consumeBoolean() ? make() : json(value(fdp)).value);
   return {
-    id: or(() => (fdp.consumeBoolean() ? { of: fdp.consumeIntegralInRange(0, 255) } : string(fdp))),
+    id: or(() => (fdp.consumeBoolean() ? new Of(fdp.consumeIntegralInRange(0, 255)) : string(fdp))),
     firstSubmitterName: or(() => string(fdp)),
     status: or(() => (fdp.consumeBoolean() ? fdp.pickValue(STATUSES) : string(fdp))),
     submittedTime: or(() => string(fdp)),
@@ -184,20 +197,22 @@ const table = (fdp) => ({
 
 // What the page's sessionStorage holds under the extension's key: nothing,
 // statuses as the extension keeps them (an entry for students of the list or
-// any key, each of a kind and a source as the extension writes them, or any
-// value), or any value JSON carries, or any text.
+// any key: each field of it as the extension writes it, or any value JSON
+// carries, or any value in place of the entry), or any value JSON carries,
+// or any text.
 function cache(fdp) {
+  const or = (make) => (fdp.consumeBoolean() ? make() : json(value(fdp)).value);
   switch (fdp.consumeIntegralInRange(0, 3)) {
     case 0: return null;
     case 1: {
-      const map = list(fdp, (f) => [f.consumeBoolean() ? { of: f.consumeIntegralInRange(0, 255) } : string(f), f.consumeBoolean() ? {
-        name: string(f),
-        status: word(f, STATUSES),
-        kind: f.pickValue(["pendingGrade", "inProgress", "notSubmitted", "graded", "returned", "unknown"]),
-        submitTime: string(f),
-        source: f.pickValue(["submissionList", "originalSubmissions", "localReturn"]),
-        statusSource: f.pickValue(["explicit", "derived", "localAction"]),
-        cachedAt: NOW - f.consumeIntegralInRange(0, 10 * MINUTE),
+      const map = list(fdp, (f) => [f.consumeBoolean() ? new Of(f.consumeIntegralInRange(0, 255)) : string(f), f.consumeBoolean() ? {
+        name: or(() => string(f)),
+        status: or(() => word(f, STATUSES)),
+        kind: or(() => f.pickValue(["pendingGrade", "inProgress", "notSubmitted", "graded", "returned", "unknown"])),
+        submitTime: or(() => string(f)),
+        source: or(() => f.pickValue(["submissionList", "originalSubmissions", "localReturn"])),
+        statusSource: or(() => f.pickValue(["explicit", "derived", "localAction"])),
+        cachedAt: or(() => NOW - f.consumeIntegralInRange(0, 10 * MINUTE)),
       } : json(value(f)).value]);
       return { shaped: map };
     }
@@ -291,7 +306,9 @@ function cacheText(c, ids) {
   if (c === null) return null;
   if ("text" in c) return c.text;
   if ("json" in c) return JSON.stringify(c.json) ?? "null";
-  const map = {};
+  // Of no prototype, so that the key "__proto__" (a student's ID, or any key)
+  // is a key of its own, as in the text that a page can write.
+  const map = Object.create(null);
   for (const [k, entry] of c.shaped) {
     const key = typeof k === "string" ? k : ids.length ? ids[k.of % ids.length] : null;
     if (key !== null) map[key] = entry;
@@ -362,6 +379,28 @@ function setsOffB16(input) {
 // submission time, where it is let out and where the extension catches it.
 const B26 = /TypeError: Cannot read properties of undefined \(reading 'textContent'\)\n\s+at parseSubmissionListGroups /;
 
+// Known: B32 (docs/findings.md). Whether `text`, put in the page's
+// sessionStorage under the extension's key, sets it off: statuses, as
+// loadStatusCache() of grading-ta.js reads them, with an entry of a
+// submission returned on this page (of the kind "returned" and the source
+// "localReturn") whose time cannot be made a number (unconvertible() of
+// lib.mjs), which shouldKeepReturnedCache() takes from the clock's time.
+function setsOffB32(text) {
+  if (text === null) return false;
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return false;
+  }
+  const map = parsed && parsed.version === 1 && parsed.map ? parsed.map : null;
+  if (map === null || typeof map !== "object") return false;
+  return Object.keys(map).some((sid) => {
+    const entry = map[sid];
+    return entry !== null && typeof entry === "object" && entry.kind === "returned" && entry.source === "localReturn" && unconvertible(entry.cachedAt);
+  });
+}
+
 async function run(data) {
   const input = read(provider(data));
   // Known: B16. While it is open, a page whose query, link to the assignment
@@ -369,6 +408,13 @@ async function run(data) {
   // grading-ta.js decodes one is left out: decodeURIComponent() throws a
   // URIError on it, as the finding says.
   if (open("B16") && setsOffB16(input)) return;
+  // Known: B32. While it is open, an input that puts statuses that set it off
+  // (setsOffB32()) in the page's sessionStorage, at the start or by an action,
+  // is left out: grading-ta.js throws on them each time it reads the statuses
+  // of the grader, and shows none, as the finding says.
+  const students = input.grader ? input.grader.options.map((o) => o.value) : [];
+  const caches = [input.stored, ...input.actions.filter((a) => a.kind === "storage").map((a) => a.cache)];
+  if (open("B32") && caches.some((c) => setsOffB32(cacheText(c, students)))) return;
   browser.forget();
   net.forget();
   uncounted(() => {
@@ -391,7 +437,15 @@ async function run(data) {
       const ids = g.options.map((o) => o.value);
       const submissions = g.submissions.map((s) => {
         const copy = { ...s };
-        if (copy.id && typeof copy.id === "object" && "of" in copy.id && Object.keys(copy.id).length === 1) copy.id = ids.length ? ids[copy.id.of % ids.length] : "";
+        if (copy.id instanceof Of) copy.id = ids.length ? ids[copy.id.of % ids.length] : "";
+        // Known: B18 and B24 (docs/findings.md). While both are open, an ID or
+        // a submission time that cannot be made a string (unconvertible() of
+        // lib.mjs) is put in the page as an object that can ({}): the bridge
+        // hands both on as they are (B24), and grading-ta.js makes a property
+        // key of the ID and, for a submission with no status that it takes as
+        // waiting for a grade, a string of the time, which throws (B18), as
+        // the findings say.
+        if (open("B18") && open("B24")) for (const k of ["id", "submittedTime"]) if (unconvertible(copy[k])) copy[k] = {};
         return copy;
       });
       w.document.body.firstElementChild.originalSubmissions = w.JSON.parse(JSON.stringify(submissions));
