@@ -122,6 +122,31 @@ test("S1: a content script of the login pages that asks for the secret is not gi
   assert.deepEqual(leaks(ext.browser), []);
 });
 
+// The registration helper on the page that registers a TOTP secret, which
+// shows the secret as text (jsQR reads no QR code), and then on a page of the
+// same tab that says the registration is done, whose script has put a secret
+// of its own in the page's sessionStorage under the key the helper uses. The
+// harness opens a page in a tab of its own, so a frame of the first tab,
+// which has the tab's ID, stands in for the next page of the tab.
+test("S3: the registration helper keeps the secret it read out of the page's sessionStorage, and the background saves that secret and no other", { todo: "S3: the secret waits in the page's sessionStorage, which the page's scripts read and write" }, async (t) => {
+  const ext = await extension();
+  t.after(() => ext.browser.close());
+  ext.browser.standIns["vendor/jsqr.min.js"] = (w) => { w.jsQR = () => null; };
+  const scripts = ["vendor/jsqr.min.js", "src/auth-totp-register.js"];
+  const page = openTab(ext.browser, { url: QR_URL, html: '<body><p>シークレット: JBSWY3DPEHPK3PXP</p><input type="number"></body>', scripts });
+  await until(() => page.document.querySelector("input").value !== "");
+  assert.equal(page.window.sessionStorage.length, 0, "the page's sessionStorage holds what the helper keeps");
+  openTab(ext.browser, {
+    url: "https://auth.iimc.kyoto-u.ac.jp/user/index.php",
+    html: "<body><p>設定が完了しました</p></body>",
+    scripts,
+    frameOf: page,
+    prepare: (w) => w.sessionStorage.setItem("kulms-totp-pending-secret", "MZXW6YTBOI"),
+  });
+  await idle();
+  assert.equal(await ext.bg.global.loadTotpSecret(), "JBSWY3DPEHPK3PXP");
+});
+
 test("S1: the settings panel on the LMS shows the code and the QR without being handed the secret", { todo: "S1: the panel asks for kulms-totp-load and draws the QR of the secret into the LMS page" }, async (t) => {
   const ext = await extension();
   t.after(() => ext.browser.close());

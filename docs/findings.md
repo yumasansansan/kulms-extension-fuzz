@@ -27,7 +27,7 @@ specification: the GNU General Public License, version 3 or any later version
 |---|---|---|---|---|---|
 | [S1](#s1) | 中 | TOTP の平文シークレットが content script と LMS の DOM に渡る | 再現 | PR 中（前半：[#80](https://github.com/Radian0523/kulms-extension/pull/80)） | |
 | [S2](#s2) | 中 | サイト連絡先の正規表現が入力長の 3 乗で遅くなる（ReDoS） | 再現・計測 | PR 中（[#81](https://github.com/Radian0523/kulms-extension/pull/81)） | |
-| [S3](#s3) | 低 | TOTP 登録補助がシークレットをページの sessionStorage に置く | 読解 | 未着手 | |
+| [S3](#s3) | 低 | TOTP 登録補助がシークレットをページの sessionStorage に置く | 読解・再現 | 対応中（[fix/totp-pending-in-background](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-pending-in-background)） | |
 | [S4](#s4) | 低 | シラバスの実体参照を二重にデコードし，数値参照は捨てる | 再現 | PR 中（[#83](https://github.com/Radian0523/kulms-extension/pull/83)） | |
 | [S5](#s5) | 低 | 使っていないホスト権限 `radian0523.github.io` | 読解 | 修正済（[#85](https://github.com/Radian0523/kulms-extension/pull/85)，[`cea1506`](https://github.com/Radian0523/kulms-extension/commit/cea15066ff947348e20a98544f284370aef4f7ec)） | |
 | [S6](#s6) | 低 | 不正な TOTP シークレットを保存できる | 再現・ファズ | 対応中（[fix/validate-totp-secret](https://github.com/yumasansansan/kulms-extension/tree/fix/validate-totp-secret)） | |
@@ -51,8 +51,8 @@ specification: the GNU General Public License, version 3 or any later version
 | [B10](#b10) | 低 | i18n の置換で，値の中の `$&` や置き場所の名前が展開され，結果が値の長さの 3 乗まで伸びる（潜在） | 再現・ファズ | 対応中（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)） | |
 | [B11](#b11) | 低 | 教科書一覧が科目名をキーとしており，同名の科目が衝突する | 読解・再現 | 対応中（[fix/textbooks-by-site](https://github.com/yumasansansan/kulms-extension/tree/fix/textbooks-by-site)） | |
 | [B12](#b12) | 低 | ページから書き換えられる Web Storage の値で例外になる | 読解・再現 | 対応中（[fix/web-storage-values](https://github.com/yumasansansan/kulms-extension/tree/fix/web-storage-values)） | |
-| [B13](#b13) | 低 | シラバス検索の最後のフォールバックが無関係な科目を選びうる | 読解 | 未着手 | |
-| [B14](#b14) | 低 | Shift_JIS にない文字を検索語から黙って落とす | 再現 | 未着手 | |
+| [B13](#b13) | 低 | シラバス検索の最後のフォールバックが無関係な科目を選びうる | 読解・再現 | 対応中（[fix/syllabus-last-resort](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-last-resort)） | |
+| [B14](#b14) | 低 | Shift_JIS にない文字を検索語から黙って落とす | 再現 | 対応中（[fix/shift-jis-encode](https://github.com/yumasansansan/kulms-extension/tree/fix/shift-jis-encode)） | |
 | [B15](#b15) | 低 | `t()` がキーをプロトタイプ越しに引き，`t("hasOwnProperty")` が undefined になる（潜在） | ファズ | 対応中（[fix/i18n-lookup](https://github.com/yumasansansan/kulms-extension/tree/fix/i18n-lookup)） | |
 | [B16](#b16) | 低 | TA 採点支援が壊れた `%` の並びで URIError を投げ，装飾が止まる | ファズ | 対応中（[fix/grading-ta-input](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-ta-input)） | |
 | [B17](#b17) | 中 | 保存されたメモが配列でないか，null を 1 つでも含むか，欄に文字列にできない値を持つと，課題パネルの描画が止まる | ファズ | 対応中（[fix/invalid-memo](https://github.com/yumasansansan/kulms-extension/tree/fix/invalid-memo)） | |
@@ -65,10 +65,10 @@ specification: the GNU General Public License, version 3 or any later version
 | [B24](#b24) | 低 | TA 採点支援のページ側の橋渡しが，ページのオブジェクトが投げる例外で止まり，文字列でない ID や名前をそのまま渡す | ファズ | 対応中（[fix/grading-bridge-values](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-bridge-values)） | |
 | [B25](#b25) | 低 | 保存された課題のキャッシュが拡張の書く形でないと，課題パネルと popup の描画が止まる | ファズ | 対応中（[fix/cache-shape](https://github.com/yumasansansan/kulms-extension/tree/fix/cache-shape)） | |
 | [B26](#b26) | 低 | TA 採点支援が，提出日時の列にセルの無い行で，提出一覧の読み取りを止める | 再現・ファズ | 対応中（[fix/grading-list-short-rows](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-list-short-rows)） | |
-| [B27](#b27) | 低 | 上部のピン留めバーが，サイト ID に壊れた `%` の並びがある科目のクリックで URIError を投げ，ツールの一覧を開けない | ファズ | 未着手 | |
-| [B28](#b28) | 中 | ページの先読みが，ツールのリンク（tool-reset）にマウスを乗せただけで，そのツールの状態を初期化させる | 再現・読解 | 未着手 | |
-| [B29](#b29) | 低 | ページの先読みが，マウスを乗せただけの科目の訪問を Sakai に記録させる | 再現・読解 | 未着手 | |
-| [B30](#b30) | 低 | 授業資料のツリーのキャッシュを 20 件に抑える処理が，項目の形を確かめず，TypeError を捕まえて黙って続ける | ファズ・読解 | 未着手 | |
+| [B27](#b27) | 低 | 上部のピン留めバーが，サイト ID に壊れた `%` の並びがある科目のクリックで URIError を投げ，ツールの一覧を開けない | ファズ | 対応中（[fix/top-favbar-site-id](https://github.com/yumasansansan/kulms-extension/tree/fix/top-favbar-site-id)） | |
+| [B28](#b28) | 中 | ページの先読みが，ツールのリンク（tool-reset）にマウスを乗せただけで，そのツールの状態を初期化させる | 再現・読解 | 対応中（[fix/prerender-side-effects](https://github.com/yumasansansan/kulms-extension/tree/fix/prerender-side-effects)） | |
+| [B29](#b29) | 低 | ページの先読みが，マウスを乗せただけの科目の訪問を Sakai に記録させる | 再現・読解 | 対応中（[fix/prerender-side-effects](https://github.com/yumasansansan/kulms-extension/tree/fix/prerender-side-effects)） | |
+| [B30](#b30) | 低 | 授業資料のツリーのキャッシュを 20 件に抑える処理が，項目の形を確かめず，TypeError を捕まえて黙って続ける | ファズ・読解 | 対応中（[fix/tree-cache-prune](https://github.com/yumasansansan/kulms-extension/tree/fix/tree-cache-prune)） | |
 | [B31](#b31) | 低 | TOTP の登録補助が，QR を読めないときに `javascript:` のリンクを押し，拡張の CSP に拒まれてエラーになる | ブラウザ・再現 | 対応中（[fix/totp-register-fallback](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-register-fallback)） | |
 | [B32](#b32) | 低 | TA 採点支援が，ページの sessionStorage に置いた状態の時刻を確かめず，数にできない値で状態の表示を止める | 読解・再現 | 対応中（[fix/grading-cache-time](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-cache-time)） | |
 | [P1](#p1) | **高** | 課題取得の N+1 と，タブごとの短い間隔での再取得（LMS への負荷） | 読解 | 未着手 | [#32](https://github.com/Radian0523/kulms-extension/issues/32), [#27](https://github.com/Radian0523/kulms-extension/issues/27) |
@@ -76,7 +76,7 @@ specification: the GNU General Public License, version 3 or any later version
 | [P3](#p3) | 中 | `document.body` 全体を監視する MutationObserver が多く，重い | 読解 | 未着手 | |
 | [P4](#p4) | 低 | jsQR（256KB）と qrcode-gen（56KB）を広すぎる範囲に注入する | 読解 | 対応中（jsQR：[fix/jsqr-where-read](https://github.com/yumasansansan/kulms-extension/tree/fix/jsqr-where-read)） | |
 | [P5](#p5) | 低 | 教科書の取得が科目ごとの直列処理 | 読解・再現 | 対応中（[fix/textbooks-parallel](https://github.com/yumasansansan/kulms-extension/tree/fix/textbooks-parallel)） | |
-| [P6](#p6) | 低 | Service Worker の起動ごとに Shift_JIS 変換表を作り直す | 計測 | 未着手 | |
+| [P6](#p6) | 低 | Service Worker の起動ごとに Shift_JIS 変換表を作り直す | 計測 | 対応中（一部：[fix/sjis-table-fast](https://github.com/yumasansansan/kulms-extension/tree/fix/sjis-table-fast)） | |
 | [P7](#p7) | 低 | TA 採点支援のページ側の橋渡しが，配列もどきの `length` が示す回数だけ反復する | ファズ・ブラウザ | 対応中（[fix/grading-bridge-values](https://github.com/yumasansansan/kulms-extension/tree/fix/grading-bridge-values)） | |
 | [P8](#p8) | 低 | 表示中の TOTP コードを毎秒作り直すたびに，シークレットをデコードし，HMAC の鍵を作り直す | 再現・ファズ | 対応中（[fix/totp-key-once](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-key-once)） | |
 | [P9](#p9) | 低 | QR コードを表示するたびに，シークレットを読み直し，QR コードを最初から作る | ファズ | 対応中（[fix/qr-code-once](https://github.com/yumasansansan/kulms-extension/tree/fix/qr-code-once)） | |
@@ -133,7 +133,7 @@ specification: the GNU General Public License, version 3 or any later version
 - テスト: [tests/background.test.mjs](../tests/background.test.mjs) の「S2」（空白の連なりの長さ n，2n，4n で数えた仕事量の伸びの次数．main では 3），[tests/regexp.test.mjs](../tests/regexp.test.mjs)（正規表現のオートマトン）．
 
 ### S3
-**TOTP 登録補助がシークレットをページの sessionStorage に置く**（低・読解）
+**TOTP 登録補助がシークレットをページの sessionStorage に置く**（低・読解・再現）
 
 - 場所: [src/auth-totp-register.js:12-17](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/auth-totp-register.js#L12-L17)，[:134](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/src/auth-totp-register.js#L134)
 - 何が起きるか:
@@ -142,7 +142,8 @@ specification: the GNU General Public License, version 3 or any later version
 - 前提: auth.iimc でスクリプトを動かせる攻撃者がいること．
 - 直し方: 保留中のシークレットは background の `chrome.storage.session` [[ChromeStorage]](#参考文献) にタブ ID ごとに置く．完了の判定には URL やフォームの状態も使う．
 - 見立て: 登録の途中では，シークレットは QR とテキストとしてページに表示されている．そのため，ページのスクリプトは sessionStorage が無くても読める．偽の QR を表示すれば，好きなシークレットを保存させることもできる．保留中のシークレットを background に移して得られる利点は，登録を中止したときにタブに残らない程度であるため，優先度は低い．
-- テスト: 未作成（ハーネスで作る）．
+- 対応: 保留中のシークレットは，background がタブごとに `chrome.storage.session` に置くようにした（content script からは読めず，ブラウザを閉じると消える）．登録補助は，読んだシークレットを background に預け，完了のページでは完了を知らせるだけにする．background は，完了を知らせたタブで，読んでから 30 分のうちに預かったシークレットだけを保存し，メッセージの送り手は認証サーバーのページの content script に限る（[fix/totp-pending-in-background](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-pending-in-background)）．PR で相談する点：完了の判定に URL やフォームの状態は使っていない．フォームの送信後の転送で `app=qrsecret` が落ちることがあり（コードのコメントによる），完了のページの URL が定まらないためである．
+- テスト: `tests/totp.test.mjs` の「S3」（登録の画面の後，同じタブの完了のページが自分の sessionStorage に別のシークレットを置いていても，読んだシークレットを保存し，ページの sessionStorage には何も置かないこと．todo）．
 
 ### S4
 **シラバスの実体参照を二重にデコードし，数値参照は捨てる**（低・再現）
@@ -421,18 +422,22 @@ specification: the GNU General Public License, version 3 or any later version
 - テスト: `tests/assignments.test.mjs` の「B12」（提出の ID）と，`tests/sidebar.test.mjs` の「B12」の 2 件（ツールの設定）と，`fuzz/known/submission/B12-ids-not-a-list`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
 ### B13
-**シラバス検索の最後のフォールバックが無関係な科目を選びうる**（低・読解）
+**シラバス検索の最後のフォールバックが無関係な科目を選びうる**（低・読解・再現）
 
 - 場所: [background.js:318-324](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L318-L324)
 - 何が起きるか: 科目名検索の結果に，名前が完全一致も部分一致もしない候補しか無くても，先頭の 1 件を返す．そのため，別の科目の教科書がシラバスへのリンク付きで表示されうる．コメントでは意図した動作とされているので，設計を見直す候補として扱う．
 - 直し方: 一致が無いときは「シラバス未登録」を表示する．あるいは教員名が一致するときだけ採用する．
+- 対応: 名前の一致が無いときは，Sakai のサイト連絡先の教員名が一致する候補に限って採り，教員名が分からないか一致する候補が無ければ採らない（シラバス未登録になる）ようにした（[fix/syllabus-last-resort](https://github.com/yumasansansan/kulms-extension/tree/fix/syllabus-last-resort)）．PR で相談する点：これまでの動作は，コードのコメントで意図したものとされている．名前の書き方が違い，教員名も得られない科目は，これまで正しい科目を選べていた場合でも，シラバス未登録になる．
+- テスト: `tests/background.test.mjs` の「B13」（名前がどれも一致しない検索の結果から，科目の教員が担当する候補を選び，教員名が分からなければ選ばない．todo）．
 
 ### B14
 **Shift_JIS にない文字を検索語から黙って落とす**（低・再現）
 
 - 場所: [background.js:148-183](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L148-L183)
-- 根拠: `𠮷野家` は `野家` として検索される．
-- テスト: `tests/background.test.mjs` の「B14」．
+- 根拠: `𠮷野家` は `野家` として検索される．変換表は Shift_JIS のデコードから作るので，Shift_JIS の符号化器なら符号を持つ U+00A5（¥），U+203E（‾），U+2212（−）も持たず，同じく落ちる．
+- 直し方: ブラウザが Shift_JIS のフォームを送るときと同じく符号化する．Encoding Standard の Shift_JIS の符号化器 [[Encoding]](#参考文献) のとおり，U+00A5 と U+203E は 1 バイトの 0x5C と 0x7E に，U+2212 は U+FF0D の符号に，U+0080 は 0x80 にし，符号の無い文字は，URL Standard の percent-encode after encoding [[URL]](#参考文献) のとおり，文字参照（`&#<符号位置>;`）にして送る．
+- 対応: そのようにした（[fix/shift-jis-encode](https://github.com/yumasansansan/kulms-extension/tree/fix/shift-jis-encode)）．対にならないサロゲートは U+FFFD として扱う．KULASIS が文字参照の検索語をどう扱うかは確かめていないが，利用者が KULASIS の検索の画面で同じ語を入れたときに，ブラウザが送るものと同じである．
+- テスト: `tests/background.test.mjs` の「B14」の 2 件（文字が落ちないこと．U+00A5，U+203E，U+2212，U+0080，𠮷，対にならないサロゲートを，それぞれブラウザと同じに符号化すること）．
 
 ### B15
 **`t()` がキーをプロトタイプ越しに引き，`t("hasOwnProperty")` が undefined になる（潜在）**（低・ファズ）
@@ -541,7 +546,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: ツール表示管理とサイドバーの幅は，拡張の状態を LMS のページの localStorage に書く．localStorage は，ページ自身のデータやページのスクリプト（攻撃者のものも）でいつでも埋められ，書き換えられる．上限（Storage 標準は localStorage と sessionStorage の保存領域ごとに 5 MiB を推奨値とする [[Storage]](#参考文献)．ハーネスは jsdom の既定の 500 万コード単位とする）まで埋まっていると，`setItem()` が QuotaExceededError を投げる [[HTML]](#参考文献)．拡張はこれを捕まえないので，ツールの切り替えは例外で止まってツールが動かず，ドラッグした幅は保存されない（どちらもイベントの処理の中で捕まえられない例外になる）．提出の検知も，提出の目印を書く sessionStorage が埋まっていると例外で止まり，提出は完了として記録されない．TOTP の登録補助も，読み取ったシークレットを置く sessionStorage が埋まっていると，コードを入力せずに未処理の拒否で止まる．課題パネルは，開くときに sessionStorage に開いた状態を書くため，埋まっていると開いた直後に例外で止まり，課題を読み込まない．
 - 根拠: ファズ対象 `sidebar` が，ページのデータで localStorage を埋めた入力で見つけた．提出の検知はファズ対象 `submission` で，登録補助は `totp-register` で確かめた．
 - 直し方: 拡張の状態はページの localStorage ではなく `chrome.storage` に置く（ページから読めず，書き換えられない．B12 の直し方と同じ）．書き込みが失敗しうる箇所では例外を受け，状態をメモリに残して続ける．
-- 対応: 埋まりうる Web Storage への書き込みで例外を受け，書けないまま処理を続ける（[fix/storage-full](https://github.com/yumasansansan/kulms-extension/tree/fix/storage-full)）．ツールの設定とサイドバーの幅は，埋まった localStorage には保存されない．状態を chrome.storage に移すこと（B12 の直し方）は，別に扱う．
+- 対応: 埋まりうる Web Storage への書き込みで例外を受け，書けないまま処理を続ける（[fix/storage-full](https://github.com/yumasansansan/kulms-extension/tree/fix/storage-full)）．ツールの設定とサイドバーの幅は，埋まった localStorage には保存されない．状態を chrome.storage に移すこと（B12 の直し方）は，別に扱う．auth-totp-register.js の分は，S3 の修正（[fix/totp-pending-in-background](https://github.com/yumasansansan/kulms-extension/tree/fix/totp-pending-in-background)）で登録補助が sessionStorage を使わなくなるので，起きなくなる（2026-11-01 に，`totp-register` の既知の入力で確かめた）．
 - テスト: `fuzz/known/sidebar/B23-storage-full`，`fuzz/known/submission/B23-session-full`，`fuzz/known/totp-register/B23-session-full`（`tests/fuzz-inputs.test.mjs` が todo として流す）と，`tests/assignments.test.mjs` の「B23」（課題パネル）．
 
 ### B24
@@ -584,7 +589,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: 上部のピン留めバーは，サイドバーのピン留めした科目のリンクを写して項目を作る．科目の行のクリックでツールを開く設定が有効なとき，項目のクリックはリンクへの移動を止め，リンクの URL からサイト ID を取り出して，その科目のツールの一覧（ドロップダウン）を開く．取り出した ID は，`decodeURIComponent()` で例外を受けずにデコードする．ID に，後に 2 桁の 16 進数が続かない `%` や，UTF-8 にならないバイトの並び（`%E0%A4` など）があると，URIError になる [[ECMA-262]](#参考文献)．URL の解析はそのような `%` をそのまま残す [[URL]](#参考文献) ため，ページのリンクにあれば項目のリンクにも残る．このとき，ドロップダウンは開かず，移動も止めたままなので，クリックは何も起こさない．例外はクリックの処理の中で受けられず，ページのコンソールと `window.onerror` に出る．Sakai が作るサイト ID（UUID や，KULMS の `2026-110-1001-000` の形）には `%` が無いため，通常のページでは起きない．
 - 根拠: 2026-10-16 の毎日のファジング（38959386385）で，ファズ対象 `sidebar` が，ID に `%E0%A4%A` を含む科目で見つけた．上流の v1.22.0（`2f7c918`）にも同じコードがある．
 - 直し方: デコードできないときは，元の文字列を ID として使う（B16 と同じ）．
-- 対応: 未着手．
+- 対応: そのようにした（[fix/top-favbar-site-id](https://github.com/yumasansansan/kulms-extension/tree/fix/top-favbar-site-id)）．
 - テスト: `fuzz/known/sidebar/B27-malformed-percent-site`（ID の末尾が `%` の科目．`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
 ### B28
@@ -597,7 +602,7 @@ specification: the GNU General Public License, version 3 or any later version
   - 一方，規則そのものは書き換えられない．規則は，要素が文書につながった時点のテキストで一度だけ解析され，後からテキストを書き換えても効かない．要素を外せば解除されるが，先読みが止まるだけである．ページのスクリプトは，拡張が無くても自分で規則を入れられる．
 - 根拠: 読解（Sakai の振る舞いはソースを読んだ結果であり，実際の KULMS では確かめていない）．規則がツールのリンクと，差し込んだ同じ ID の要素の中のリンクに当たることは，HTML 標準の規則の読み方 [[HTML]](#参考文献) と URL パターン [[URLPattern]](#参考文献) をハーネスに写して確かめた（`tests/prerender.test.mjs` の「B28」）．
 - 直し方: 先読みを，科目のトップ（`/portal/site/<サイト>` で，その後にパスの無いもの）へのリンクに限り，tool-reset と page-reset を含む URL を除く．条件を ID の選択子だけに頼らない（拡張が作ったピン留め上部バーの項目に印を付けて選ぶなど）．
-- 対応: 未着手．
+- 対応: 先読みを，科目のトップ（URL パターン `/portal/site/:site`）へのリンクに限った．B29 の修正で，先読みは利用者がリンクを押し始めてからになるので，ページに同じ ID の要素を置かれても，その中のリンクは押されるまで先読みされない．そのため，ID の選択子に頼ることの副作用は，実際の訪問と変わらない（[fix/prerender-side-effects](https://github.com/yumasansansan/kulms-extension/tree/fix/prerender-side-effects)．B29 と同じブランチ）．
 - テスト: `tests/prerender.test.mjs` の「B28」（todo）．
 
 ### B29
@@ -607,7 +612,7 @@ specification: the GNU General Public License, version 3 or any later version
 - 何が起きるか: 先読みは，利用者がリンクを開く前に，そのページをサーバーから取得し，ページのスクリプトまで動かす．Sakai は，サイトのページを描くときにその利用者の在席を始め（`pres.begin` の事象），統計ツール（SiteStats）はそれを「サイト訪問」として数える [[SakaiSiteHandler]](#参考文献)，[[SakaiPresence]](#参考文献)，[[SakaiStats]](#参考文献)．在席の時間切れまでの間は，同じ科目で 2 度は記録されない．そのため，サイドバーや上部バーの科目にマウスを約 200 ms 乗せただけで，開いていない科目への訪問が記録され，教員が見る訪問者数や在席の表示が実際と違うものになる．ページを開いた時点でサーバーの状態を変えるほかのページでも同じであり，B28 のツールの初期化もその一つである．先読みのたびにサイトのページ全体を描かせるので，サーバーの負荷も増える．
 - 根拠: 読解（Sakai のソース）．規則の eagerness が moderate であることは，`tests/prerender.test.mjs` の「B29」で確かめた．
 - 直し方: eagerness を conservative にし，利用者がリンクを押し始めた時点（pointerdown）で先読みさせる．開く直前なので，記録は実際の訪問と変わらない．
-- 対応: 未着手．
+- 対応: そのようにした（[fix/prerender-side-effects](https://github.com/yumasansansan/kulms-extension/tree/fix/prerender-side-effects)．B28 と同じブランチ）．設定の説明，README，ストアの説明，ランディングページを，新しい動作に合わせた．PR で相談する点：先読みが始まるのが押し始めてからになるので，マウスを乗せた時点で始めていたこれまでより，表示が速くなる分は小さくなる．
 - テスト: `tests/prerender.test.mjs` の「B29」（todo）．
 
 ### B30
@@ -621,7 +626,7 @@ specification: the GNU General Public License, version 3 or any later version
   - いずれも，この形の項目を書くのはページのスクリプトであり，拡張自身は書かない．影響は，キャッシュの件数と，次に開いたときにキャッシュから表示できるかに限られる．
 - 根拠: 2026-10-20 の CI（39404471638，39437098916）と毎日のファジング（39495354410）で，ファズ対象 `resources` が，テキストが `null` の項目で見つけた．比較関数の TypeError は，項目を，保存したばかりのものを含めて 21 件置いた入力で確かめた（20 件では並べ替えに至らず，起きない）．NaN の場合は，上の V8 の試行による．
 - 直し方: `JSON.parse()` の結果がオブジェクトであり，その `savedAt` が有限の数であるときに限りその値を使い，それ以外は 0 とする．S14 の直し方（キャッシュを `chrome.storage.local` に置く）をとれば，ページのスクリプトは項目を書けなくなるが，ストレージの破損や旧版との互換に備えて，同じ確かめは要る（B25 と同様）．
-- 対応: 未着手．
+- 対応: そのようにした（[fix/tree-cache-prune](https://github.com/yumasansansan/kulms-extension/tree/fix/tree-cache-prune)）．
 - テスト: `fuzz/known/resources/B30-cache-entry-null` と `B30-saved-at-unconvertible`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
 ### B31
@@ -710,6 +715,7 @@ specification: the GNU General Public License, version 3 or any later version
 
 - 場所: [background.js:112-145](https://github.com/Radian0523/kulms-extension/blob/087452e33d14c117e6fa584fe3dd4b19f8f9a76c/background.js#L112-L145)．約 2.2 万回のデコードで，Node では約 32ms かかった．
 - ファジング: 表は，Service Worker が起きてから最初の検索で作られ，ハーネスの数え方で約 15.6 万歩になる．検索語によらない一度きりの仕事だが，小さな入力の線形の上限（`background-message` の 11 単位の入力で 96,122 歩）を超える．`background-message` の対象は，最初の入力の前に表を作っておき，どの入力にも数えない（P6 を探すときは，入力ごとに表を消す．下の「ファジングで避けている既知の問題」）．`syllabus-search` の対象は，入力が空のとき（上限の基になる仕事量を数えるとき）にも検索するので，表の仕事はその基に入り，どの入力にも数えない．
+- 対応（一部）: 表を作る処理を，並びを 1 つずつデコードせず，改行で区切って 1 度にデコードするようにした（[fix/sjis-table-fast](https://github.com/yumasansansan/kulms-extension/tree/fix/sjis-table-fast)）．作る表は同じ（9,269 項目，入る順も同じ）で，時間は 17.1 ms から 6.8 ms になった（Node 26.13.0 で，新しいプロセスで 1 度作るときの 9 回の中央値．AC 電源，電源の設定は performance，ほぼ無負荷）．残りの大半は，約 9,300 項目の Map を作る時間である．ハーネスが数える仕事は表の大きさに比例するので変わらず，既知の入力は止まったままである．PR で相談する点：表をあらかじめ作って同梱すれば（約 56 KB．background.js は 27.7 KB），作る時間も仕事も無くなる．
 - テスト: `fuzz/known/background-message/P6-first-search`（`tests/fuzz-inputs.test.mjs` が todo として流す）．
 
 ### P7
@@ -1008,7 +1014,15 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 | fix/validate-totp-secret の続く修正（2026-10-14） | `totp-register` | S6 | 既知の入力とシードを含む 55 入力が通る．同日に加えた更新時の移行の修正は，`tests/totp.test.mjs` の S6 のテスト（更新時の移行）が通り，ほかの 29 本と衝突なく合わさる（`git merge-tree`） |
 | fix/validate-totp-secret の 2 つめの続く修正（2026-10-14） | `popup`，`totp-register` | S6 | `popup` の S6 の既知の入力 2 件と，毎日のファジング（38474299674）が `popup` で止まった入力と，`totp-register` の既知の入力が通る．`tests/totp.test.mjs` の S6 のテスト 5 件が通る．ほかの修正ブランチとは，fix/totp-code-from-background とだけ src/auth-totp.js で衝突する（上の S6 の「対応」） |
 | 27 本すべて（2026-10-14） | — | — | 上の 5 本と 2 本の続く修正を含む修正ブランチ 27 本の 351 組は，どれも衝突なく合わさる（`git merge-tree`）．v1.21.1 を基にした 5 本では，テストは失敗 0 で，それぞれの問題の todo が通る |
-| fix/grading-cache-time（2026-11-01．`3e98079` を基にした） | `grading-pages` | B32 | 既知の入力，シード，40626078453 の入力が，探しても通り，シードから 120 秒（789 回）で失敗なし（時間の判定は外した）．`tests/grading-ta.test.mjs` の B32 のテストが通り，テスト全体も失敗 0 で，新たに通る todo は B32 の 2 件のみ．上流の ESLint の警告は変わらない．未取り込みの修正ブランチ 32 本のいずれとも，main と合わせるときに無い衝突は生じない（`git merge-tree`） |
+| fix/grading-cache-time（2026-11-01．`3e98079` を基にした） | `grading-pages` | B32 | 既知の入力，シード，40626078453 の入力が，探しても通り，シードから 120 秒（789 回）で失敗なし（時間の判定は外した）．`tests/grading-ta.test.mjs` の B32 のテストが通り，テスト全体も失敗 0 で，新たに通る todo は B32 の 2 件のみ．上流の ESLint の警告は変わらない．未取り込みの修正ブランチ 32 本のいずれとも，main と合わせるときに無い衝突は生じない（`git merge-tree`．最初の確かめはコミットの前で，ブランチの名前が main と同じコミットを指していたので，2026-11-01 にコミットの後で確かめ直した） |
+| fix/prerender-side-effects（2026-11-01．`3e98079` を基にした） | `sidebar` | B28，B29 | `tests/prerender.test.mjs` の B28 と B29 のテストが通り，テスト全体も失敗 0 で，新たに通る todo はこの 2 件のみ．60 秒（1,573 回）で失敗なし．上流の ESLint の警告は変わらない |
+| fix/top-favbar-site-id（同） | `sidebar` | B27 | 既知の入力とシードが，探しても通り，60 秒（1,627 回）で失敗なし．テスト全体も失敗 0 で，新たに通る todo は B27 の 1 件のみ．上流の ESLint の警告は変わらない |
+| fix/tree-cache-prune（同） | `resources` | B30 | 既知の入力 2 件とシードが，探しても通り，60 秒（806 回）で失敗なし．テスト全体も失敗 0 で，新たに通る todo は B30 の 2 件のみ．上流の ESLint の警告は 1 件減る |
+| fix/sjis-table-fast（同） | `background-message`，`syllabus-search` | P6（一部） | 作る表が同じであることを確かめ，作る時間は 17.1 ms から 6.8 ms になった（P6 の節）．P6 の既知の入力は止まったまま（数える仕事は表の大きさに比例する）．テスト全体は失敗 0．各 60 秒（1,720 回と 7,347 回）で失敗なし．上流の ESLint の警告は 1 件減る |
+| fix/shift-jis-encode（同） | `background-message`，`syllabus-search` | B14 | `tests/background.test.mjs` の B14 のテスト 2 件が通り，テスト全体も失敗 0 で，新たに通る todo はこの 2 件のみ．各 60 秒（1,114 回と 7,257 回）で失敗なし．上流の ESLint の警告は変わらない |
+| fix/syllabus-last-resort（同） | `background-message`，`syllabus-search` | B13 | `tests/background.test.mjs` の B13 のテストが通り，テスト全体も失敗 0 で，新たに通る todo はこの 1 件のみ．各 60 秒（521 回と 3,786 回）で失敗なし．上流の ESLint の警告は変わらない |
+| fix/totp-pending-in-background（同） | `totp-register`，`background-message` | S3 | `tests/totp.test.mjs` の S3 のテストと，`totp-register` の B23 の既知の入力（sessionStorage が埋まっているとき）が通り，テスト全体も失敗 0 で，新たに通る todo はこの 2 件のみ．各 60 秒（494 回と 902 回）で失敗なし．上流の ESLint の警告は変わらない．fix/storage-full（B23）と fix/validate-totp-secret（S6）とは auth-totp-register.js で衝突する（解き方は修正ブランチのコミットメッセージに書いた） |
+| 2026-11-01 の 8 本 | — | — | 上の 7 本と fix/grading-cache-time は，fix/totp-pending-in-background の 2 本を除き，未取り込みの修正ブランチのいずれとも，main と合わせるときに無い衝突を生じない．8 本どうしの 28 組も衝突なく合わさる（`git merge-tree`．コミットの無いブランチは，ステージした内容から作った一時的なコミットで合わせた） |
 
 段で判定するようにした後のファジング（2026-10-07）:
 
@@ -1088,6 +1102,9 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
   - 調べる中で，同じ警告に至る別の経路（ページの sessionStorage に置いた状態の時刻）を見つけ，B32 として載せた．`grading-pages` は，sessionStorage の状態の項目の各欄を，拡張が書く形か任意の JSON の値として作るようにした．これまでは，項目全体を拡張が書く形にするか任意の値にするかのみで，B32 の形にはほぼ届かなかった．B32 を起こす状態を置く入力は流さない．
   - 対象の誤りを 2 つ直した．提出の ID を受講者で指す対象自身の表し方（キー `of` の 1 つだけを持つオブジェクト）が，任意の JSON の値と区別できず，`of` の値が数にできない値であれば，対象自身が投げた．専用のクラスにした（直す前の対象は，加えたシード `seeds/grading-pages/submission-id-of` で止まる）．また，sessionStorage の状態の文字列を作るとき，キーが `__proto__` の項目が落ちていた．prototype を持たないオブジェクトで作るようにした．
   - これらの後，`grading-pages` のシード 4 件，既知の入力 3 件，40626078453 の入力を，時間の判定を外して再生し，すべて通った．B18 と B32 の既知の入力と 40626078453 の入力は，その ID を開いた一覧から外すと止まる．B18 を直したブランチ（fix/grading-ta-input）の拡張では，B18 の既知の入力と 40626078453 の入力は通り，B32 の既知の入力は止まる．毎日のファジング 40775552747 の `grading-pages` のコーパスと残した入力の 164 入力も，状態の項目の読み方が変わった後で，時間の判定を外して再生し，すべて通った．テスト 318 件（207 件が通り，111 件が todo）で失敗は 0 件である．
+- 2026-11-01 に，依存関係を `pnpm update --recursive --latest` で上げた（eslint 10.14.0，eslint-plugin-regexp 3.3.2，fake-indexeddb 6.2.7，recheck 4.6.2．ロックファイルでは，jsdom が使う @asamuzakjp/dom-selector 10.0.5 や undici 8.12.3，Jazzer.js が計装に使う @babel の各パッケージも上がった）．jsdom は 30.1.3 のままである．package.json で版を 1 つに書いているが，`--latest` はそうした版も上げる（2026-10-20 には 30.1.2 から 30.1.3 に上げた）．30.1.3 が最新版だったので，変わらなかった．上げた後も，lint が通り，canary は埋めたバグを見つけ，テスト一式（318 件）に失敗は無く，上流の設定での ESLint も，エラー 0 件，警告 53 件のままであった．
+  - 同日，未着手の発見のうち，B13，B14，B27，B28 と B29，B30，S3，P6（一部）の修正ブランチを作った（各節の「対応」と，上の修正ブランチの確かめの表）．相談が要りそうなもの（B13 など）も修正ブランチを作り，相談は PR の中で行う．B13 と S3 にはテストが無かったので，`tests/background.test.mjs` と `tests/totp.test.mjs` に加え，B14 にはブラウザと同じ符号化を確かめるテストを加えた（いずれも todo）．
+  - 修正ブランチの確かめの `git merge-tree` が，コミットの無いブランチでは空回りしていた．ブランチの名前は main と同じコミットを指すので，名前で合わせると main と main を比べることになる．ステージした内容から，参照を作らない一時的なコミットを作って合わせ直した．B32 の fix/grading-cache-time を含む 7 本は，結果として新たな衝突を生じなかったが，S3 の修正は fix/storage-full と fix/validate-totp-secret とで衝突する．
 
 ## カバレッジ
 
@@ -1133,7 +1150,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 ## このリポジトリの方針
 
 - kulms-extension は fork（[yumasansansan/kulms-extension](https://github.com/yumasansansan/kulms-extension)）を submodule `kulms-extension/` として持つ．修正はこの fork のブランチで行い，上流（[Radian0523/kulms-extension](https://github.com/Radian0523/kulms-extension)）へ PR を出す．
-- このリポジトリのパッケージ管理は pnpm で，Node も pnpm も最新版を使う（2026-10-06 の検証は Windows 11 で Node 26.10.0 と pnpm 12.9.1，2026-10-12 の検証は Ubuntu 26.04 で Node 26.11.1 と pnpm 12.11.2，2026-10-20 の検証は Ubuntu 26.10 で Node 26.12.0 と pnpm 12.14.0）．pnpm の版は `package.json` で固定しない（`packageManager` を書かない）．上流は bun を使うが，このリポジトリでは不要．
+- このリポジトリのパッケージ管理は pnpm で，Node も pnpm も最新版を使う（2026-10-06 の検証は Windows 11 で Node 26.10.0 と pnpm 12.9.1，2026-10-12 の検証は Ubuntu 26.04 で Node 26.11.1 と pnpm 12.11.2，2026-10-20 の検証は Ubuntu 26.10 で Node 26.12.0 と pnpm 12.14.0，2026-11-01 の検証は Ubuntu 26.10 で Node 26.13.0 と pnpm 12.16.1）．pnpm の版は `package.json` で固定しない（`packageManager` を書かない）．上流は bun を使うが，このリポジトリでは不要．
 - このリポジトリのファイルは GPL-3.0-or-later とし，ADLplug-Next と同じ形の SPDX ヘッダを各ファイルの先頭に付ける．コメントを書けないファイルは `REUSE.toml` で指定し，REUSE 仕様 [[REUSE]](#参考文献) に適合させる（CI で `reuse lint` を掛ける）．submodule の kulms-extension は上流の MIT のまま．
 
 ## 参考文献
@@ -1153,6 +1170,7 @@ S2，S8，S9 の正規表現は，以前は入力を切って避けていた（�
 - [CWSBranding] Google, "Branding guidelines," Chrome Web Store, Chrome for Developers. https://developer.chrome.com/docs/webstore/branding
 - [DOM] WHATWG, "DOM Standard," Living Standard. https://dom.spec.whatwg.org/
 - [ECMA-262] Ecma International, "ECMAScript Language Specification," ECMA-262. https://tc39.es/ecma262/
+- [Encoding] WHATWG, "Encoding Standard," Living Standard（§13.3.2 Shift_JIS encoder）. https://encoding.spec.whatwg.org/
 - [Fetch] WHATWG, "Fetch Standard," Living Standard（§2.2.5 の redirect-taint と要求のオリジンの直列化，§4.4 HTTP fetch，§4.5 HTTP-redirect fetch，§4.10 CORS check）. https://fetch.spec.whatwg.org/
 - [FirefoxCICP] Mozilla, "gfx/thebes/gfxUtils.cpp," Firefox（`gfxUtils::CicpToColorSpace`：行列係数が未指定のとき，原色から行列を推し量る）. https://github.com/mozilla-firefox/firefox/blob/main/gfx/thebes/gfxUtils.cpp
 - [GitHubActionsEvents] GitHub, "Events that trigger workflows," GitHub Docs（フォークからの pull_request では，GITHUB_TOKEN は読み取りの権限のみを持つ）. https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows

@@ -124,6 +124,33 @@ test("B14: encodeShiftJIS says when it cannot encode a character", { todo: "B14:
   assert.notEqual(g.encodeShiftJIS("𠮷野家"), g.encodeShiftJIS("野家"));
 });
 
+// What a browser sends of each character when it submits a form in Shift_JIS:
+// the Shift_JIS encoder of the Encoding Standard makes U+00A5 and U+203E the
+// bytes 0x5C and 0x7E, U+2212 the code of U+FF0D, and U+0080 the byte 0x80,
+// and the URL Standard's percent-encode after encoding writes a character
+// that has no code as a character reference (&#…;), a lone surrogate as
+// U+FFFD (the code points are given by number: U+2212 and U+FF0D look alike).
+test("B14: encodeShiftJIS writes each character as a browser does when it submits a form in Shift_JIS", { todo: "B14: characters that the table, built by decoding, does not hold are dropped silently" }, (t) => {
+  const { browser, g } = background();
+  t.after(() => browser.close());
+  const sent = [[0xa5, "%5C"], [0x203e, "%7E"], [0x2212, "%81%7C"], [0x80, "%80"], [0x20bb7, "%26%23134071%3B"], [0xd800, "%26%2365533%3B"]];
+  for (const [cp, query] of sent) assert.equal(g.encodeShiftJIS(String.fromCodePoint(cp)), query, `U+${cp.toString(16).toUpperCase()}`);
+});
+
+// KULASIS's search results for a course's name that names none of them: two
+// other courses, the second taught by the course's teacher, as Sakai's site
+// contact says.
+test("B13: with no name that matches, the name search takes a result only when the course's teacher teaches it", { todo: "B13: with no name that matches, the first result is taken whoever teaches it" }, async (t) => {
+  const page = '<table class="search_result"><tr><th>科目名</th><th>教員</th><th>曜時限</th><th>シラバス</th></tr>' +
+    '<tr><td>微分積分学Ａ</td><td>京大 次郎</td><td>月1</td><td><a href="la_syllabus?lectureNo=11111"><img src="syllabus.gif" alt="シラバス"></a></td></tr>' +
+    '<tr><td>線型代数学（演習）</td><td>京大 太郎</td><td>水2</td><td><a href="la_syllabus?lectureNo=22222"><img src="syllabus.gif" alt="シラバス"></a></td></tr></table>';
+  const { browser, g } = background(syllabus(page));
+  t.after(() => browser.close());
+  const taught = await g.searchSyllabus("線形代数学Ａ", { expectedTeacher: () => Promise.resolve("京大 太郎") });
+  assert.equal(taught && taught.lectureNo, "22222");
+  assert.equal(await g.searchSyllabus("線形代数学Ａ", { expectedTeacher: () => Promise.resolve(null) }), null);
+});
+
 test("B20: a page of pages.json that is null does not hide the Site Info tool after it", { todo: "B20: pages.json is read without looking at its shape, so a TypeError on a page that is null ends the search" }, async (t) => {
   const net = new Net()
     .on(`${LMS}/direct/site/`, { headers: { "content-type": "application/json" }, body: JSON.stringify([null, { tools: [{ toolId: "sakai.siteinfo", placementId: "p" }] }]) })
